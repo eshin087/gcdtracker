@@ -33,7 +33,7 @@ export default async function ToolingPage() {
   const agentPkgs = packages.filter((p) => p.def.role === "agent");
   const frameworkPkgs = packages.filter((p) => p.def.role === "framework");
   const agentWeek = agentPkgs.reduce((s, p) => s + p.last7, 0);
-  const topAgent = agentPkgs[0] ?? null;
+  const topAgent = agentPkgs[0]?.last7 ? agentPkgs[0] : null;
   // Weekly totals of agent CLI downloads for the long-run chart (npm goes back to 2024).
   const weekly = new Map<string, number>();
   for (const p of agentPkgs.filter((p) => p.def.registry === "npm")) {
