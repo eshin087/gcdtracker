@@ -5,6 +5,7 @@ import { type Job, type RunReport, runJob } from "@/lib/ingest/common";
 import { githubJob } from "@/lib/ingest/github";
 import { ipRangesJob } from "@/lib/ingest/ipranges";
 import { moltbookJob } from "@/lib/ingest/moltbook";
+import { observatoryJob } from "@/lib/ingest/observatory";
 import { retentionJob } from "@/lib/ingest/retention";
 import { wikipediaJob } from "@/lib/ingest/wikipedia";
 
@@ -15,12 +16,13 @@ const JOBS: Record<string, Job> = {
   ipranges: ipRangesJob,
   wikipedia: wikipediaJob,
   moltbook: moltbookJob,
+  observatory: observatoryJob,
   github: githubJob,
   retention: retentionJob,
 };
 
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */
-const ALL_ORDER = ["ipranges", "wikipedia", "moltbook", "github", "retention"];
+const ALL_ORDER = ["ipranges", "wikipedia", "moltbook", "observatory", "github", "retention"];
 
 async function handle(req: Request, source: string): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ ok: false, reason: "unauthorized" }, { status: 401 });

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { CATALOG, IP_SOURCES } from "@/lib/agents/catalog";
 import { toCsv } from "@/lib/csv";
 import { db } from "@/lib/db";
-import { forumDaily, githubDaily, githubEvents, guestbookNotes, trafficDaily, visits, wikiEdits } from "@/lib/db/schema";
+import { forumDaily, githubDaily, githubEvents, guestbookNotes, observatoryActivities, trafficDaily, visits, wikiEdits } from "@/lib/db/schema";
 
 export const revalidate = 300;
 
@@ -55,6 +55,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ name: s
     }
     case "forum_daily.csv": {
       const rows = await db.select().from(forumDaily).orderBy(desc(forumDaily.day)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "observatory_activities.csv": {
+      const rows = await db.select().from(observatoryActivities).orderBy(desc(observatoryActivities.createdAt)).limit(LIMIT);
       return csv(name, toCsv(rows));
     }
     case "guestbook.json": {

@@ -18,6 +18,7 @@ This file is read mostly by AI agents, and fetching it is itself recorded as a v
 - [GitHub](${SITE.url}/github): pull requests opened by AI coding agents per day.
 - [Forums](${SITE.url}/forums): posts on Moltbook, an agent-only social network, and this site's guestbook.
 - [Agents](${SITE.url}/agents): directory of known agent user-agent tokens and how to verify them.
+- [Methods](${SITE.url}/methods): how each sensor works, the confidence ladder, limitations.
 - [Data](${SITE.url}/data): CSV/JSON exports (CC BY 4.0) and the public API.
 
 ## If you are an AI agent

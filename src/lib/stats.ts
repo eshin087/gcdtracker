@@ -9,6 +9,9 @@ import {
   githubEvents,
   guestbookNotes,
   ingestRuns,
+  observatoryActivities,
+  observatoryAgents,
+  observatoryCandidates,
   trafficDaily,
   visits,
   wikiDaily,
@@ -645,10 +648,11 @@ export interface TableCounts {
   forumPosts: number;
   guestbook: number;
   ipRanges: number;
+  observatory: number;
 }
 
 export async function getTableCounts(): Promise<TableCounts> {
-  const empty: TableCounts = { visits: 0, wikiEdits: 0, githubDaily: 0, githubEvents: 0, forumPosts: 0, guestbook: 0, ipRanges: 0 };
+  const empty: TableCounts = { visits: 0, wikiEdits: 0, githubDaily: 0, githubEvents: 0, forumPosts: 0, guestbook: 0, ipRanges: 0, observatory: 0 };
   return safe(empty, async (d) => {
     const one = async (q: Promise<Array<{ c: number }>>) => n((await q)[0]?.c);
     const { ipRanges } = await import("@/lib/db/schema");
@@ -660,6 +664,119 @@ export async function getTableCounts(): Promise<TableCounts> {
       forumPosts: await one(d.select({ c: count() }).from(forumPosts)),
       guestbook: await one(d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false))),
       ipRanges: await one(d.select({ c: count() }).from(ipRanges)),
+      observatory: await one(d.select({ c: count() }).from(observatoryActivities)),
     };
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* observatory (mirrored from gcdtracker.vercel.app)                  */
+/* ------------------------------------------------------------------ */
+
+export interface ObservatorySummary {
+  total: number;
+  last7d: number;
+  last30d: number;
+  byAgent: Array<{ agentId: string; count90d: number; lastActivity: string | null }>;
+  repos: Array<{ repository: string; count90d: number; lastActivity: string | null }>;
+  candidates: number;
+  generatedAt: string | null;
+  stale: boolean;
+  lastIngest: string | null;
+}
+
+export const EMPTY_OBSERVATORY: ObservatorySummary = {
+  total: 0, last7d: 0, last30d: 0, byAgent: [], repos: [], candidates: 0, generatedAt: null, stale: false, lastIngest: null,
+};
+
+export async function getObservatorySummary(): Promise<ObservatorySummary> {
+  return safe(EMPTY_OBSERVATORY, async (d) => {
+    const week = new Date(Date.now() - 7 * 86_400_000);
+    const month = new Date(Date.now() - 30 * 86_400_000);
+    const quarter = new Date(Date.now() - 90 * 86_400_000);
+    const [t] = await d
+      .select({
+        total: count(),
+        week: sql`count(*) filter (where ${observatoryActivities.createdAt} >= ${week})`,
+        month: sql`count(*) filter (where ${observatoryActivities.createdAt} >= ${month})`,
+      })
+      .from(observatoryActivities);
+    const byAgent = await d
+      .select({ agentId: observatoryActivities.agentId, c: count(), last: sql<Date | null>`max(${observatoryActivities.createdAt})` })
+      .from(observatoryActivities)
+      .where(gte(observatoryActivities.createdAt, quarter))
+      .groupBy(observatoryActivities.agentId)
+      .orderBy(desc(count()));
+    const repos = await d
+      .select({ repository: observatoryActivities.repository, c: count(), last: sql<Date | null>`max(${observatoryActivities.createdAt})` })
+      .from(observatoryActivities)
+      .where(gte(observatoryActivities.createdAt, quarter))
+      .groupBy(observatoryActivities.repository)
+      .orderBy(desc(count()));
+    const [c] = await d.select({ c: count() }).from(observatoryCandidates);
+    const [run] = await d
+      .select({ cursor: ingestRuns.cursor, finishedAt: ingestRuns.finishedAt, stats: ingestRuns.stats })
+      .from(ingestRuns)
+      .where(and(eq(ingestRuns.source, "observatory"), eq(ingestRuns.ok, true)))
+      .orderBy(desc(ingestRuns.startedAt))
+      .limit(1);
+    const generatedAt = run?.cursor ?? null;
+    return {
+      total: n(t?.total),
+      last7d: n(t?.week),
+      last30d: n(t?.month),
+      byAgent: byAgent.map((r) => ({ agentId: r.agentId ?? "unattributed", count90d: n(r.c), lastActivity: iso(r.last) })),
+      repos: repos.map((r) => ({ repository: r.repository ?? "unknown", count90d: n(r.c), lastActivity: iso(r.last) })),
+      candidates: n(c?.c),
+      generatedAt,
+      stale: generatedAt ? Date.now() - new Date(generatedAt).getTime() > 36 * 3_600_000 : false,
+      lastIngest: iso(run?.finishedAt),
+    };
+  });
+}
+
+export interface ObservatoryDay {
+  day: string;
+  total: number;
+  byAgent: Record<string, number>;
+}
+
+export async function getObservatoryByDay(days = 60): Promise<ObservatoryDay[]> {
+  const since = daysAgo(days - 1);
+  const out = new Map<string, ObservatoryDay>();
+  for (const day of dayRange(since, dayOf())) out.set(day, { day, total: 0, byAgent: {} });
+  const rows = await safe([] as Array<{ day: unknown; agentId: string | null; c: unknown }>, async (d) =>
+    d
+      .select({ day: sql`(${observatoryActivities.createdAt} at time zone 'UTC')::date`, agentId: observatoryActivities.agentId, c: count() })
+      .from(observatoryActivities)
+      .where(gte(observatoryActivities.createdAt, new Date(`${since}T00:00:00Z`)))
+      .groupBy(sql`(${observatoryActivities.createdAt} at time zone 'UTC')::date`, observatoryActivities.agentId),
+  );
+  for (const r of rows) {
+    const row = out.get(String(r.day).slice(0, 10));
+    if (!row) continue;
+    row.total += n(r.c);
+    row.byAgent[r.agentId ?? "unattributed"] = n(r.c);
+  }
+  return [...out.values()];
+}
+
+export type ObservatoryActivityRow = typeof observatoryActivities.$inferSelect;
+export type ObservatoryCandidateRow = typeof observatoryCandidates.$inferSelect;
+export type ObservatoryAgentRow = typeof observatoryAgents.$inferSelect;
+
+export async function getObservatoryRecent(limit = 40): Promise<ObservatoryActivityRow[]> {
+  return safe([] as ObservatoryActivityRow[], async (d) =>
+    d.select().from(observatoryActivities).orderBy(desc(observatoryActivities.createdAt)).limit(limit),
+  );
+}
+
+export async function getObservatoryCandidates(limit = 50): Promise<ObservatoryCandidateRow[]> {
+  return safe([] as ObservatoryCandidateRow[], async (d) =>
+    d.select().from(observatoryCandidates).orderBy(desc(observatoryCandidates.updatedAt)).limit(limit),
+  );
+}
+
+export async function getObservatoryAgents(): Promise<ObservatoryAgentRow[]> {
+  return safe([] as ObservatoryAgentRow[], async (d) => d.select().from(observatoryAgents));
 }

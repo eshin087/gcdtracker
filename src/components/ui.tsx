@@ -172,3 +172,31 @@ export function SectionHead({ title, href, more }: { title: string; href?: strin
     </div>
   );
 }
+
+/* ---------- source card (home dashboard) ---------- */
+
+export interface SourceCardProps {
+  title: string;
+  what: string;
+  rung: string;
+  value: ReactNode;
+  valueLabel: string;
+  href: string;
+}
+
+export function SourceCard({ title, what, rung, value, valueLabel, href }: SourceCardProps) {
+  return (
+    <Link href={href} className="source-card">
+      <div className="source-head">
+        <span className="source-title">{title}</span>
+        <span className="badge">{rung}</span>
+      </div>
+      <p className="source-what">{what}</p>
+      <div className="source-value">
+        <span className="num">{value}</span>
+        <span className="lbl">{valueLabel}</span>
+      </div>
+      <span className="source-open">open →</span>
+    </Link>
+  );
+}

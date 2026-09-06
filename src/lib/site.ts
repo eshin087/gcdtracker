@@ -18,5 +18,6 @@ export const TABS = [
   { href: "/github", label: "GitHub" },
   { href: "/forums", label: "Forums" },
   { href: "/agents", label: "Agents" },
+  { href: "/methods", label: "Methods" },
   { href: "/data", label: "Data" },
 ] as const;

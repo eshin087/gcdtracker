@@ -22,6 +22,7 @@ export default async function DataPage() {
     { name: "github_daily.csv", href: "/api/export/github_daily.csv", rows: counts.githubDaily, desc: "pull requests per day per coding agent, with the counting method" },
     { name: "github_events.csv", href: "/api/export/github_events.csv", rows: counts.githubEvents, desc: "sample of recent agent pull requests" },
     { name: "forum_daily.csv", href: "/api/export/forum_daily.csv", rows: null, desc: "Moltbook posts and distinct posting agents per day" },
+    { name: "observatory_activities.csv", href: "/api/export/observatory_activities.csv", rows: counts.observatory, desc: "documented agent pull requests from watched repositories, mirrored from the gcdTracker observatory (gcdtracker.vercel.app) and kept beyond its 90-day window" },
     { name: "agents.json", href: "/api/export/agents.json", rows: null, desc: "the full agent catalog: tokens, operator, category, robots.txt behaviour, verification sources" },
     { name: "guestbook.json", href: "/api/export/guestbook.json", rows: counts.guestbook, desc: "notes left by visiting agents" },
   ];
@@ -136,7 +137,7 @@ Content-Type: application/json
         <p>
           Data exports are published under CC BY 4.0; the code is MIT and lives at <a href={SITE.repo}>{SITE.repo.replace("https://", "")}</a>.
           Visitor IP addresses are never stored: only a /24 (IPv4) or /48 (IPv6) prefix and a salted hash. Wikipedia and GitHub
-          data are public records republished with links to their sources. Moltbook posts are shown as short excerpts with links.
+          data are public records republished with links to their sources. Moltbook posts are shown as short excerpts with links. Watched-repository pull requests are mirrored from the <a href="https://gcdtracker.vercel.app">gcdTracker observatory</a> (MIT-licensed code; PR titles and excerpts remain third-party metadata, and inclusion implies no endorsement or finding of misconduct).
         </p>
       </div>
     </div>

@@ -201,3 +201,56 @@ export const ingestRuns = pgTable(
   },
   (t) => [index("ingest_runs_source_started_idx").on(t.source, t.startedAt.desc())],
 );
+
+/* ---------- observatory (data from gcdtracker.vercel.app, kept beyond its 90-day window) ---------- */
+
+export const observatoryActivities = pgTable(
+  "observatory_activities",
+  {
+    id: text("id").primaryKey(),
+    sourceId: text("source_id").notNull(),
+    platform: text("platform").notNull(),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    actorLogin: text("actor_login"),
+    actorId: bigint("actor_id", { mode: "number" }),
+    agentId: text("agent_id"),
+    attribution: text("attribution").notNull(),
+    repository: text("repository"),
+    state: text("state"),
+    createdAt: ts("created_at").notNull(),
+    sourceUpdatedAt: ts("source_updated_at"),
+    lastObservedAt: ts("last_observed_at"),
+    firstSeenAt: ts("first_seen_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("obs_act_created_idx").on(t.createdAt.desc()),
+    index("obs_act_agent_created_idx").on(t.agentId, t.createdAt.desc()),
+    index("obs_act_repo_idx").on(t.repository),
+  ],
+);
+
+export const observatoryCandidates = pgTable("observatory_candidates", {
+  id: text("id").primaryKey(),
+  activityId: text("activity_id").notNull(),
+  ruleId: text("rule_id").notNull(),
+  excerpt: text("excerpt"),
+  status: text("status").notNull(),
+  url: text("url"),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const observatoryAgents = pgTable("observatory_agents", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  operator: text("operator"),
+  kind: text("kind"),
+  platform: text("platform"),
+  login: text("login"),
+  identityId: bigint("identity_id", { mode: "number" }),
+  historical: boolean("historical").notNull().default(false),
+  lastActivityAt: ts("last_activity_at"),
+  website: text("website"),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
