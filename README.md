@@ -54,7 +54,7 @@ curl -A "Mozilla/5.0 (compatible; GPTBot/1.4; +https://openai.com/gptbot)" http:
 | `DATABASE_URL` | for data | Neon Postgres connection string (set automatically by the Vercel Neon integration). |
 | `CRON_SECRET` | for ingest | Bearer token for `/api/ingest/*`. Vercel Cron sends it automatically; GitHub Actions reads it from a repository secret of the same name. Also salts the IP hashes. |
 | `GITHUB_TOKEN` | optional | Raises the GitHub search limit from 10 to 30 requests/minute. A classic token with no scopes is enough. |
-| `NEXT_PUBLIC_SITE_URL` | optional | Canonical URL if not `https://gcdtracker.vercel.app`. |
+| `NEXT_PUBLIC_SITE_URL` | optional | Canonical URL if not `https://gcdtracker-site.vercel.app`. |
 | `CLOUDFLARE_API_TOKEN` | optional, unused yet | Reserved for a live Cloudflare Radar chart (Account → Radar → Read). |
 
 GitHub Actions needs the repository secret `CRON_SECRET` and the repository variable `SITE_URL` (the production URL).
