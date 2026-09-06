@@ -45,7 +45,7 @@ export const agentWatchJob: Job = async (ctx) => {
     let status = text ? "payload" : "";
     if (!text) {
       const res = await fetch(AGENT_WATCH.registry, {
-        headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker-site.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
+        headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
         cache: "no-store",
       });
       status = String(res.status);

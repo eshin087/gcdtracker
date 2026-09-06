@@ -9,7 +9,7 @@ import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
 import { getIngestStatus, getOverview, getTimeline, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
-import { getArchiveSummary, getPackageStats, getRobotsCensus } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, getArchiveMonthly, getArchiveSummary, getPackageStats, getRobotsCensus } from "@/lib/stats-census";
 
 export const revalidate = 60;
 
@@ -23,7 +23,7 @@ const RAIL: RailItem[] = [
 
 export default async function HomePage() {
   const db = hasDatabase();
-  const [archive, packages, census] = await Promise.all([getArchiveSummary(), getPackageStats(), getRobotsCensus()]);
+  const [archive, archiveMonthly, packages, census] = await Promise.all([getArchiveSummary(), getArchiveMonthly(), getPackageStats(), getRobotsCensus()]);
   const latestCrawl = census.at(-1) ?? null;
   const agentInstalls7d = packages.filter((p) => p.def.role === "agent").reduce((s, p) => s + p.last7, 0);
   const [overview, timeline, watched, runs, flow, records, osm, mcp, sightings] = await Promise.all([
@@ -82,6 +82,25 @@ export default async function HomePage() {
         </h2>
         <p className="page-sub">Who acts where, from the last {flow.days} days of every sensor. Link width follows real counts; the ticker replays actual records.</p>
         <AgentFlow data={flow} records={records} />
+
+        {archiveMonthly.length > 1 ? (
+          <figure className="home-chart">
+            <TimelineChart
+              days={archiveMonthly.map((m) => `${m.period}-01`)}
+              bars={archiveMonthly.map((m) => m.agentPrs)}
+              barLabel="Agent PRs opened per month, all of GitHub"
+              line={archiveMonthly.map((m) => (m.prsOpened > 0 ? (100 * m.agentPrs) / m.prsOpened : 0))}
+              lineLabel="Share of all PRs opened (%)"
+              annotations={AGENT_LAUNCHES.filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7)))}
+              title="Agent pull requests across all of GitHub, by month"
+            />
+            <figcaption>
+              Pull requests opened by coding agents across every public repository on GitHub, per month, and their share of all pull requests opened: a census of GH Archive since
+              January 2025, {fmtInt(archive.hours)} hours counted so far.{" "}
+              <Link href="/github">Full census →</Link>
+            </figcaption>
+          </figure>
+        ) : null}
 
         <figure className="home-chart">
           {anyTraffic ? (

@@ -22,6 +22,12 @@ async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
 /* GH Archive census                                                  */
 /* ------------------------------------------------------------------ */
 
+/** Chart annotations: when the major coding agents shipped. */
+export const AGENT_LAUNCHES = [
+  { day: "2025-02-24", label: "Claude Code preview" },
+  { day: "2025-05-19", label: "Codex & Copilot agent" },
+];
+
 export interface ArchivePeriod {
   /** YYYY-MM-DD for days, YYYY-MM for months */
   period: string;

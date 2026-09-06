@@ -3,7 +3,7 @@ import { BarList, Empty } from "@/components/ui";
 import { fmtDate, fmtInt, fmtPct } from "@/lib/format";
 import { githubAgentLabel } from "@/lib/github/agents";
 import { GH_ARCHIVE } from "@/lib/ingest/gharchive";
-import { type ArchivePeriod, type ArchiveSummary, getArchiveAgents, getArchiveDaily, getArchiveMonthly } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, type ArchivePeriod, type ArchiveSummary, getArchiveAgents, getArchiveDaily, getArchiveMonthly } from "@/lib/stats-census";
 
 const TOOL_LABELS: Record<string, string> = {
   claude: "Claude (Code)",
@@ -22,11 +22,6 @@ const TOOL_LABELS: Record<string, string> = {
   sweep: "Sweep",
   other: "other",
 };
-
-const LAUNCHES = [
-  { day: "2025-02-24", label: "Claude Code preview" },
-  { day: "2025-05-19", label: "Codex & Copilot agent" },
-];
 
 function sumTools(periods: ArchivePeriod[], pick: (p: ArchivePeriod) => Record<string, number> | null): { rows: Array<{ tool: string; value: number }>; from: string | null; to: string | null } {
   const totals = new Map<string, number>();
@@ -72,7 +67,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
         barLabel="Agent PRs opened per month"
         line={monthly.map((p) => (p.prsOpened > 0 ? (100 * p.agentPrs) / p.prsOpened : 0))}
         lineLabel="Share of all PRs opened (%)"
-        annotations={LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7)))}
+        annotations={AGENT_LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7)))}
         title="Agent pull requests across all of GitHub, by month"
       />
       {partialMonth && partialMonth.hours < 28 * 24 ? (

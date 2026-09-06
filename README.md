@@ -72,14 +72,14 @@ node --experimental-strip-types scripts/robots-census.mjs --dry --crawl CC-MAIN-
 | `CRON_SECRET` | for ingest | Bearer token for `/api/ingest/*`; also salts IP hashes. Same value in the GitHub repository secret. |
 | `GITHUB_TOKEN` | recommended | Raises GitHub search from 10 to 30 requests/minute and unlocks the text-signature job. Classic token, **no scopes**. |
 | `CLOUDFLARE_API_TOKEN` | optional | Live Cloudflare Radar charts on the Traffic page. Custom token with **Account → Radar → Read**. |
-| `NEXT_PUBLIC_SITE_URL` | optional | Canonical URL if not `https://gcdtracker-site.vercel.app`. |
+| `NEXT_PUBLIC_SITE_URL` | optional | Canonical URL if not `https://gcdtracker.vercel.app`. |
 
 GitHub Actions needs the repository secret `CRON_SECRET` and the repository variable `SITE_URL`.
 
 ### Adding the GitHub token (3 steps)
 
 1. On GitHub: **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**. Name it `gcdtracker`, pick an expiry, **tick no scopes**, generate, copy the value.
-2. On Vercel: project **gcdtracker-site → Settings → Environment Variables → Add**: key `GITHUB_TOKEN`, paste the value, environments Production and Preview, Save.
+2. On Vercel: project **gcdtracker-site (served at gcdtracker.vercel.app) → Settings → Environment Variables → Add**: key `GITHUB_TOKEN`, paste the value, environments Production and Preview, Save.
 3. **Deployments → latest → ⋯ → Redeploy.** The next ingest run uses it.
 
 ### Adding the Cloudflare token (3 steps)
