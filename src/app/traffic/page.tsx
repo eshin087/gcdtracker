@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MiniChart, TimelineChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
-import { fmtDay, fmtInt, fmtPct } from "@/lib/format";
+import { fmtDate, fmtDay, fmtInt, fmtPct } from "@/lib/format";
 import { getCategoryBreakdown, getOverview, getTrafficByDay, hasDatabase } from "@/lib/stats";
 import { getSeries } from "@/lib/stats-sources";
 import { getRobotsCensus, ROBOTS_OPERATORS } from "@/lib/stats-census";
@@ -156,7 +156,7 @@ export default async function TrafficPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, marginTop: 20 }}>
             <div>
               <div className="label" style={{ marginBottom: 8 }}>
-                Blocked completely · crawl of {latestCrawl ? fmtDay(latestCrawl.date) : ""} · {latestCrawl ? fmtInt(latestCrawl.sites) : ""} sites sampled
+                Blocked completely · crawl of {latestCrawl ? fmtDate(latestCrawl.date) : ""} · {latestCrawl ? fmtInt(latestCrawl.sites) : ""} sites sampled
               </div>
               <BarList
                 rows={latestRanked.slice(0, 14).map((r) => ({ key: r.token, label: r.token, value: r.blocked, secondary: r.mentioned, title: `${ROBOTS_OPERATORS[r.token] ?? ""} · named by ${r.mentioned.toFixed(2)}%` }))}
@@ -185,7 +185,7 @@ export default async function TrafficPage() {
                   <tbody>
                     {[...census].reverse().slice(0, 14).map((c) => (
                       <tr key={c.date}>
-                        <td className="mono">{fmtDay(c.date)}</td>
+                        <td className="mono">{fmtDate(c.date)}</td>
                         <td className="num dim">{fmtInt(c.sites)}</td>
                         {["GPTBot", "ClaudeBot", "CCBot", "Google-Extended"].map((t) => (
                           <td className="num" key={t}>
