@@ -49,9 +49,15 @@ async function handle(req: Request, source: string): Promise<Response> {
   const reports: RunReport[] = [];
 
   if (source === "all") {
-    for (const name of ALL_ORDER) {
-      if (Date.now() > deadline - 20_000) break;
-      reports.push(await runJob(name, JOBS[name], ctx));
+    // Each job gets a fair slice of the remaining time so the paced GitHub jobs
+    // cannot starve the ones after them; cheap jobs return early and hand time on.
+    for (let i = 0; i < ALL_ORDER.length; i++) {
+      const name = ALL_ORDER[i];
+      const remaining = deadline - Date.now();
+      if (remaining < 20_000) break;
+      const jobsLeft = ALL_ORDER.length - i;
+      const slice = Math.max(20_000, Math.min(remaining, (remaining / jobsLeft) * 1.8));
+      reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice }));
     }
   } else {
     reports.push(await runJob(source, JOBS[source], ctx));

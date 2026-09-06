@@ -49,15 +49,22 @@ export const mcpJob: Job = async (ctx) => {
         updatedAt: updated ? new Date(updated) : null,
       });
     }
-    if (rows.length > 0) {
+    // The registry lists every version of a server; keep one row per name (newest update wins).
+    const byName = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      const prev = byName.get(r.name);
+      if (!prev || (r.updatedAt?.getTime() ?? 0) >= (prev.updatedAt?.getTime() ?? 0)) byName.set(r.name, r);
+    }
+    const unique = [...byName.values()];
+    if (unique.length > 0) {
       await ctx.db
         .insert(mcpServers)
-        .values(rows)
+        .values(unique)
         .onConflictDoUpdate({
           target: mcpServers.name,
           set: { title: sql`excluded.title`, description: sql`excluded.description`, url: sql`excluded.url`, updatedAt: sql`excluded.updated_at` },
         });
-      stats.upserted = (stats.upserted as number) + rows.length;
+      stats.upserted = (stats.upserted as number) + unique.length;
     }
     cursor = body.metadata?.nextCursor;
     if (!cursor) break;

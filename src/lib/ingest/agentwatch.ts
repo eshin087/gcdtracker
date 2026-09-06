@@ -39,7 +39,11 @@ export const agentWatchJob: Job = async (ctx) => {
 
   // 2. Cloudflare's public registry of agents that sign requests (Web Bot Auth).
   if (timeLeft(ctx) > 15_000) {
-    const res = await fetch(AGENT_WATCH.registry, { headers: { "user-agent": "gcdTracker/0.1 (+https://github.com/eshin087/gcdtracker-site) bot" }, cache: "no-store" });
+    // The registry answers 403 to JSON-only Accept headers; ask for text explicitly.
+    const res = await fetch(AGENT_WATCH.registry, {
+      headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker-site.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
+      cache: "no-store",
+    });
     if (res.ok) {
       const text = await res.text();
       const dirs = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("http"));
