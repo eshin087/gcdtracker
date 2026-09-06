@@ -4,12 +4,14 @@ import { notFound } from "next/navigation";
 import { MiniChart } from "@/components/charts";
 import { SaveButton } from "@/components/SaveButton";
 import { BarList, Empty, PageHeader, Segmented, StatTiles } from "@/components/ui";
-import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
+import { fmtDay, fmtInt, fmtPct, fmtStamp, relTime } from "@/lib/format";
 import { GITHUB_AGENTS, githubAgent, githubAgentLabel } from "@/lib/github/agents";
 import { signatureLabel } from "@/lib/github/signatures";
 import { SITE } from "@/lib/site";
 import { getGithubByAgent, getGithubByDay, getGithubEvents, getOverview, hasDatabase } from "@/lib/stats";
 import { getWatchedByDay, getWatchedRecent, getWatchedSignals, getWatchedSummary } from "@/lib/stats-sources";
+import { getArchiveSummary } from "@/lib/stats-census";
+import { Census } from "../Census";
 
 export const revalidate = 300;
 
@@ -18,31 +20,40 @@ export const metadata: Metadata = {
   description: "Pull requests opened by AI coding agents on GitHub: daily counts across all repositories, documented PRs in watched repositories, and self-disclosure signals.",
 };
 
-const VIEWS = ["day", "agents", "prs", "watched", "signals"] as const;
+const VIEWS = ["census", "day", "agents", "prs", "watched", "signals"] as const;
 const STATUSES = ["all", "unreviewed", "needs_evidence", "confirmed", "dismissed"] as const;
 type View = (typeof VIEWS)[number];
 
 export default async function GithubPage({ params }: { params: Promise<{ view?: string[] }> }) {
   const { view: segments } = await params;
-  const v = segments?.[0] ?? "day";
+  const v = segments?.[0] ?? "census";
   const status = segments?.[1] ?? "all";
   if (!(VIEWS as readonly string[]).includes(v)) notFound();
   if ((segments?.length ?? 0) > 2 || (segments?.length === 2 && (v !== "signals" || !(STATUSES as readonly string[]).includes(status)))) notFound();
   const view = v as View;
 
   const db = hasDatabase();
-  const [overview, byDay, watched, watchedByDay] = await Promise.all([getOverview(), getGithubByDay(60), getWatchedSummary(), getWatchedByDay(60)]);
+  const [overview, byDay, watched, watchedByDay, archive] = await Promise.all([getOverview(), getGithubByDay(60), getWatchedSummary(), getWatchedByDay(60), getArchiveSummary()]);
   const lastDataDay = [...byDay].reverse().find((d) => d.botAccounts > 0 || d.branchPrefix > 0)?.day ?? null;
 
-  const tiles = [
-    { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "all of GitHub, complete UTC days" },
-    { value: fmtInt(overview.codexPrs7d), label: "PRs on codex/ branches, 7 days", sub: "Codex pushes under the user's account" },
+  const latest = archive.latest;
+  const tiles = latest
+    ? [
+        { value: fmtInt(archive.last7.agentPrs), label: `agent PRs opened, last ${archive.last7.days} complete days`, sub: `every public event on GitHub · ${archive.prior7.days > 0 ? `${archive.prior7.agentPrs < archive.last7.agentPrs ? "+" : ""}${fmtInt(archive.last7.agentPrs - archive.prior7.agentPrs)} vs prior week` : "GH Archive census"}` },
+        { value: archive.last7.prsOpened > 0 ? fmtPct(archive.last7.agentPrs / archive.last7.prsOpened, 2) : "–", label: "of all pull requests opened on GitHub", sub: `${fmtInt(archive.last7.prsOpened)} PRs opened in the same days` },
+      ]
+    : [
+        { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "all of GitHub, complete UTC days" },
+        { value: fmtInt(overview.codexPrs7d), label: "PRs on codex/ branches, 7 days", sub: "Codex pushes under the user's account" },
+      ];
+  tiles.push(
     { value: fmtInt(watched.last7d), label: "agent PRs in watched repos, 7 days", sub: `${fmtInt(watched.repos.length)} repositories watched` },
     { value: fmtInt(watched.signals.unreviewed ?? 0), label: "self-disclosure signals awaiting review", sub: `${fmtInt(watched.signals.confirmed ?? 0)} confirmed` },
-  ];
+  );
 
   const seg = [
-    { href: "/github", label: "By day", active: view === "day" },
+    { href: "/github", label: "All of GitHub", active: view === "census" },
+    { href: "/github/day", label: "Search API by day", active: view === "day" },
     { href: "/github/agents", label: "By agent", active: view === "agents" },
     { href: "/github/prs", label: "Recent PRs", active: view === "prs" },
     { href: "/github/watched", label: "Watched repos", active: view === "watched" },
@@ -53,10 +64,11 @@ export default async function GithubPage({ params }: { params: Promise<{ view?: 
     <div className="shell explorer">
       <PageHeader
         title="GitHub"
-        sub="Two measurements. Daily counts of pull requests by AI coding agents across all of GitHub, from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
+        sub="Three measurements. A census of every public GitHub event since January 2025, counting pull requests by AI coding agents and their share of all PRs. Daily counts from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="GitHub views" />
+      {view === "census" ? <Census summary={archive} db={db} /> : null}
       {view === "day" ? <ByDay byDay={byDay} watchedByDay={watchedByDay} db={db} lastDataDay={lastDataDay} /> : null}
       {view === "agents" ? <ByAgent db={db} /> : null}
       {view === "prs" ? <Prs db={db} /> : null}

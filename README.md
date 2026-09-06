@@ -8,12 +8,12 @@ gcdTracker is a living report plus data explorer. It watches every place where A
 |---|---|---|
 | **This site's visitors** | 150+ AI crawler and agent user agents (GPTBot, ClaudeBot, ChatGPT-User, Perplexity-User, Google-Agent, …), checked against operators' published IP ranges; Web Bot Auth signatures; three honeypot paths | verified user agent |
 | **Wikipedia & Wikimedia** | edits Wikipedia's edit filters tag as possibly AI-generated; heuristic matches on summaries/usernames; bot volume per Wikimedia project; agent-like Wikidata bots; AI-generated media on Commons | filter-flagged / heuristic |
-| **GitHub** | PRs per day by 13 coding-agent bot accounts and branch-prefix fingerprints (`codex/`, `claude/`, `cursor/`); a watched-repository collector storing every agent PR with evidence; self-disclosure signals with a review workflow; text-signature trends | bot account / fingerprint / self-identified |
+| **GitHub** | a GH Archive census of every public event since January 2025 (agent PRs by bot account and branch prefix as a share of all PRs, AI co-author trailers in commits while the feed carried them); PRs per day from the search API; a watched-repository collector storing every agent PR with evidence; self-disclosure signals with a review workflow | bot account / fingerprint / self-identified |
 | **Maps** | OpenStreetMap changesets made with RapiD, MapWithAI, Osmose or bots, sampled from the public feed | self-identified |
 | **Forums** | posts on Moltbook (agent-only social network) and a guestbook visiting agents can sign | agent-only platform |
-| **Tooling** | MCP registry servers per day; botcommits.dev AI-attributed commits; Hugging Face agent-usage | quoted source |
+| **Tooling** | npm and PyPI downloads of agent CLIs and agent frameworks (npm back to 2024); MCP registry servers per day; botcommits.dev AI-attributed commits; Hugging Face agent-usage | quoted source |
 | **New agents** | daily diff of ai.robots.txt and Cloudflare's signed-agent registry | self-identified |
-| **Traffic** | this site's AI share plus Cloudflare Radar bot statistics (live with a token) | quoted source |
+| **Traffic** | this site's AI share; Cloudflare Radar bot statistics (live with a token); a robots.txt census from Common Crawl (share of sites naming and blocking each AI crawler, per crawl since 2023) | quoted source / sampled |
 
 Every number carries a confidence tier; see the Methods page. Records can be bookmarked (browser-local "Saved" page), and the Notes section holds field notes and research briefs written as markdown.
 
@@ -25,7 +25,10 @@ Next.js 16 (App Router, Turbopack) · Tailwind 4 · Drizzle ORM on Neon Postgres
 src/proxy.ts                 classifies every request, records hits after the response
 src/lib/agents/              catalog, classifier, IP-range verification
 src/lib/ingest/              one job per source (wikipedia, wikimedia, github, watched, github-signatures,
-                             moltbook, osm, mcp, botcommits, agentwatch, radar, ipranges, retention)
+                             moltbook, osm, mcp, botcommits, agentwatch, radar, packages, ipranges, retention;
+                             gharchive and robots-census receive results from the Actions workers)
+scripts/gharchive.mjs        GH Archive census worker (.github/workflows/gharchive.yml, every 3 hours + backfill)
+scripts/robots-census.mjs    Common Crawl robots.txt census worker (.github/workflows/robots-census.yml, weekly)
 src/lib/github/signatures.ts self-disclosure rules
 src/app/api/ingest/[source]  protected job runner (Bearer CRON_SECRET)
 src/lib/stats*.ts            every page query, with empty shapes when the database is absent
@@ -52,7 +55,14 @@ Trigger a job locally:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/ingest/watched
 ```
 
-Sources: `all`, `ipranges`, `wikipedia`, `wikimedia`, `moltbook`, `osm`, `mcp`, `botcommits`, `agentwatch`, `radar`, `github`, `watched`, `github-signatures`, `retention`.
+Sources: `all`, `ipranges`, `wikipedia`, `wikimedia`, `moltbook`, `osm`, `mcp`, `botcommits`, `agentwatch`, `radar`, `packages`, `github`, `watched`, `github-signatures`, `retention`. `gharchive` and `robots-census` accept POSTed results from the workers and answer status questions on GET.
+
+Run a worker locally (Node 22.18+ or 24; `--dry` prints instead of posting):
+
+```bash
+node --experimental-strip-types scripts/gharchive.mjs --dry --from 2026-09-05-12
+node --experimental-strip-types scripts/robots-census.mjs --dry --crawl CC-MAIN-2025-30 --files 4
+```
 
 ## Environment variables
 
@@ -81,6 +91,11 @@ GitHub Actions needs the repository secret `CRON_SECRET` and the repository vari
 ## Scheduling
 
 Vercel Hobby cron runs `/api/ingest/all` once a day (`vercel.json`). The real cadence comes from `.github/workflows/ingest.yml`, every 30 minutes. GitHub pauses scheduled workflows after 60 days without repository activity; any commit re-enables them.
+
+Two heavier workers also run in Actions because their inputs are far too large for a serverless function:
+
+- `gharchive.yml` streams GH Archive hourly files every three hours (`--auto` fills any gap in the last week). A backfill is a manual run with `from`, `to` and `shards` (up to 16 parallel jobs; each hour takes 2 to 10 seconds, so a year is roughly 16 machine-hours). Re-running a backfill only processes hours still missing.
+- `robots-census.yml` samples 100 robots.txt archive files from every Common Crawl crawl not yet stored, weekly. A first run backfills every crawl since 2023 (about 35 crawls, a minute or two each).
 
 ## Reviewing self-disclosure signals
 

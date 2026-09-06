@@ -372,3 +372,35 @@ export const agentSightings = pgTable(
   },
   (t) => [uniqueIndex("agent_sightings_kind_token_uq").on(t.kind, t.token), index("agent_sightings_first_seen_idx").on(t.firstSeen.desc())],
 );
+
+/**
+ * GH Archive census: every public GitHub event, counted per hour by the Actions
+ * worker (scripts/gharchive.mjs). kind ∈ total | agent-prs | agent-merged |
+ * pr-signature | commit-signature; key is the metric name, agent key or tool key.
+ */
+export const ghArchiveHourly = pgTable(
+  "gh_archive_hourly",
+  {
+    /** YYYY-MM-DDTHH (UTC) */
+    hour: text("hour").notNull(),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: integer("value").notNull(),
+    fetchedAt: ts("fetched_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.hour, t.kind, t.key] })],
+);
+
+/** Daily roll-up of gh_archive_hourly, recomputed for every day a batch touches. */
+export const ghArchiveDaily = pgTable(
+  "gh_archive_daily",
+  {
+    day: day("day").notNull(),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: integer("value").notNull(),
+    /** hours of the day present in the hourly table (24 = complete) */
+    hours: integer("hours").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.kind, t.key] }), index("gh_archive_daily_kind_day_idx").on(t.kind, t.day.desc())],
+);

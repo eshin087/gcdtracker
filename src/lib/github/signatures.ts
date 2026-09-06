@@ -71,3 +71,29 @@ export function findSignatures(text: string | null | undefined): SignatureHit[] 
 export function signatureLabel(ruleId: string): string {
   return SIGNATURE_RULES.find((r) => r.id === ruleId)?.label ?? ruleId;
 }
+
+/** Canonical tool keys for the names the rules recognise. */
+const TOOL_KEYS: Array<[RegExp, string]> = [
+  [/claude/i, "claude"],
+  [/codex/i, "codex"],
+  [/chatgpt/i, "chatgpt"],
+  [/copilot/i, "copilot"],
+  [/cursor/i, "cursor"],
+  [/windsurf/i, "windsurf"],
+  [/jules/i, "jules"],
+  [/devin/i, "devin"],
+  [/aider/i, "aider"],
+  [/gemini/i, "gemini"],
+  [/kiro/i, "kiro"],
+  [/amazon q/i, "amazon-q"],
+  [/openhands/i, "openhands"],
+  [/sweep/i, "sweep"],
+];
+
+/** Which tool a signature excerpt names, as a stable key (`claude`, `copilot`, …). */
+export function namedTool(excerpt: string): string {
+  const m = excerpt.match(new RegExp(`(?:with|by|using)\\s+(?:the\\s+)?\\[?(${TOOLS})|co-authored-by:\\s*(${TOOLS})|^(aider):`, "i"));
+  const name = m ? (m[1] ?? m[2] ?? m[3] ?? "") : excerpt;
+  for (const [re, key] of TOOL_KEYS) if (re.test(name)) return key;
+  return "other";
+}

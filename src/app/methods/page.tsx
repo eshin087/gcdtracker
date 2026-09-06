@@ -86,6 +86,15 @@ export default function MethodsPage() {
           branch starts with <code>codex/</code>, <code>claude/</code> or <code>cursor/</code>, a fingerprint that on a single day
           in September 2026 matched more pull requests than every bot account combined. Past days are queried once and frozen.
         </p>
+        <p>
+          The search API caps every query at a thousand results, so since phase 4 the headline GitHub numbers come from a census
+          instead: GH Archive publishes every public GitHub event, hour by hour, and a worker in GitHub Actions streams each hourly
+          file (70 to 150 MB) and counts pull requests opened by the same bot accounts and branch prefixes, alongside every pull
+          request opened that hour. That gives agent PRs as a share of all PRs, back to January 2025, with no sampling. Two
+          caveats come from GitHub, not from us: during 2025 the public event payloads were slimmed, so commit messages (which
+          carried AI co-author trailers) end in the autumn of 2025, and PR bodies end at the same time. The census marks which
+          measures each hour supports rather than showing zeros.
+        </p>
 
         <h3 id="watched">Watched repositories</h3>
         <p>
@@ -108,6 +117,15 @@ export default function MethodsPage() {
           dataset (which coding agents hit the Hub). Two public registries are diffed daily so newly announced agents appear
           automatically: the ai.robots.txt crawler list and Cloudflare&apos;s registry of agents that sign requests. Cloudflare Radar
           figures are quoted, and drawn live when an API token is configured.
+        </p>
+        <p>
+          Two further public measures arrived with phase 4. Package downloads: npm and PyPI publish daily download counts for
+          every package, so the agent CLIs (Claude Code, Codex, Copilot, Gemini, OpenCode, Aider, OpenHands, Browser Use) and the
+          frameworks agents are built from (the MCP SDKs, the agent SDKs, CrewAI) are charted as installs per day. Downloads count
+          machines and CI runs, not people. And a robots.txt census: Common Crawl archives the robots.txt of every host it visits,
+          about monthly, and a worker samples a hundred of those archive files per crawl (tens of thousands of sites) and counts
+          which AI crawlers are named and which are fully blocked, back to early 2023. The sample is of the whole web, where
+          blocking is rarer than on the large news and reference sites that most published figures describe.
         </p>
 
         <h3 id="forums">Agent forums and guestbook</h3>
@@ -174,7 +192,9 @@ export default function MethodsPage() {
           <li>Agentic browsers that ship a stock Chrome user agent are invisible at this layer and counted as human. Visit counts are a floor.</li>
           <li>Meta, ByteDance, DeepSeek, xAI and most tooling vendors publish no address ranges, so their agents can never be verified.</li>
           <li>Wikipedia&apos;s filters catch a particular style of AI writing; they miss careful edits and occasionally flag human ones.</li>
-          <li>GitHub counts come from the public search API, which is rate-limited and sometimes marks results as incomplete.</li>
+          <li>GitHub search counts are rate-limited and sometimes incomplete; the GH Archive census replaces them for totals but can only see agents that use a bot account or a branch prefix.</li>
+          <li>The robots.txt census is a sample of Common Crawl&apos;s hosts, weighted toward the long tail of the web; it cannot see sites that block Common Crawl itself.</li>
+          <li>Package downloads include CI runs, mirrors and reinstalls; they are a demand signal, not a user count.</li>
           <li>The watched-repository sample is a selection of repositories, not a census of GitHub.</li>
           <li>Quoted series (botcommits.dev, Hugging Face, Cloudflare Radar) use their publishers&apos; definitions and update on their schedules.</li>
           <li>This site is new and small. Its own traffic numbers describe one obscure host, not the web.</li>

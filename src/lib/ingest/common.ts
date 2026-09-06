@@ -9,6 +9,8 @@ export interface JobContext {
   deadline: number;
   /** optional request body handed to the job (e.g. a file the scheduler fetched on our behalf) */
   payload?: string;
+  /** query string of the triggering request (jobs that answer status questions read it) */
+  query?: URLSearchParams;
 }
 
 export interface JobResult {

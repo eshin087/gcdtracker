@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { CATALOG, IP_SOURCES } from "@/lib/agents/catalog";
 import { toCsv } from "@/lib/csv";
 import { db } from "@/lib/db";
-import { forumDaily, githubDaily, githubEvents, guestbookNotes, osmChangesets, trafficDaily, watchedPrs, watchedSignals, mcpServers, externalSeries, agentSightings, visits, wikiEdits } from "@/lib/db/schema";
+import { forumDaily, ghArchiveDaily, githubDaily, githubEvents, guestbookNotes, osmChangesets, trafficDaily, watchedPrs, watchedSignals, mcpServers, externalSeries, agentSightings, visits, wikiEdits } from "@/lib/db/schema";
 
 export const revalidate = 300;
 
@@ -71,6 +71,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ name: s
     }
     case "mcp_servers.csv": {
       const rows = await db.select().from(mcpServers).orderBy(desc(mcpServers.publishedAt)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "gh_archive_daily.csv": {
+      const rows = await db.select().from(ghArchiveDaily).orderBy(desc(ghArchiveDaily.day), ghArchiveDaily.kind, ghArchiveDaily.key).limit(LIMIT);
       return csv(name, toCsv(rows));
     }
     case "external_series.csv": {

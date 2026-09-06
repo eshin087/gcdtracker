@@ -5,6 +5,8 @@ import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
 import { fmtDay, fmtInt, fmtPct } from "@/lib/format";
 import { getCategoryBreakdown, getOverview, getTrafficByDay, hasDatabase } from "@/lib/stats";
 import { getSeries } from "@/lib/stats-sources";
+import { getRobotsCensus, ROBOTS_OPERATORS } from "@/lib/stats-census";
+import { ROBOTS_CENSUS } from "@/lib/ingest/robots-census";
 import industry from "../../../data/industry.json";
 import { CATEGORY_LABELS } from "@/lib/agents/types";
 
@@ -17,7 +19,15 @@ export const metadata: Metadata = {
 
 export default async function TrafficPage() {
   const db = hasDatabase();
-  const [overview, byDay, breakdown, radar] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30), getSeries("radar")]);
+  const [overview, byDay, breakdown, radar, census] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30), getSeries("radar"), getRobotsCensus()]);
+  const latestCrawl = census.at(-1) ?? null;
+  const blockedShare = (token: string) => census.map((c) => (c.sites > 0 ? (100 * (c.tokens[token]?.blocked ?? 0)) / c.sites : 0));
+  const latestRanked = latestCrawl
+    ? Object.entries(latestCrawl.tokens)
+        .filter(([t]) => t !== "*" && t !== "Googlebot" && t !== "Bingbot")
+        .map(([t, v]) => ({ token: t, blocked: (100 * v.blocked) / latestCrawl.sites, mentioned: (100 * v.mentioned) / latestCrawl.sites }))
+        .sort((a, b) => b.blocked - a.blocked)
+    : [];
   const days = byDay.map((d) => d.day);
   const totalBreakdown = breakdown.reduce((a, b) => a + b.count, 0);
   const botShare = Object.entries(radar)
@@ -116,6 +126,80 @@ export default async function TrafficPage() {
               ))}
           </ul>
         </div>
+      )}
+
+      <div className="section-head">
+        <h2>Who the web tells to go away</h2>
+        <a className="more" href={ROBOTS_CENSUS.site}>
+          Common Crawl robots.txt archive ↗
+        </a>
+      </div>
+      <p className="page-sub" style={{ maxWidth: "72ch" }}>
+        Every Common Crawl crawl (roughly monthly) archives the robots.txt of each site it visits. A worker samples {latestCrawl ? fmtInt(latestCrawl.files) : "100"} of
+        those archive files per crawl, spread across the crawl, and counts sites whose robots.txt names an AI crawler and sites that block it completely
+        (<code className="mono">Disallow: /</code> for that agent). Shares are of all sampled sites with a readable robots.txt, so they describe the whole web, not the
+        top sites where blocking is far more common.
+      </p>
+      {census.length === 0 ? (
+        <Empty db={db}>The robots.txt census runs weekly in GitHub Actions and backfills every crawl since 2023 on first launch.</Empty>
+      ) : (
+        <>
+          <TimelineChart
+            days={census.map((c) => c.date)}
+            bars={blockedShare("GPTBot")}
+            barLabel="Sites blocking GPTBot (%)"
+            line={blockedShare("ClaudeBot")}
+            lineLabel="Sites blocking ClaudeBot (%)"
+            title="Share of sampled sites that fully block, per crawl"
+            height={220}
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, marginTop: 20 }}>
+            <div>
+              <div className="label" style={{ marginBottom: 8 }}>
+                Blocked completely · crawl of {latestCrawl ? fmtDay(latestCrawl.date) : ""} · {latestCrawl ? fmtInt(latestCrawl.sites) : ""} sites sampled
+              </div>
+              <BarList
+                rows={latestRanked.slice(0, 14).map((r) => ({ key: r.token, label: r.token, value: r.blocked, secondary: r.mentioned, title: `${ROBOTS_OPERATORS[r.token] ?? ""} · named by ${r.mentioned.toFixed(2)}%` }))}
+                format={(v) => `${v.toFixed(2)}%`}
+              />
+              <p className="dim sans" style={{ fontSize: 12.5, marginTop: 8 }}>
+                Accent: fully blocked. Grey: named at all. Googlebot is blocked by {latestCrawl ? ((100 * (latestCrawl.tokens.Googlebot?.blocked ?? 0)) / latestCrawl.sites).toFixed(2) : "–"}% of the same sites, for scale.
+              </p>
+            </div>
+            <div>
+              <div className="label" style={{ marginBottom: 8 }}>
+                Per crawl
+              </div>
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Crawl</th>
+                      <th className="num">Sites</th>
+                      <th className="num">GPTBot</th>
+                      <th className="num">ClaudeBot</th>
+                      <th className="num">CCBot</th>
+                      <th className="num">Google-Extended</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...census].reverse().slice(0, 14).map((c) => (
+                      <tr key={c.date}>
+                        <td className="mono">{fmtDay(c.date)}</td>
+                        <td className="num dim">{fmtInt(c.sites)}</td>
+                        {["GPTBot", "ClaudeBot", "CCBot", "Google-Extended"].map((t) => (
+                          <td className="num" key={t}>
+                            {((100 * (c.tokens[t]?.blocked ?? 0)) / c.sites).toFixed(2)}%
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="section-head">

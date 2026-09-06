@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Source to ingest (all, ipranges, wikipedia, wikimedia, moltbook, osm, mcp, botcommits, agentwatch, radar, github, watched, github-signatures, retention)"
+        description: "Source to ingest (all, ipranges, wikipedia, wikimedia, moltbook, osm, mcp, botcommits, agentwatch, radar, packages, github, watched, github-signatures, retention)"
         default: "all"
 
 jobs:

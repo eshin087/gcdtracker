@@ -1,0 +1,60 @@
+name: gharchive
+
+# GH Archive census: counts agent pull requests across all public GitHub activity.
+# The hourly files are too large for the site's serverless functions, so this worker
+# streams them here and posts hourly totals to /api/ingest/gharchive.
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Backfill start hour, e.g. 2025-01-01-0 (leave empty for the automatic catch-up)"
+        default: ""
+      to:
+        description: "Backfill end hour, e.g. 2025-03-31-23"
+        default: ""
+      shards:
+        description: "Parallel jobs for a backfill (1-16)"
+        default: "8"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        run: |
+          n="${{ github.event.inputs.shards || '1' }}"
+          if [ -z "${{ github.event.inputs.from }}" ]; then n=1; fi
+          echo "shards=$(node -e "console.log(JSON.stringify([...Array(Math.min(16, Math.max(1, Number('$n')))).keys()]))")" >> "$GITHUB_OUTPUT"
+
+  census:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Count
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FROM: ${{ github.event.inputs.from }}
+          TO: ${{ github.event.inputs.to }}
+          SHARDS: ${{ github.event.inputs.shards || '1' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$FROM" ]; then
+            node scripts/gharchive.mjs --from "$FROM" --to "${TO:-$FROM}" --shard "${{ matrix.shard }}/$SHARDS" --max-minutes 330
+          else
+            node scripts/gharchive.mjs --auto --max-minutes 150
+          fi
