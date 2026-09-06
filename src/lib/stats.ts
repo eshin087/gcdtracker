@@ -26,8 +26,11 @@ import type { LiveInfo } from "@/lib/live-types";
 
 const AI = [...AI_CATEGORIES] as string[];
 const n = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
-const iso = (d: Date | string | null | undefined): string | null =>
-  d === null || d === undefined ? null : typeof d === "string" ? d : d.toISOString();
+const iso = (d: Date | string | null | undefined): string | null => {
+  if (d === null || d === undefined) return null;
+  const date = typeof d === "string" ? new Date(d.includes("T") ? d : d.replace(" ", "T").replace(/\+00(:00)?$/, "Z")) : d;
+  return Number.isNaN(date.getTime()) ? String(d) : date.toISOString();
+};
 
 /** Run a query when the database exists; otherwise (or on error) return the fallback shape. */
 async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
