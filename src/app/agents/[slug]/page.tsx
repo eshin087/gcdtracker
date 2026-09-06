@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MiniChart } from "@/components/charts";
+import { TimelineChart } from "@/components/charts";
 import { CategoryBadge, Empty, PageHeader, StatTiles, VerifiedBadge } from "@/components/ui";
 import { findAgent, ipSourceFor } from "@/lib/agents/catalog";
 import { CATEGORY_DESCRIPTIONS } from "@/lib/agents/types";
@@ -96,8 +96,11 @@ export default async function AgentPage({ params }: { params: Params }) {
         <Empty db={db}>This agent has not visited yet. The moment it does, its hits, paths and verification results appear here.</Empty>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24, marginBottom: 28 }}>
-            <MiniChart days={detail.byDay.map((d) => d.day)} values={detail.byDay.map((d) => d.hits)} label="Hits per day · 60 days" />
+          <figure className="home-chart" style={{ margin: "4px 0 26px" }}>
+            <TimelineChart days={detail.byDay.map((d) => d.day)} bars={detail.byDay.map((d) => d.hits)} barLabel="hits per day" title="Hits per day, last 60 days" height={220} />
+            <figcaption>Hits per day over the last 60 days.</figcaption>
+          </figure>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, marginBottom: 32 }}>
             <div>
               <div className="label" style={{ marginBottom: 6 }}>
                 Most requested paths
