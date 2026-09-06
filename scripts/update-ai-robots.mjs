@@ -5,7 +5,7 @@ import { writeFile } from "node:fs/promises";
 const SOURCE = "https://raw.githubusercontent.com/ai-robots-txt/ai.robots.txt/main/robots.json";
 
 const res = await fetch(SOURCE, {
-  headers: { "user-agent": "gcdTracker/0.1 (+https://github.com/eshin087/gcdTracker) bot" },
+  headers: { "user-agent": "gcdTracker/0.1 (+https://github.com/eshin087/gcdtracker-site) bot" },
 });
 if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
 const agents = await res.json();
