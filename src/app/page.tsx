@@ -9,6 +9,7 @@ import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
 import { getIngestStatus, getOverview, getTimeline, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
+import { getArchiveSummary, getPackageStats, getRobotsCensus } from "@/lib/stats-census";
 
 export const revalidate = 60;
 
@@ -22,6 +23,9 @@ const RAIL: RailItem[] = [
 
 export default async function HomePage() {
   const db = hasDatabase();
+  const [archive, packages, census] = await Promise.all([getArchiveSummary(), getPackageStats(), getRobotsCensus()]);
+  const latestCrawl = census.at(-1) ?? null;
+  const agentInstalls7d = packages.filter((p) => p.def.role === "agent").reduce((s, p) => s + p.last7, 0);
   const [overview, timeline, watched, runs, flow, records, osm, mcp, sightings] = await Promise.all([
     getOverview(),
     getTimeline(60),
@@ -66,7 +70,9 @@ export default async function HomePage() {
           tiles={[
             { value: fmtInt(overview.aiVisits7d), label: "AI visits to this site, 7 days", sub: `${fmtPct(overview.aiShare7d)} of all requests` },
             { value: fmtInt(overview.wikiFlagged7d), label: "Wikipedia edits flagged, 7 days" },
-            { value: fmtInt(overview.agentPrs7d), label: "GitHub PRs by agent accounts, 7 days", sub: `+${fmtInt(overview.codexPrs7d)} on codex/ branches · ${fmtInt(watched.last7d)} in watched repos` },
+            archive.latest
+              ? { value: fmtInt(archive.last7.agentPrs), label: `GitHub PRs by agents, last ${archive.last7.days} days`, sub: `${archive.last7.prsOpened > 0 ? fmtPct(archive.last7.agentPrs / archive.last7.prsOpened, 2) : "–"} of every PR opened on GitHub · census` }
+              : { value: fmtInt(overview.agentPrs7d), label: "GitHub PRs by agent accounts, 7 days", sub: `+${fmtInt(overview.codexPrs7d)} on codex/ branches · ${fmtInt(watched.last7d)} in watched repos` },
             { value: fmtInt(overview.forumPosts7d), label: "agent-forum posts, 7 days" },
           ]}
         />
@@ -101,12 +107,12 @@ export default async function HomePage() {
         <div className="source-grid">
           <SourceCard title="This site's visitors" what="Every request classified by user agent and signature, then checked against the operator's published IP ranges. Three honeypots catch robots.txt violators." rung="verified user agent" value={fmtInt(overview.aiVisitsTotal)} valueLabel="AI visits recorded" href="/visitors" />
           <SourceCard title="Wikipedia & Wikimedia" what="Edits Wikipedia's own filters tag as possibly AI-generated, bot volume across every major Wikimedia project, and AI-generated media on Commons." rung="filter-flagged" value={fmtInt(overview.wikiFlaggedTotal)} valueLabel="flagged edits stored" href="/wikipedia" />
-          <SourceCard title="GitHub" what="Pull requests per day by 13 coding-agent accounts across all of GitHub, plus every agent PR in watched repositories with its evidence and self-disclosure signals." rung="bot account" value={fmtInt(watched.total)} valueLabel="documented PRs in watched repos" href="/github" />
+          <SourceCard title="GitHub" what="A census of every public GitHub event since January 2025: pull requests by coding agents as a share of all PRs. Plus every agent PR in watched repositories with its evidence and self-disclosure signals." rung="bot account" value={archive.completeDays > 0 ? fmtInt(archive.completeDays) : fmtInt(watched.total)} valueLabel={archive.completeDays > 0 ? "days of GitHub history counted" : "documented PRs in watched repos"} href="/github" />
           <SourceCard title="Maps" what="OpenStreetMap changesets made with AI-suggested geometry (RapiD, MapWithAI), automated QA tools, or bots, sampled from the public feed." rung="self-identified" value={fmtInt(osm.ai7d)} valueLabel="AI-assisted changesets, 7 days" href="/maps" />
           <SourceCard title="Agent forums" what="Posts on Moltbook, a social network where only AI agents hold accounts, plus notes agents leave in this site's guestbook." rung="agent-only platform" value={fmtInt(overview.forumPosts7d)} valueLabel="posts in 7 days" href="/forums" />
-          <SourceCard title="Tooling" what="MCP servers published per day, AI-attributed commits across GitHub, and which coding agents use the Hugging Face Hub." rung="quoted source" value={fmtInt(mcp.new7d)} valueLabel="MCP servers published, 7 days" href="/tooling" />
+          <SourceCard title="Tooling" what="Downloads of agent CLIs and agent frameworks from npm and PyPI, MCP servers published per day, AI-attributed commits, and which coding agents use the Hugging Face Hub." rung="quoted source" value={agentInstalls7d > 0 ? fmtInt(agentInstalls7d) : fmtInt(mcp.new7d)} valueLabel={agentInstalls7d > 0 ? "agent CLI installs, 7 days" : "MCP servers published, 7 days"} href="/tooling" />
           <SourceCard title="New agents" what="Newly published crawler tokens and agents that cryptographically sign their requests, diffed daily from two public registries." rung="self-identified" value={fmtInt(sightings.counts["signature-registry"] ?? 0)} valueLabel="agents that sign requests" href="/new-agents" />
-          <SourceCard title="Traffic" what="How much of the web's requests are AI: this site's own share and internet-scale figures from Cloudflare Radar." rung="quoted source" value={fmtPct(overview.aiShare7d)} valueLabel="AI share here, 7 days" href="/traffic" />
+          <SourceCard title="Traffic" what="How much of the web's requests are AI: this site's own share, internet-scale figures from Cloudflare Radar, and a robots.txt census of which AI crawlers the web blocks, per crawl since 2023." rung="quoted source" value={latestCrawl ? fmtPct((latestCrawl.tokens.GPTBot?.blocked ?? 0) / latestCrawl.sites, 2) : fmtPct(overview.aiShare7d)} valueLabel={latestCrawl ? "of sampled sites block GPTBot" : "AI share here, 7 days"} href="/traffic" />
         </div>
 
         <h2 id="picture" className="page-title" style={{ fontSize: 26, margin: "10px 0 12px", scrollMarginTop: 80 }}>
