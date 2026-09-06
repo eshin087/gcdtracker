@@ -98,6 +98,7 @@ Statuses: `confirmed`, `dismissed`, `needs_evidence`. The next ingest run applie
 - **Retention**: visits, Wikipedia edits and forum posts are deleted after 180 days, GitHub PR samples after 90, ingest logs after 30. Watched-repository PRs, map changesets, MCP servers and sightings are kept.
 - **Hide a guestbook note**: `update guestbook_notes set hidden = true where id = <id>;`
 - **Refresh the long-tail agent list**: `node scripts/update-ai-robots.mjs` and commit `data/ai-robots.json`.
+- **Refresh the signed-agent registry**: `node scripts/update-registry.mjs` and commit `data/signature-registry.json` (the registry host blocks cloud fetchers, so this runs from a workstation).
 - **Rotate the secret**: update `CRON_SECRET` in Vercel (production + preview) and the GitHub repository secret together.
 - **Next phase (not built)**: an open beacon other site owners can add so AI-agent visits are counted across many sites, with per-site keys and aggregate-only public stats.
 

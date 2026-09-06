@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import aiRobots from "../../../data/ai-robots.json";
+import vendoredRegistry from "../../../data/signature-registry.json";
 import { agentSightings, externalSeries } from "@/lib/db/schema";
 import { fetchJson, type Job, timeLeft } from "./common";
 
@@ -49,6 +50,11 @@ export const agentWatchJob: Job = async (ctx) => {
       });
       status = String(res.status);
       if (res.ok) text = await res.text();
+    }
+    if (!text) {
+      // Vendored copy (refreshed by hand with scripts/update-registry.mjs).
+      text = (vendoredRegistry as { urls: string[] }).urls.join("\n");
+      status = `vendored ${(vendoredRegistry as { fetchedAt: string }).fetchedAt.slice(0, 10)}`;
     }
     if (text) {
       const dirs = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("http"));
