@@ -5,7 +5,14 @@ import { type Job, type RunReport, runJob } from "@/lib/ingest/common";
 import { githubJob } from "@/lib/ingest/github";
 import { ipRangesJob } from "@/lib/ingest/ipranges";
 import { moltbookJob } from "@/lib/ingest/moltbook";
-import { observatoryJob } from "@/lib/ingest/observatory";
+import { watchedJob } from "@/lib/ingest/watched";
+import { wikimediaJob } from "@/lib/ingest/wikimedia";
+import { osmJob } from "@/lib/ingest/osm";
+import { mcpJob } from "@/lib/ingest/mcp";
+import { botcommitsJob } from "@/lib/ingest/botcommits";
+import { agentWatchJob } from "@/lib/ingest/agentwatch";
+import { githubSignaturesJob } from "@/lib/ingest/github-signatures";
+import { radarJob } from "@/lib/ingest/radar";
 import { retentionJob } from "@/lib/ingest/retention";
 import { wikipediaJob } from "@/lib/ingest/wikipedia";
 
@@ -16,13 +23,20 @@ const JOBS: Record<string, Job> = {
   ipranges: ipRangesJob,
   wikipedia: wikipediaJob,
   moltbook: moltbookJob,
-  observatory: observatoryJob,
+  watched: watchedJob,
+  wikimedia: wikimediaJob,
+  osm: osmJob,
+  mcp: mcpJob,
+  botcommits: botcommitsJob,
+  agentwatch: agentWatchJob,
+  "github-signatures": githubSignaturesJob,
+  radar: radarJob,
   github: githubJob,
   retention: retentionJob,
 };
 
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */
-const ALL_ORDER = ["ipranges", "wikipedia", "moltbook", "observatory", "github", "retention"];
+const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "github", "watched", "github-signatures", "retention"];
 
 async function handle(req: Request, source: string): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ ok: false, reason: "unauthorized" }, { status: 401 });

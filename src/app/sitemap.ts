@@ -1,8 +1,12 @@
 import type { MetadataRoute } from "next";
-import { SITE, TABS } from "@/lib/site";
+import { ALL_LINKS, SITE } from "@/lib/site";
 
 export const dynamic = "force-static";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return TABS.map((t) => ({ url: `${SITE.url}${t.href}`, changeFrequency: "hourly", priority: t.href === "/" ? 1 : 0.7 }));
+  return ALL_LINKS.filter((l) => l.href !== "/saved").map((l) => ({
+    url: `${SITE.url}${l.href}`,
+    changeFrequency: "hourly",
+    priority: l.href === "/" ? 1 : 0.7,
+  }));
 }

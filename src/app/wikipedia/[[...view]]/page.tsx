@@ -4,17 +4,18 @@ import { MiniChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, Pagination, Segmented, StatTiles, TierBadge } from "@/components/ui";
 import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
 import { getOverview, getWikiByDay, getWikiEditors, getWikiEdits, hasDatabase } from "@/lib/stats";
+import { Wikimedia } from "../Wikimedia";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Wikipedia",
-  description: "Edits on English Wikipedia flagged as possibly AI-generated, by day, edit and editor.",
+  title: "Wikipedia & Wikimedia",
+  description: "Edits on English Wikipedia flagged as possibly AI-generated, bot volume across Wikimedia, agent-like Wikidata bots, and AI-generated media on Commons.",
 };
 
 type Tier = "all" | "1" | "2";
 interface Route {
-  view: "day" | "edits" | "editors";
+  view: "day" | "edits" | "editors" | "wikimedia";
   tier: Tier;
   page: number;
 }
@@ -23,6 +24,7 @@ function parse(segments: string[] | undefined): Route | null {
   const [a, b, c] = segments ?? [];
   if (!a) return { view: "day", tier: "all", page: 1 };
   if (a === "editors" && !b) return { view: "editors", tier: "all", page: 1 };
+  if (a === "wikimedia" && !b) return { view: "wikimedia", tier: "all", page: 1 };
   if (a === "edits") {
     const tier: Tier = b === "1" || b === "2" ? b : "all";
     if (b && !["all", "1", "2"].includes(b)) return null;
@@ -61,13 +63,14 @@ export default async function WikipediaPage({ params }: { params: Promise<{ view
     { href: "/wikipedia", label: "By day", active: route.view === "day" },
     { href: "/wikipedia/edits", label: "Flagged edits", active: route.view === "edits" },
     { href: "/wikipedia/editors", label: "Editors", active: route.view === "editors" },
+    { href: "/wikipedia/wikimedia", label: "Across Wikimedia", active: route.view === "wikimedia" },
   ];
 
   return (
     <div className="shell explorer">
       <PageHeader
-        title="Wikipedia"
-        sub="Edits on English Wikipedia that Wikipedia's own edit filters tag as possibly AI-generated, plus edits whose summaries say an AI tool was used. Every row carries its confidence tier."
+        title="Wikipedia & Wikimedia"
+        sub="Edits on English Wikipedia that Wikipedia's own edit filters tag as possibly AI-generated, plus edits whose summaries say an AI tool was used. Across the wider Wikimedia family: bot volume per project, agent-like Wikidata bots, and AI-generated media on Commons."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="Wikipedia views" />
@@ -75,6 +78,7 @@ export default async function WikipediaPage({ params }: { params: Promise<{ view
       {route.view === "day" ? <ByDay byDay={byDay} db={db} /> : null}
       {route.view === "edits" ? <Edits route={route} db={db} /> : null}
       {route.view === "editors" ? <Editors db={db} /> : null}
+      {route.view === "wikimedia" ? <Wikimedia db={db} /> : null}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { Rail, type RailItem } from "@/components/Rail";
 import industry from "../../../data/industry.json";
 import { CATALOG, IP_SOURCES } from "@/lib/agents/catalog";
 import { GITHUB_AGENTS } from "@/lib/github/agents";
-import { OBSERVATORY } from "@/lib/ingest/observatory";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -18,7 +17,9 @@ const RAIL: RailItem[] = [
   { id: "honeypot", title: "Honeypots", level: 3 },
   { id: "wikipedia", title: "Wikipedia", level: 3 },
   { id: "github", title: "GitHub", level: 3 },
-  { id: "observatory", title: "Watched repositories", level: 3 },
+  { id: "watched", title: "Watched repositories", level: 3 },
+  { id: "maps", title: "Maps", level: 3 },
+  { id: "tooling", title: "Tooling and quoted sources", level: 3 },
   { id: "forums", title: "Agent forums and guestbook", level: 3 },
   { id: "ladder", title: "The confidence ladder" },
   { id: "limits", title: "Limitations" },
@@ -40,8 +41,8 @@ export default function MethodsPage() {
         <h2 id="sensors">The sensors</h2>
         <p>
           Everything runs on a small Next.js site. A request classifier sits in front of every page; scheduled jobs poll the
-          Wikipedia recent-changes API, the GitHub search API, Moltbook&apos;s public feed and the observatory snapshot every 30
-          minutes; published IP lists are refreshed daily. Raw rows are kept for AI and honeypot visits only; people are counted,
+          Wikipedia recent-changes API, the Wikimedia metrics API, the GitHub search API, OpenStreetMap, the MCP registry and
+          Moltbook&apos;s public feed every 30 minutes; published IP lists are refreshed daily. Raw rows are kept for AI and honeypot visits only; people are counted,
           never logged. Source addresses are reduced to a network prefix and a salted hash before storage.
         </p>
 
@@ -86,14 +87,27 @@ export default function MethodsPage() {
           in September 2026 matched more pull requests than every bot account combined. Past days are queried once and frozen.
         </p>
 
-        <h3 id="observatory">Watched repositories</h3>
+        <h3 id="watched">Watched repositories</h3>
         <p>
-          A second, separately built site, the <a href={OBSERVATORY.site}>{OBSERVATORY.name}</a>, records every documented agent
-          pull request in a small watch-list of repositories (github/gh-aw, airbytehq/airbyte, fern-api/docs, OpenHands/OpenHands)
-          and scans PR bodies for self-disclosure lines such as &ldquo;Generated with Claude Code&rdquo;. It publishes a daily
-          snapshot; we mirror it into our database so history survives its 90-day window and show it on the GitHub tab as watched
-          repositories and self-disclosure signals. Its coverage is a selected sample, not a census, and self-disclosure hits are
-          candidates until reviewed.
+          A seed list of repositories, extended automatically with the repositories where our own search feed sees the most
+          agent activity, is polled a few repositories at a time. Every pull request by a registered agent account is stored with
+          its evidence (the author&apos;s numeric id). Pull requests whose body names an AI tool, such as &ldquo;Generated with Claude
+          Code&rdquo; or an AI co-author trailer, become self-disclosure signals: leads that stay unreviewed until a person
+          records a decision in the repository&apos;s reviews file. Only confirmed signals count toward totals.
+        </p>
+        <h3 id="maps">Maps</h3>
+        <p>
+          OpenStreetMap publishes every changeset with the name of the editing software. We sample the newest changesets
+          continuously and keep those made with AI-suggested geometry (RapiD, MapWithAI), automated QA tools, or bots. The editor
+          name is self-declared, so this sits on the self-identified rung; the share of sampled changesets is shown alongside.
+        </p>
+        <h3 id="tooling">Tooling, new agents and quoted sources</h3>
+        <p>
+          Three measures are quoted from their publishers rather than collected here: the official MCP registry (servers
+          published per day), botcommits.dev (AI-attributed commits per month across GitHub), and Hugging Face&apos;s agent-usage
+          dataset (which coding agents hit the Hub). Two public registries are diffed daily so newly announced agents appear
+          automatically: the ai.robots.txt crawler list and Cloudflare&apos;s registry of agents that sign requests. Cloudflare Radar
+          figures are quoted, and drawn live when an API token is configured.
         </p>
 
         <h3 id="forums">Agent forums and guestbook</h3>
@@ -161,7 +175,8 @@ export default function MethodsPage() {
           <li>Meta, ByteDance, DeepSeek, xAI and most tooling vendors publish no address ranges, so their agents can never be verified.</li>
           <li>Wikipedia&apos;s filters catch a particular style of AI writing; they miss careful edits and occasionally flag human ones.</li>
           <li>GitHub counts come from the public search API, which is rate-limited and sometimes marks results as incomplete.</li>
-          <li>The watched-repository sample covers four repositories and four agents; it is evidence, not a census.</li>
+          <li>The watched-repository sample is a selection of repositories, not a census of GitHub.</li>
+          <li>Quoted series (botcommits.dev, Hugging Face, Cloudflare Radar) use their publishers&apos; definitions and update on their schedules.</li>
           <li>This site is new and small. Its own traffic numbers describe one obscure host, not the web.</li>
           <li>A person reading the page source can trigger the honeypot on purpose.</li>
         </ul>
@@ -218,9 +233,7 @@ export default function MethodsPage() {
         <h2 id="data">Data, API and licences</h2>
         <p>
           All tables are downloadable as CSV or JSON on the <Link href="/data">data page</Link>, under CC BY 4.0. The code is MIT
-          licensed at <a href={SITE.repo}>{SITE.repo.replace("https://", "")}</a>. Watched-repository records are mirrored from the
-          observatory under its MIT licence; PR titles and excerpts remain third-party metadata, and inclusion implies no endorsement
-          or finding of misconduct.
+          licensed at <a href={SITE.repo}>{SITE.repo.replace("https://", "")}</a>. Pull-request titles and excerpts, wiki revisions, changesets and posts remain third-party public records republished with links; inclusion implies no endorsement or finding of misconduct.
         </p>
       </article>
     </div>

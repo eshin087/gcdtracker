@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { CATALOG, IP_SOURCES } from "@/lib/agents/catalog";
 import { toCsv } from "@/lib/csv";
 import { db } from "@/lib/db";
-import { forumDaily, githubDaily, githubEvents, guestbookNotes, observatoryActivities, trafficDaily, visits, wikiEdits } from "@/lib/db/schema";
+import { forumDaily, githubDaily, githubEvents, guestbookNotes, osmChangesets, trafficDaily, watchedPrs, watchedSignals, mcpServers, externalSeries, agentSightings, visits, wikiEdits } from "@/lib/db/schema";
 
 export const revalidate = 300;
 
@@ -57,8 +57,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ name: s
       const rows = await db.select().from(forumDaily).orderBy(desc(forumDaily.day)).limit(LIMIT);
       return csv(name, toCsv(rows));
     }
-    case "observatory_activities.csv": {
-      const rows = await db.select().from(observatoryActivities).orderBy(desc(observatoryActivities.createdAt)).limit(LIMIT);
+    case "watched_prs.csv": {
+      const rows = await db.select().from(watchedPrs).orderBy(desc(watchedPrs.createdAt)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "watched_signals.csv": {
+      const rows = await db.select().from(watchedSignals).orderBy(desc(watchedSignals.updatedAt)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "osm_changesets.csv": {
+      const rows = await db.select().from(osmChangesets).orderBy(desc(osmChangesets.ts)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "mcp_servers.csv": {
+      const rows = await db.select().from(mcpServers).orderBy(desc(mcpServers.publishedAt)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "external_series.csv": {
+      const rows = await db.select().from(externalSeries).orderBy(desc(externalSeries.period)).limit(LIMIT);
+      return csv(name, toCsv(rows));
+    }
+    case "agent_sightings.csv": {
+      const rows = await db.select().from(agentSightings).orderBy(desc(agentSightings.firstSeen)).limit(LIMIT);
       return csv(name, toCsv(rows));
     }
     case "guestbook.json": {

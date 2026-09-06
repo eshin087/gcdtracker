@@ -4,9 +4,9 @@ import { CategoryBadge, PageHeader, StatTiles } from "@/components/ui";
 import { CATALOG, CURATED, IP_SOURCES, LONG_TAIL } from "@/lib/agents/catalog";
 import type { AgentDef } from "@/lib/agents/types";
 import { fmtInt, relTime } from "@/lib/format";
-import { getObservatoryAgents, getObservatorySummary, getVisitsByAgent } from "@/lib/stats";
+import { getVisitsByAgent } from "@/lib/stats";
+import { getWatchedSummary } from "@/lib/stats-sources";
 import { GITHUB_AGENTS } from "@/lib/github/agents";
-import { OBSERVATORY } from "@/lib/ingest/observatory";
 
 export const revalidate = 300;
 
@@ -27,7 +27,7 @@ function robotsLabel(r: AgentDef["robots"]): string {
 }
 
 export default async function AgentsPage() {
-  const [seen, obsAgents, obs] = await Promise.all([getVisitsByAgent(90, 500), getObservatoryAgents(), getObservatorySummary()]);
+  const [seen, watched] = await Promise.all([getVisitsByAgent(90, 500), getWatchedSummary()]);
   const stats = new Map(seen.map((s) => [s.slug, s]));
 
   const withHits = (list: AgentDef[]) =>
@@ -69,10 +69,10 @@ export default async function AgentsPage() {
         Coding agents on GitHub
       </h2>
       <p className="page-sub">
-        Agents that open pull requests under their own identity. Our daily counts come from the GitHub search API across all of
-        GitHub; the watched-repository counts are mirrored from the <a href={OBSERVATORY.site} className="sans">gcdTracker observatory</a>.
+        Agents that open pull requests under their own identity. Daily counts come from the GitHub search API across all of
+        GitHub; watched-repository counts come from our own collector.
       </p>
-      <CodingAgents obsAgents={obsAgents} obs={obs} />
+      <CodingAgents watched={watched} />
 
       <details style={{ marginTop: 40 }}>
         <summary className="page-title" style={{ fontSize: 24, cursor: "pointer" }}>
@@ -131,29 +131,8 @@ function AgentTable({ defs, stats }: { defs: AgentDef[]; stats: Map<string, Awai
   );
 }
 
-function CodingAgents({
-  obsAgents,
-  obs,
-}: {
-  obsAgents: Awaited<ReturnType<typeof getObservatoryAgents>>;
-  obs: Awaited<ReturnType<typeof getObservatorySummary>>;
-}) {
-  const byIdentity = new Map(obsAgents.filter((o) => o.identityId !== null).map((o) => [o.identityId, o]));
-  const obsCounts = new Map(obs.byAgent.map((b) => [b.agentId, b]));
-  const matched = new Set<string>();
-  const rows = GITHUB_AGENTS.map((g) => {
-    const o = g.id !== undefined ? byIdentity.get(g.id) : undefined;
-    if (o) matched.add(o.id);
-    const c = o ? obsCounts.get(o.id) : undefined;
-    const method = g.tier === "bot-account" ? `bot account #${g.id}` : `branch prefix ${g.query.replace("head:", "")}`;
-    return { key: g.key, label: g.label, vendor: g.vendor, method, url: g.url, obs90: c?.count90d ?? null, last: c?.lastActivity ?? o?.lastActivityAt?.toISOString() ?? null, historical: o?.historical ?? false };
-  });
-  for (const o of obsAgents) {
-    if (matched.has(o.id)) continue;
-    const c = obsCounts.get(o.id);
-    const method = o.platform === "wikidata" ? `Wikidata user #${o.identityId}` : `account #${o.identityId}`;
-    rows.push({ key: `obs-${o.id}`, label: o.name, vendor: o.operator ?? "", method, url: o.website ?? undefined, obs90: c?.count90d ?? 0, last: c?.lastActivity ?? o.lastActivityAt?.toISOString() ?? null, historical: o.historical });
-  }
+function CodingAgents({ watched }: { watched: Awaited<ReturnType<typeof getWatchedSummary>> }) {
+  const counts = new Map(watched.byAgent.map((b) => [b.agentId, b]));
   return (
     <div className="tbl-wrap">
       <table className="tbl">
@@ -167,18 +146,19 @@ function CodingAgents({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.key}>
-              <td className="mono">
-                {r.url ? <a href={r.url}>{r.label}</a> : r.label}
-                {r.historical ? <span className="badge" style={{ marginLeft: 6 }}>historical</span> : null}
-              </td>
-              <td>{r.vendor}</td>
-              <td className="dim">{r.method}</td>
-              <td className="num">{r.obs90 === null ? <span className="dim">not watched</span> : fmtInt(r.obs90)}</td>
-              <td className="dim">{r.last ? relTime(r.last) : "–"}</td>
-            </tr>
-          ))}
+          {GITHUB_AGENTS.map((g) => {
+            const c = counts.get(g.key);
+            const method = g.tier === "bot-account" ? `bot account #${g.id}` : `branch prefix ${g.query.replace("head:", "")}`;
+            return (
+              <tr key={g.key}>
+                <td className="mono">{g.url ? <a href={g.url}>{g.label}</a> : g.label}</td>
+                <td>{g.vendor}</td>
+                <td className="dim">{method}</td>
+                <td className="num">{c ? fmtInt(c.count90d) : <span className="dim">0</span>}</td>
+                <td className="dim">{c?.lastActivity ? relTime(c.lastActivity) : "–"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

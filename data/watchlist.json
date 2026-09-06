@@ -1,0 +1,4 @@
+{
+  "note": "Seed repositories for the watched-repo collector. The collector adds the top repositories by agent pull-request volume automatically (source: auto).",
+  "repos": ["github/gh-aw", "airbytehq/airbyte", "fern-api/docs", "OpenHands/OpenHands"]
+}

@@ -4,6 +4,7 @@ import {
   boolean,
   char,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -202,10 +203,21 @@ export const ingestRuns = pgTable(
   (t) => [index("ingest_runs_source_started_idx").on(t.source, t.startedAt.desc())],
 );
 
-/* ---------- observatory (data from gcdtracker.vercel.app, kept beyond its 90-day window) ---------- */
+/* ---------- watched repositories (native collector) ---------- */
 
-export const observatoryActivities = pgTable(
-  "observatory_activities",
+export const watchedRepos = pgTable("watched_repos", {
+  repo: text("repo").primaryKey(),
+  /** seed | auto */
+  source: text("source").notNull().default("seed"),
+  firstSeen: ts("first_seen").notNull().defaultNow(),
+  lastPolledAt: ts("last_polled_at"),
+  lastPrAt: ts("last_pr_at"),
+  prCount30d: integer("pr_count_30d").notNull().default(0),
+});
+
+/** Documented or self-disclosed agent pull requests in watched repositories. */
+export const watchedPrs = pgTable(
+  "watched_prs",
   {
     id: text("id").primaryKey(),
     sourceId: text("source_id").notNull(),
@@ -216,6 +228,7 @@ export const observatoryActivities = pgTable(
     actorLogin: text("actor_login"),
     actorId: bigint("actor_id", { mode: "number" }),
     agentId: text("agent_id"),
+    /** documented_agent | self_disclosed */
     attribution: text("attribution").notNull(),
     repository: text("repository"),
     state: text("state"),
@@ -223,34 +236,139 @@ export const observatoryActivities = pgTable(
     sourceUpdatedAt: ts("source_updated_at"),
     lastObservedAt: ts("last_observed_at"),
     firstSeenAt: ts("first_seen_at").notNull().defaultNow(),
+    evidence: text("evidence"),
+    bodyExcerpt: text("body_excerpt"),
   },
   (t) => [
-    index("obs_act_created_idx").on(t.createdAt.desc()),
-    index("obs_act_agent_created_idx").on(t.agentId, t.createdAt.desc()),
-    index("obs_act_repo_idx").on(t.repository),
+    index("watched_prs_created_idx").on(t.createdAt.desc()),
+    index("watched_prs_agent_created_idx").on(t.agentId, t.createdAt.desc()),
+    index("watched_prs_repo_idx").on(t.repository),
   ],
 );
 
-export const observatoryCandidates = pgTable("observatory_candidates", {
+/** Self-disclosure candidates awaiting human review (data/reviews.json). */
+export const watchedSignals = pgTable("watched_signals", {
   id: text("id").primaryKey(),
   activityId: text("activity_id").notNull(),
   ruleId: text("rule_id").notNull(),
   excerpt: text("excerpt"),
-  status: text("status").notNull(),
+  /** unreviewed | needs_evidence | confirmed | dismissed */
+  status: text("status").notNull().default("unreviewed"),
+  reason: text("reason"),
   url: text("url"),
+  reviewedAt: ts("reviewed_at"),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
-export const observatoryAgents = pgTable("observatory_agents", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  operator: text("operator"),
-  kind: text("kind"),
-  platform: text("platform"),
-  login: text("login"),
-  identityId: bigint("identity_id", { mode: "number" }),
-  historical: boolean("historical").notNull().default(false),
-  lastActivityAt: ts("last_activity_at"),
-  website: text("website"),
-  updatedAt: ts("updated_at").notNull().defaultNow(),
+/* ---------- wikimedia-wide ---------- */
+
+export const wikidataBotEdits = pgTable(
+  "wikidata_bot_edits",
+  {
+    revid: bigint("revid", { mode: "number" }).primaryKey(),
+    user: text("user").notNull(),
+    userId: bigint("user_id", { mode: "number" }),
+    title: text("title").notNull(),
+    ts: ts("ts").notNull(),
+    comment: text("comment"),
+    size: integer("size"),
+  },
+  (t) => [index("wikidata_bot_edits_ts_idx").on(t.ts.desc())],
+);
+
+export const commonsAiUploads = pgTable(
+  "commons_ai_uploads",
+  {
+    pageid: bigint("pageid", { mode: "number" }).primaryKey(),
+    title: text("title").notNull(),
+    ts: ts("ts").notNull(),
+    category: text("category").notNull(),
+  },
+  (t) => [index("commons_ai_uploads_ts_idx").on(t.ts.desc())],
+);
+
+export const wikiTagWatch = pgTable(
+  "wiki_tag_watch",
+  {
+    wiki: text("wiki").notNull(),
+    tag: text("tag").notNull(),
+    hitcount: integer("hitcount").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    firstSeen: ts("first_seen").notNull().defaultNow(),
+    lastSeen: ts("last_seen").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.wiki, t.tag] })],
+);
+
+/* ---------- OpenStreetMap ---------- */
+
+export const osmChangesets = pgTable(
+  "osm_changesets",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey(),
+    ts: ts("ts").notNull(),
+    user: text("user"),
+    editor: text("editor"),
+    /** rapid | mapwithai | osmose | bot | other-ai */
+    aiKind: text("ai_kind").notNull(),
+    changes: integer("changes"),
+    comment: text("comment"),
+    url: text("url").notNull(),
+  },
+  (t) => [index("osm_changesets_ts_idx").on(t.ts.desc())],
+);
+
+export const osmDaily = pgTable("osm_daily", {
+  day: day("day").primaryKey(),
+  sampled: integer("sampled").notNull().default(0),
+  aiAssisted: integer("ai_assisted").notNull().default(0),
+  byEditor: jsonb("by_editor").$type<Record<string, number>>(),
 });
+
+/* ---------- agent tooling ---------- */
+
+export const mcpServers = pgTable(
+  "mcp_servers",
+  {
+    name: text("name").primaryKey(),
+    title: text("title"),
+    description: text("description"),
+    url: text("url"),
+    publishedAt: ts("published_at"),
+    updatedAt: ts("updated_at"),
+    firstSeen: ts("first_seen").notNull().defaultNow(),
+  },
+  (t) => [index("mcp_servers_published_idx").on(t.publishedAt.desc())],
+);
+
+/** Time series quoted from external aggregators (botcommits.dev, Hugging Face, Cloudflare Radar). */
+export const externalSeries = pgTable(
+  "external_series",
+  {
+    source: text("source").notNull(),
+    series: text("series").notNull(),
+    /** YYYY-MM or YYYY-MM-DD */
+    period: text("period").notNull(),
+    value: doublePrecision("value").notNull(),
+    lo: doublePrecision("lo"),
+    hi: doublePrecision("hi"),
+    fetchedAt: ts("fetched_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.source, t.series, t.period] })],
+);
+
+/** Newly published agent identities: ai.robots.txt tokens and signed-agent directories. */
+export const agentSightings = pgTable(
+  "agent_sightings",
+  {
+    id: serial("id").primaryKey(),
+    /** ai-robots-txt | signature-registry */
+    kind: text("kind").notNull(),
+    token: text("token").notNull(),
+    operator: text("operator"),
+    fn: text("fn"),
+    url: text("url"),
+    firstSeen: ts("first_seen").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("agent_sightings_kind_token_uq").on(t.kind, t.token), index("agent_sightings_first_seen_idx").on(t.firstSeen.desc())],
+);

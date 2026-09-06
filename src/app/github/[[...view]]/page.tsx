@@ -1,58 +1,44 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MiniChart } from "@/components/charts";
+import { SaveButton } from "@/components/SaveButton";
 import { BarList, Empty, PageHeader, Segmented, StatTiles } from "@/components/ui";
 import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
 import { GITHUB_AGENTS, githubAgent, githubAgentLabel } from "@/lib/github/agents";
-import { OBSERVATORY } from "@/lib/ingest/observatory";
-import {
-  getGithubByAgent,
-  getGithubByDay,
-  getGithubEvents,
-  getObservatoryByDay,
-  getObservatoryCandidates,
-  getObservatoryRecent,
-  getObservatorySummary,
-  getOverview,
-  hasDatabase,
-} from "@/lib/stats";
+import { signatureLabel } from "@/lib/github/signatures";
+import { SITE } from "@/lib/site";
+import { getGithubByAgent, getGithubByDay, getGithubEvents, getOverview, hasDatabase } from "@/lib/stats";
+import { getWatchedByDay, getWatchedRecent, getWatchedSignals, getWatchedSummary } from "@/lib/stats-sources";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "GitHub",
-  description: "Pull requests opened by AI coding agents on GitHub, counted per day and per agent, plus documented PRs in watched repositories.",
+  description: "Pull requests opened by AI coding agents on GitHub: daily counts across all repositories, documented PRs in watched repositories, and self-disclosure signals.",
 };
 
 const VIEWS = ["day", "agents", "prs", "watched", "signals"] as const;
+const STATUSES = ["all", "unreviewed", "needs_evidence", "confirmed", "dismissed"] as const;
 type View = (typeof VIEWS)[number];
-
-function Attribution({ generatedAt, stale }: { generatedAt: string | null; stale: boolean }) {
-  return (
-    <p className="sans" style={{ fontSize: 12.5, color: "var(--muted)", margin: "14px 0 0" }}>
-      Source: <a href={OBSERVATORY.site}>{OBSERVATORY.name}</a> ({OBSERVATORY.site.replace("https://", "")}), a separately built
-      site that records documented agent pull requests in a watch-list of repositories; mirrored here so history outlives its
-      90-day window.{generatedAt ? ` Snapshot ${fmtStamp(generatedAt)}.` : ""}{" "}
-      {stale ? <span className="badge warn">snapshot older than 36h</span> : null}
-    </p>
-  );
-}
 
 export default async function GithubPage({ params }: { params: Promise<{ view?: string[] }> }) {
   const { view: segments } = await params;
   const v = segments?.[0] ?? "day";
-  if (!(VIEWS as readonly string[]).includes(v) || (segments?.length ?? 0) > 1) notFound();
+  const status = segments?.[1] ?? "all";
+  if (!(VIEWS as readonly string[]).includes(v)) notFound();
+  if ((segments?.length ?? 0) > 2 || (segments?.length === 2 && (v !== "signals" || !(STATUSES as readonly string[]).includes(status)))) notFound();
   const view = v as View;
 
   const db = hasDatabase();
-  const [overview, byDay, obs, obsByDay] = await Promise.all([getOverview(), getGithubByDay(60), getObservatorySummary(), getObservatoryByDay(60)]);
+  const [overview, byDay, watched, watchedByDay] = await Promise.all([getOverview(), getGithubByDay(60), getWatchedSummary(), getWatchedByDay(60)]);
   const lastDataDay = [...byDay].reverse().find((d) => d.botAccounts > 0 || d.branchPrefix > 0)?.day ?? null;
 
   const tiles = [
-    { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "GitHub search, complete UTC days" },
+    { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "all of GitHub, complete UTC days" },
     { value: fmtInt(overview.codexPrs7d), label: "PRs on codex/ branches, 7 days", sub: "Codex pushes under the user's account" },
-    { value: fmtInt(obs.last7d), label: "documented PRs in watched repos, 7 days", sub: `${fmtInt(obs.total)} mirrored from the observatory` },
-    { value: lastDataDay ? fmtDay(lastDataDay) : "–", label: "latest day with search data", sub: `${GITHUB_AGENTS.length} agents tracked` },
+    { value: fmtInt(watched.last7d), label: "agent PRs in watched repos, 7 days", sub: `${fmtInt(watched.repos.length)} repositories watched` },
+    { value: fmtInt(watched.signals.unreviewed ?? 0), label: "self-disclosure signals awaiting review", sub: `${fmtInt(watched.signals.confirmed ?? 0)} confirmed` },
   ];
 
   const seg = [
@@ -67,47 +53,50 @@ export default async function GithubPage({ params }: { params: Promise<{ view?: 
     <div className="shell explorer">
       <PageHeader
         title="GitHub"
-        sub="Two measurements. Daily counts of pull requests by AI coding agents across all of GitHub, from the public search API. And every documented agent PR in a watch-list of repositories, mirrored from the gcdTracker observatory."
+        sub="Two measurements. Daily counts of pull requests by AI coding agents across all of GitHub, from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="GitHub views" />
-      {view === "day" ? <ByDay byDay={byDay} obsByDay={obsByDay} db={db} /> : null}
+      {view === "day" ? <ByDay byDay={byDay} watchedByDay={watchedByDay} db={db} lastDataDay={lastDataDay} /> : null}
       {view === "agents" ? <ByAgent db={db} /> : null}
       {view === "prs" ? <Prs db={db} /> : null}
-      {view === "watched" ? <Watched obs={obs} db={db} /> : null}
-      {view === "signals" ? <Signals obs={obs} db={db} /> : null}
+      {view === "watched" ? <Watched watched={watched} db={db} /> : null}
+      {view === "signals" ? <Signals status={status} db={db} /> : null}
     </div>
   );
 }
 
 function ByDay({
   byDay,
-  obsByDay,
+  watchedByDay,
   db,
+  lastDataDay,
 }: {
   byDay: Awaited<ReturnType<typeof getGithubByDay>>;
-  obsByDay: Awaited<ReturnType<typeof getObservatoryByDay>>;
+  watchedByDay: Awaited<ReturnType<typeof getWatchedByDay>>;
   db: boolean;
+  lastDataDay: string | null;
 }) {
   const anySearch = byDay.some((d) => d.botAccounts + d.branchPrefix > 0);
-  const anyObs = obsByDay.some((d) => d.total > 0);
-  if (!anySearch && !anyObs) return <Empty db={db}>The GitHub poller runs every 30 minutes and backfills 30 days gradually.</Empty>;
+  const anyWatched = watchedByDay.some((d) => d.total > 0);
+  if (!anySearch && !anyWatched) return <Empty db={db}>The GitHub poller runs every 30 minutes and backfills 30 days gradually.</Empty>;
   const days = byDay.map((d) => d.day);
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24, margin: "0 0 28px" }}>
-        <MiniChart days={days} values={byDay.map((d) => d.botAccounts)} label="Bot-account PRs per day (search)" />
+        <MiniChart days={days} values={byDay.map((d) => d.botAccounts)} label="Bot-account PRs per day (all GitHub)" />
         <MiniChart days={days} values={byDay.map((d) => d.byAgent["codex-branch"] ?? 0)} label="codex/ branch PRs per day" />
-        <MiniChart days={days} values={obsByDay.map((d) => d.total)} label="Documented PRs in watched repos" />
+        <MiniChart days={days} values={watchedByDay.map((d) => d.total)} label="Agent PRs in watched repos" />
       </div>
       {anySearch ? (
         <>
           <p className="label" style={{ marginBottom: 8 }}>
-            PRs per day by agent bot accounts (accent) and by branch fingerprint (grey)
+            PRs per day by agent bot accounts (accent) and by branch fingerprint (grey){lastDataDay ? ` · latest ${fmtDay(lastDataDay)}` : ""}
           </p>
           <BarList
             rows={[...byDay].reverse().map((d) => {
               const top = Object.entries(d.byAgent)
+                .filter(([k]) => !k.startsWith("sig-"))
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 4)
                 .map(([k, v]) => `${githubAgentLabel(k)} ${fmtInt(v)}`)
@@ -117,7 +106,7 @@ function ByDay({
           />
         </>
       ) : (
-        <p className="empty">Search counts arrive with the first ingest run; the watched-repo series above comes from the observatory mirror.</p>
+        <p className="empty">Search counts arrive with the next ingest run.</p>
       )}
     </>
   );
@@ -127,45 +116,56 @@ async function ByAgent({ db }: { db: boolean }) {
   const rows = await getGithubByAgent(30);
   const seen = new Map(rows.map((r) => [r.agent, r]));
   const all = GITHUB_AGENTS.map((a) => ({ def: a, stat: seen.get(a.key) })).sort((x, y) => (y.stat?.prs ?? 0) - (x.stat?.prs ?? 0));
+  const signatures = rows.filter((r) => r.tier === "text-signature");
   if (rows.length === 0) return <Empty db={db} />;
   return (
-    <div className="tbl-wrap">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>Vendor</th>
-            <th>Counted by</th>
-            <th className="num">PRs (30d)</th>
-            <th className="num">Per day</th>
-            <th>Latest day</th>
-          </tr>
-        </thead>
-        <tbody>
-          {all.map(({ def, stat }) => (
-            <tr key={def.key}>
-              <td className="mono">
-                {def.url ? <a href={def.url}>{def.label}</a> : def.label}
-                {def.note ? (
-                  <div className="dim" style={{ fontSize: 12, marginTop: 2, fontFamily: "var(--font-inter)" }}>
-                    {def.note}
-                  </div>
-                ) : null}
-              </td>
-              <td>{def.vendor}</td>
-              <td>
-                <span className={`badge ${def.tier === "bot-account" ? "ok" : ""}`}>
-                  {def.tier === "bot-account" ? `bot account #${def.id}` : `branch prefix ${def.query.replace("head:", "")}`}
-                </span>
-              </td>
-              <td className="num">{stat ? fmtInt(stat.prs) : <span className="dim">0</span>}</td>
-              <td className="num">{stat && stat.days > 0 ? fmtInt(stat.prs / stat.days) : "–"}</td>
-              <td className="dim">{stat?.lastDay ? fmtDay(stat.lastDay) : "–"}</td>
+    <>
+      <div className="tbl-wrap">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Vendor</th>
+              <th>Counted by</th>
+              <th className="num">PRs (30d)</th>
+              <th className="num">Per day</th>
+              <th>Latest day</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {all.map(({ def, stat }) => (
+              <tr key={def.key}>
+                <td className="mono">
+                  {def.url ? <a href={def.url}>{def.label}</a> : def.label}
+                  {def.note ? (
+                    <div className="dim" style={{ fontSize: 12, marginTop: 2, fontFamily: "var(--font-inter)" }}>
+                      {def.note}
+                    </div>
+                  ) : null}
+                </td>
+                <td>{def.vendor}</td>
+                <td>
+                  <span className={`badge ${def.tier === "bot-account" ? "ok" : ""}`}>
+                    {def.tier === "bot-account" ? `bot account #${def.id}` : `branch prefix ${def.query.replace("head:", "")}`}
+                  </span>
+                </td>
+                <td className="num">{stat ? fmtInt(stat.prs) : <span className="dim">0</span>}</td>
+                <td className="num">{stat && stat.days > 0 ? fmtInt(stat.prs / stat.days) : "–"}</td>
+                <td className="dim">{stat?.lastDay ? fmtDay(stat.lastDay) : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {signatures.length > 0 ? (
+        <>
+          <p className="label" style={{ margin: "28px 0 8px" }}>
+            Text signatures across all of GitHub · 30 days · self-identified rung, loose phrase matching
+          </p>
+          <BarList rows={signatures.map((s) => ({ key: s.agent, label: s.agent.replace("sig-", ""), value: s.prs, title: `${s.days} days` }))} variant="neutral" />
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -180,6 +180,7 @@ async function Prs({ db }: { db: boolean }) {
             <th>Opened (UTC)</th>
             <th>Agent</th>
             <th>Pull request</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -195,6 +196,9 @@ async function Prs({ db }: { db: boolean }) {
                   {r.title.slice(0, 110)}
                 </a>
               </td>
+              <td>
+                <SaveButton item={{ id: `ghev-${r.id}`, kind: "pull request", title: `${r.repo}#${r.number} ${r.title}`, url: r.url, sub: githubAgentLabel(r.agent) }} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -203,25 +207,31 @@ async function Prs({ db }: { db: boolean }) {
   );
 }
 
-async function Watched({ obs, db }: { obs: Awaited<ReturnType<typeof getObservatorySummary>>; db: boolean }) {
-  const recent = await getObservatoryRecent(40);
-  if (obs.total === 0) return <Empty db={db}>The observatory mirror runs with every ingest cycle.</Empty>;
+async function Watched({ watched, db }: { watched: Awaited<ReturnType<typeof getWatchedSummary>>; db: boolean }) {
+  const recent = await getWatchedRecent(40);
+  if (watched.total === 0) return <Empty db={db}>The watched-repository collector runs with every ingest cycle, a few repositories at a time.</Empty>;
   return (
     <>
+      <p className="page-sub" style={{ maxWidth: "72ch" }}>
+        A seed list of repositories plus the repositories where our search feed sees the most agent activity. Every PR by a
+        registered agent account is recorded with its evidence; PRs whose body names an AI tool become self-disclosure signals.
+        {watched.lastIngest ? ` Last collection ${relTime(watched.lastIngest)}.` : ""}
+      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 24, marginBottom: 24 }}>
         <div>
           <div className="label" style={{ marginBottom: 6 }}>
-            Watched repositories · PRs in 90 days
+            Watched repositories · agent PRs in 30 days
           </div>
           <table className="tbl">
             <tbody>
-              {obs.repos.map((r) => (
+              {watched.repos.map((r) => (
                 <tr key={r.repository}>
                   <td className="mono">
-                    <a href={`https://github.com/${r.repository}/pulls`}>{r.repository}</a>
+                    <a href={`https://github.com/${r.repository}/pulls`}>{r.repository}</a>{" "}
+                    {r.source === "auto" ? <span className="badge">auto</span> : null}
                   </td>
-                  <td className="num">{fmtInt(r.count90d)}</td>
-                  <td className="dim">{relTime(r.lastActivity)}</td>
+                  <td className="num">{fmtInt(r.count30d)}</td>
+                  <td className="dim">{r.lastActivity ? relTime(r.lastActivity) : "not polled yet"}</td>
                 </tr>
               ))}
             </tbody>
@@ -229,23 +239,26 @@ async function Watched({ obs, db }: { obs: Awaited<ReturnType<typeof getObservat
         </div>
         <div>
           <div className="label" style={{ marginBottom: 6 }}>
-            Documented agents · PRs in 90 days
+            Agents · PRs in 90 days
           </div>
           <table className="tbl">
             <tbody>
-              {obs.byAgent.map((a) => (
+              {watched.byAgent.map((a) => (
                 <tr key={a.agentId}>
-                  <td className="mono">{a.agentId}</td>
+                  <td className="mono">{githubAgentLabel(a.agentId)}</td>
                   <td className="num">{fmtInt(a.count90d)}</td>
                   <td className="dim">{relTime(a.lastActivity)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="dim sans" style={{ fontSize: 12, marginTop: 8 }}>
+            {fmtInt(watched.documented30d)} documented · {fmtInt(watched.selfDisclosed30d)} self-disclosed in 30 days
+          </p>
         </div>
       </div>
       <div className="label" style={{ marginBottom: 8 }}>
-        Most recent documented pull requests
+        Most recent agent pull requests
       </div>
       <div className="tbl-wrap">
         <table className="tbl">
@@ -254,68 +267,89 @@ async function Watched({ obs, db }: { obs: Awaited<ReturnType<typeof getObservat
               <th>Opened (UTC)</th>
               <th>Agent</th>
               <th>Pull request</th>
-              <th>State</th>
+              <th>Evidence</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {recent.map((r) => (
               <tr key={r.id}>
                 <td className="mono dim">{fmtStamp(r.createdAt)}</td>
-                <td className="mono">{r.agentId ?? r.actorLogin ?? "?"}</td>
+                <td className="mono">{r.agentId ? githubAgentLabel(r.agentId) : (r.actorLogin ?? "?")}</td>
                 <td>
                   <a href={r.url}>
                     <span className="mono">{r.repository}</span> {r.title.slice(0, 100)}
                   </a>
+                  {r.state ? <span className="dim"> · {r.state}</span> : null}
                 </td>
-                <td className="dim">{r.state ?? "–"}</td>
+                <td className="dim" style={{ fontSize: 12, maxWidth: 320 }}>
+                  {r.attribution === "documented_agent" ? <span className="badge ok">documented</span> : <span className="badge">self-disclosed</span>}{" "}
+                  {r.evidence?.slice(0, 140)}
+                </td>
+                <td>
+                  <SaveButton item={{ id: `pr-${r.id}`, kind: "pull request", title: `${r.repository} · ${r.title}`, url: r.url, sub: r.evidence ?? undefined }} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Attribution generatedAt={obs.generatedAt} stale={obs.stale} />
     </>
   );
 }
 
-async function Signals({ obs, db }: { obs: Awaited<ReturnType<typeof getObservatorySummary>>; db: boolean }) {
-  const rows = await getObservatoryCandidates(50);
+async function Signals({ status, db }: { status: string; db: boolean }) {
+  const rows = await getWatchedSignals(status === "all" ? undefined : status, 100);
+  const seg = STATUSES.map((s) => ({ href: s === "all" ? "/github/signals" : `/github/signals/${s}`, label: s.replace("_", " "), active: status === s }));
   return (
     <>
-      <p className="page-sub" style={{ maxWidth: "70ch" }}>
-        Pull requests in the watched repositories whose body carries a self-disclosure line such as &ldquo;Generated with Claude
-        Code&rdquo; or an AI co-author trailer, found by the observatory&apos;s signature rules. They are candidates, not confirmed
-        agent PRs, until a person reviews them.
+      <p className="page-sub" style={{ maxWidth: "72ch" }}>
+        Pull requests in watched repositories whose body names an AI tool (&ldquo;Generated with Claude Code&rdquo;, an AI
+        co-author trailer, an <code className="mono">aider:</code> prefix). Detection flags contributions, not people. A signal
+        is a lead until a person reviews it; only confirmed signals count toward totals.{" "}
+        <a href={`${SITE.repo}/issues/new?template=evidence.md`}>Suggest evidence ↗</a>
       </p>
+      <Segmented options={seg} label="Signal status" />
       {rows.length === 0 ? (
-        <Empty db={db}>No self-disclosure candidates mirrored yet.</Empty>
+        <Empty db={db}>No self-disclosure signals {status === "all" ? "yet" : `with status ${status.replace("_", " ")}`}.</Empty>
       ) : (
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
               <tr>
+                <th>Pull request</th>
                 <th>Rule</th>
                 <th>Excerpt</th>
                 <th>Status</th>
-                <th>Evidence</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td className="mono">{c.ruleId}</td>
-                  <td>{c.excerpt ?? "–"}</td>
                   <td>
-                    <span className="badge">{c.status}</span>
+                    <a href={c.url ?? "#"}>
+                      <span className="mono">{c.repository}</span> {c.title?.slice(0, 90) ?? c.activityId}
+                    </a>
                   </td>
-                  <td>{c.url ? <a href={c.url}>open PR ↗</a> : "–"}</td>
+                  <td className="dim">{signatureLabel(c.ruleId)}</td>
+                  <td style={{ maxWidth: 360 }}>{c.excerpt ?? "–"}</td>
+                  <td>
+                    <span className={`badge ${c.status === "confirmed" ? "ok" : c.status === "dismissed" ? "" : "warn"}`}>{c.status.replace("_", " ")}</span>
+                    {c.reason ? <div className="dim" style={{ fontSize: 12 }}>{c.reason}</div> : null}
+                  </td>
+                  <td>
+                    <SaveButton item={{ id: `sig-${c.id}`, kind: "signal", title: `${c.repository} · ${c.title ?? c.activityId}`, url: c.url, sub: c.excerpt ?? undefined }} />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <Attribution generatedAt={obs.generatedAt} stale={obs.stale} />
+      <p className="dim sans" style={{ fontSize: 12.5, marginTop: 14 }}>
+        Reviews live in <Link href={`${SITE.repo}/blob/main/data/reviews.json`}>data/reviews.json</Link> and are re-applied on every run.
+      </p>
     </>
   );
 }

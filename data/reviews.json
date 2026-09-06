@@ -1,0 +1,4 @@
+{
+  "note": "Human review decisions for self-disclosure signals. id = watched_signals.id (<pr id>-<rule id>). status: confirmed | dismissed | needs_evidence. Applied on every ingest run.",
+  "reviews": []
+}

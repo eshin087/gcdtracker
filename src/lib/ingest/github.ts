@@ -6,15 +6,19 @@ import { fetchJson, type Job, type JobContext, sleep, timeLeft } from "./common"
 
 const SEARCH = "https://api.github.com/search/issues";
 
-interface SearchItem {
+export interface SearchItem {
   id: number;
+  body?: string | null;
+  user?: { id: number; login: string; type?: string };
+  state?: string;
+  updated_at?: string;
   number: number;
   title: string;
   html_url: string;
   repository_url: string;
   created_at: string;
 }
-interface SearchResponse {
+export interface SearchResponse {
   total_count?: number;
   incomplete_results?: boolean;
   items?: SearchItem[];
@@ -22,7 +26,7 @@ interface SearchResponse {
 }
 
 /** Search API pacing: 10/min unauthenticated, 30/min with a token. */
-function gapMs(): number {
+export function gapMs(): number {
   return process.env.GITHUB_TOKEN ? 2_100 : 6_500;
 }
 
@@ -41,7 +45,7 @@ export class RateLimited extends Error {
 let lastCall = 0;
 
 /** One paced search call. Throws RateLimited with the reset time on 403/429. */
-async function search(q: string, extra: Record<string, string> = {}): Promise<SearchResponse> {
+export async function search(q: string, extra: Record<string, string> = {}): Promise<SearchResponse> {
   const wait = lastCall + gapMs() - Date.now();
   if (wait > 0) await sleep(wait);
   lastCall = Date.now();
@@ -66,7 +70,7 @@ async function countDay(ctx: JobContext, agent: GithubAgent, day: string, final:
 }
 
 /** Budget-aware: returns false when the deadline is too close for another paced call. */
-function canCall(ctx: JobContext): boolean {
+export function canCall(ctx: JobContext): boolean {
   return timeLeft(ctx) > gapMs() + 12_000;
 }
 

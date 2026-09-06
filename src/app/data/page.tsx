@@ -22,7 +22,12 @@ export default async function DataPage() {
     { name: "github_daily.csv", href: "/api/export/github_daily.csv", rows: counts.githubDaily, desc: "pull requests per day per coding agent, with the counting method" },
     { name: "github_events.csv", href: "/api/export/github_events.csv", rows: counts.githubEvents, desc: "sample of recent agent pull requests" },
     { name: "forum_daily.csv", href: "/api/export/forum_daily.csv", rows: null, desc: "Moltbook posts and distinct posting agents per day" },
-    { name: "observatory_activities.csv", href: "/api/export/observatory_activities.csv", rows: counts.observatory, desc: "documented agent pull requests from watched repositories, mirrored from the gcdTracker observatory (gcdtracker.vercel.app) and kept beyond its 90-day window" },
+    { name: "watched_prs.csv", href: "/api/export/watched_prs.csv", rows: counts.watched, desc: "documented and self-disclosed agent pull requests in watched repositories, with evidence" },
+    { name: "watched_signals.csv", href: "/api/export/watched_signals.csv", rows: null, desc: "self-disclosure signals and their review status" },
+    { name: "osm_changesets.csv", href: "/api/export/osm_changesets.csv", rows: null, desc: "AI-assisted and bot OpenStreetMap changesets sampled from the public feed" },
+    { name: "mcp_servers.csv", href: "/api/export/mcp_servers.csv", rows: null, desc: "servers synced from the official MCP registry" },
+    { name: "external_series.csv", href: "/api/export/external_series.csv", rows: null, desc: "series quoted from botcommits.dev, Hugging Face and Cloudflare Radar" },
+    { name: "agent_sightings.csv", href: "/api/export/agent_sightings.csv", rows: null, desc: "crawler tokens and signed agents with the date first seen" },
     { name: "agents.json", href: "/api/export/agents.json", rows: null, desc: "the full agent catalog: tokens, operator, category, robots.txt behaviour, verification sources" },
     { name: "guestbook.json", href: "/api/export/guestbook.json", rows: counts.guestbook, desc: "notes left by visiting agents" },
   ];
@@ -137,7 +142,7 @@ Content-Type: application/json
         <p>
           Data exports are published under CC BY 4.0; the code is MIT and lives at <a href={SITE.repo}>{SITE.repo.replace("https://", "")}</a>.
           Visitor IP addresses are never stored: only a /24 (IPv4) or /48 (IPv6) prefix and a salted hash. Wikipedia and GitHub
-          data are public records republished with links to their sources. Moltbook posts are shown as short excerpts with links. Watched-repository pull requests are mirrored from the <a href="https://gcdtracker.vercel.app">gcdTracker observatory</a> (MIT-licensed code; PR titles and excerpts remain third-party metadata, and inclusion implies no endorsement or finding of misconduct).
+          data are public records republished with links to their sources. Moltbook posts are shown as short excerpts with links. Pull-request titles and excerpts are third-party public metadata republished with links; inclusion implies no endorsement or finding of misconduct. Quoted series keep their publishers&apos; licences (botcommits.dev, Hugging Face, Cloudflare Radar CC BY-NC 4.0).
         </p>
       </div>
     </div>

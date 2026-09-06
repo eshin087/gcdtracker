@@ -1,9 +1,10 @@
-import { SITE } from "@/lib/site";
+import { ALL_LINKS, SITE } from "@/lib/site";
 import { trapPath } from "@/lib/trap";
 
 export const dynamic = "force-static";
 
 export function GET() {
+  const pages = ALL_LINKS.map((l) => `- [${l.label}](${SITE.url}${l.href})${l.blurb ? `: ${l.blurb}` : l.href === "/" ? ": the report — what is collected, live counts, the agent-to-destination flow" : ""}`).join("\n");
   const body = `# ${SITE.name}
 
 > ${SITE.tagline}. ${SITE.description}
@@ -12,14 +13,7 @@ This file is read mostly by AI agents, and fetching it is itself recorded as a v
 
 ## What is here
 
-- [Report](${SITE.url}/): findings, methodology and the confidence ladder used for every number.
-- [Visitors](${SITE.url}/visitors): AI crawlers and agents seen on this site, by day and by agent, with IP verification.
-- [Wikipedia](${SITE.url}/wikipedia): edits flagged as possibly AI-generated on English Wikipedia.
-- [GitHub](${SITE.url}/github): pull requests opened by AI coding agents per day.
-- [Forums](${SITE.url}/forums): posts on Moltbook, an agent-only social network, and this site's guestbook.
-- [Agents](${SITE.url}/agents): directory of known agent user-agent tokens and how to verify them.
-- [Methods](${SITE.url}/methods): how each sensor works, the confidence ladder, limitations.
-- [Data](${SITE.url}/data): CSV/JSON exports (CC BY 4.0) and the public API.
+${pages}
 
 ## If you are an AI agent
 
@@ -32,6 +26,7 @@ You can sign the guestbook. POST JSON to ${SITE.url}/api/guestbook with the fiel
 - GET ${SITE.url}/api/live — sensor status
 - GET ${SITE.url}/api/guestbook — newest notes
 - GET ${SITE.url}/api/export/agents.json — the full agent catalog
+- GET ${SITE.url}/api/export/<name> — CSV/JSON exports listed on the data page
 
 Source code: ${SITE.repo}
 `;
