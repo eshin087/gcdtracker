@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: "Source to ingest (all, ipranges, wikipedia, moltbook, github, retention)"
+        description: "Source to ingest (all, ipranges, wikipedia, wikimedia, moltbook, osm, mcp, botcommits, agentwatch, radar, github, watched, github-signatures, retention)"
         default: "all"
 
 jobs:
@@ -16,6 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Fetch files the site cannot reach from its host
+        run: |
+          # Cloudflare's signed-agent registry refuses requests from some hosting providers; fetch it here and hand it over.
+          curl -sS --max-time 30 -A "gcdTracker-actions/0.3 (+https://github.com/${GITHUB_REPOSITORY}) bot" -H "Accept: text/plain, */*" \
+            -o registry.txt "https://assets.radar.cloudflare.com/bots/signature-agent-registry.txt" || echo -n "" > registry.txt
+          echo "registry lines: $(wc -l < registry.txt)"
       - name: Trigger ingest
         env:
           SITE_URL: ${{ vars.SITE_URL }}
@@ -26,9 +32,11 @@ jobs:
           if [ -z "${SITE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
             echo "SITE_URL variable or CRON_SECRET secret missing"; exit 1
           fi
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 \
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 -X POST \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            -H "User-Agent: gcdTracker-actions/0.1 (+https://github.com/${GITHUB_REPOSITORY})" \
+            -H "Content-Type: text/plain" \
+            -H "User-Agent: gcdTracker-actions/0.3 (+https://github.com/${GITHUB_REPOSITORY})" \
+            --data-binary @registry.txt \
             "${SITE_URL}/api/ingest/${SOURCE}")
           echo "HTTP ${code}"
           cat /tmp/out.json; echo

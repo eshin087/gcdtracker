@@ -38,14 +38,19 @@ export const agentWatchJob: Job = async (ctx) => {
   }
 
   // 2. Cloudflare's public registry of agents that sign requests (Web Bot Auth).
+  //    The registry blocks some hosting providers, so the scheduler may fetch it and POST the text to us.
   if (timeLeft(ctx) > 15_000) {
-    // The registry answers 403 to JSON-only Accept headers; ask for text explicitly.
-    const res = await fetch(AGENT_WATCH.registry, {
-      headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker-site.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const text = await res.text();
+    let text: string | null = ctx.payload && ctx.payload.includes("http-message-signatures-directory") ? ctx.payload : null;
+    let status = text ? "payload" : "";
+    if (!text) {
+      const res = await fetch(AGENT_WATCH.registry, {
+        headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker-site.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
+        cache: "no-store",
+      });
+      status = String(res.status);
+      if (res.ok) text = await res.text();
+    }
+    if (text) {
       const dirs = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith("http"));
       const rows = dirs.map((u) => {
         let host = u;
@@ -58,8 +63,9 @@ export const agentWatchJob: Job = async (ctx) => {
       });
       if (rows.length > 0) await ctx.db.insert(agentSightings).values(rows).onConflictDoNothing();
       stats.signedAgents = rows.length;
+      stats.registry = status;
     } else {
-      stats.registry = `skipped (${res.status})`;
+      stats.registry = `skipped (${status})`;
     }
   }
 

@@ -21,7 +21,7 @@ export const mcpJob: Job = async (ctx) => {
   let cursor: string | undefined;
   let newest = since;
 
-  for (let page = 0; page < 20; page++) {
+  for (let page = 0; page < 80; page++) {
     if (timeLeft(ctx) < 10_000) {
       partial = true;
       break;

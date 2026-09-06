@@ -7,6 +7,8 @@ export interface JobContext {
   db: Db;
   /** epoch ms by which the job must return */
   deadline: number;
+  /** optional request body handed to the job (e.g. a file the scheduler fetched on our behalf) */
+  payload?: string;
 }
 
 export interface JobResult {

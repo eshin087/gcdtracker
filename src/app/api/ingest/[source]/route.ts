@@ -45,7 +45,16 @@ async function handle(req: Request, source: string): Promise<Response> {
 
   const started = Date.now();
   const deadline = started + (maxDuration - 15) * 1000;
-  const ctx = { db, deadline };
+  let payload: string | undefined;
+  if (req.method === "POST") {
+    try {
+      const text = await req.text();
+      if (text && text.length < 2_000_000) payload = text;
+    } catch {
+      payload = undefined;
+    }
+  }
+  const ctx = { db, deadline, payload };
   const reports: RunReport[] = [];
 
   if (source === "all") {
@@ -57,7 +66,7 @@ async function handle(req: Request, source: string): Promise<Response> {
       if (remaining < 20_000) break;
       const jobsLeft = ALL_ORDER.length - i;
       const slice = Math.max(20_000, Math.min(remaining, (remaining / jobsLeft) * 1.8));
-      reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice }));
+      reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice, payload }));
     }
   } else {
     reports.push(await runJob(source, JOBS[source], ctx));
