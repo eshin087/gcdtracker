@@ -1,0 +1,27 @@
+{
+  "updated": "2026-09-06",
+  "note": "Figures are quoted from the cited publications. Percentages in the chart are shares of HTML requests or crawler traffic as defined by each source; they are not directly comparable across sources.",
+  "shares": [
+    { "label": "Humans", "value": 47, "unit": "% of HTML requests", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "date": "2025-12" },
+    { "label": "Non-AI bots", "value": 44, "unit": "% of HTML requests", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "date": "2025-12" },
+    { "label": "Googlebot", "value": 4.5, "unit": "% of HTML requests", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "date": "2025-12" },
+    { "label": "All other AI bots combined", "value": 4.2, "unit": "% of HTML requests", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "date": "2025-12" }
+  ],
+  "crawlerShare": [
+    { "label": "Googlebot", "may2024": 30, "may2025": 50 },
+    { "label": "GPTBot", "may2024": 2.2, "may2025": 7.7 },
+    { "label": "ClaudeBot", "may2024": 11.7, "may2025": 5.4 },
+    { "label": "Bytespider", "may2024": 22.8, "may2025": 2.9 }
+  ],
+  "crawlerShareSource": { "source": "Cloudflare, From Googlebot to GPTBot", "url": "https://blog.cloudflare.com/from-googlebot-to-gptbot-whos-crawling-your-site-in-2025/", "date": "2025-07" },
+  "facts": [
+    { "text": "AI \"user action\" fetches (someone asking an assistant to read a page) grew more than 15× during 2025, driven by ChatGPT-User.", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "verified": true },
+    { "text": "GPTBot accounted for roughly 7.5% of all verified-bot traffic; GPTBot, ClaudeBot and CCBot were the user agents most often fully disallowed in robots.txt.", "source": "Cloudflare Radar 2025 Year in Review", "url": "https://blog.cloudflare.com/radar-2025-year-in-review/", "verified": true },
+    { "text": "Anthropic's crawl-to-refer ratio reached about 70,900 pages crawled per referral in June 2025, and as much as 500,000:1 later in the year; Mistral's was below 1:1.", "source": "Cloudflare, Crawl before the fall of referrals", "url": "https://blog.cloudflare.com/ai-search-crawl-refer-ratio-on-radar/", "verified": true },
+    { "text": "About 14% of the top 10,000 domains carry AI-specific robots.txt directives.", "source": "Cloudflare, From Googlebot to GPTBot", "url": "https://blog.cloudflare.com/from-googlebot-to-gptbot-whos-crawling-your-site-in-2025/", "verified": true },
+    { "text": "As reported by Vercel: in one month GPTBot made 569 million requests and Claude 370 million against Googlebot's 4.5 billion; over a third of AI-crawler requests hit 404 pages, and neither crawler executes JavaScript.", "source": "Vercel, The rise of the AI crawler", "url": "https://vercel.com/blog/the-rise-of-the-ai-crawler", "verified": false },
+    { "text": "As reported by the Wikimedia Foundation: bots generate about 65% of the most expensive traffic while making up roughly 35% of pageviews, and multimedia bandwidth rose 50% since January 2024, attributed to AI scrapers.", "source": "Wikimedia Diff, How crawlers impact the operations of the Wikimedia projects", "url": "https://diff.wikimedia.org/2025/04/01/how-crawlers-impact-the-operations-of-the-wikimedia-projects/", "verified": false },
+    { "text": "As reported by Fastly: crawlers make up about 80% of AI-bot traffic, and 98% of on-demand fetcher traffic comes from OpenAI.", "source": "Fastly Threat Research, August 2025", "url": "https://www.fastly.com/press/press-releases/new-fastly-threat-research-reveals-ai-crawlers-make-up-almost-80-of-ai-bot", "verified": false },
+    { "text": "As reported by TollBit: the ratio of AI-bot visits to human visits moved from about 1:200 in early 2025 to about 1:31 by the end of the year, and retrieval bots now out-scrape training crawlers.", "source": "TollBit, State of the Bots", "url": "https://tollbit.com/bots/", "verified": false }
+  ]
+}

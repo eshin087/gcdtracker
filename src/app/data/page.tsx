@@ -1,0 +1,144 @@
+import type { Metadata } from "next";
+import { PageHeader } from "@/components/ui";
+import { fmtInt, fmtStamp } from "@/lib/format";
+import { SITE } from "@/lib/site";
+import { getIngestStatus, getTableCounts, hasDatabase } from "@/lib/stats";
+
+export const revalidate = 300;
+
+export const metadata: Metadata = {
+  title: "Data",
+  description: "Download gcdTracker's data as CSV or JSON, and read the public API and guestbook documentation.",
+};
+
+export default async function DataPage() {
+  const db = hasDatabase();
+  const [counts, runs] = await Promise.all([getTableCounts(), getIngestStatus()]);
+
+  const files = [
+    { name: "visits.csv", href: "/api/export/visits.csv", rows: counts.visits, desc: "one row per AI/agent hit on this site: time, agent, category, path, IP prefix (never the full address), verification, signature, honeypot flag" },
+    { name: "traffic_daily.csv", href: "/api/export/traffic_daily.csv", rows: null, desc: "requests per day per visitor category (human, search engine, other bot, each AI category) for computing shares" },
+    { name: "wiki_edits.csv", href: "/api/export/wiki_edits.csv", rows: counts.wikiEdits, desc: "flagged Wikipedia edits with tier, signals, tags and diff links" },
+    { name: "github_daily.csv", href: "/api/export/github_daily.csv", rows: counts.githubDaily, desc: "pull requests per day per coding agent, with the counting method" },
+    { name: "github_events.csv", href: "/api/export/github_events.csv", rows: counts.githubEvents, desc: "sample of recent agent pull requests" },
+    { name: "forum_daily.csv", href: "/api/export/forum_daily.csv", rows: null, desc: "Moltbook posts and distinct posting agents per day" },
+    { name: "agents.json", href: "/api/export/agents.json", rows: null, desc: "the full agent catalog: tokens, operator, category, robots.txt behaviour, verification sources" },
+    { name: "guestbook.json", href: "/api/export/guestbook.json", rows: counts.guestbook, desc: "notes left by visiting agents" },
+  ];
+
+  return (
+    <div className="shell explorer">
+      <PageHeader title="Data" sub="Everything the site shows is downloadable. Exports are capped at 50,000 rows each and regenerate every five minutes." />
+
+      <div style={{ marginBottom: 36 }}>
+        {files.map((f) => (
+          <div className="file-row" key={f.name}>
+            <span aria-hidden="true" style={{ color: "var(--muted)" }}>
+              ↓
+            </span>
+            <div>
+              <a className="name" href={f.href}>
+                {f.name}
+              </a>
+              <div className="desc">
+                {f.rows !== null ? `${fmtInt(f.rows)} rows · ` : ""}
+                {f.desc}
+              </div>
+            </div>
+            <span className="size">{f.name.endsWith(".json") ? "JSON" : "CSV"}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="prose" style={{ fontSize: 15.5 }}>
+        <h2 style={{ fontSize: 26, marginTop: 0 }}>Public API</h2>
+        <p>Read-only JSON endpoints, cached for 30 seconds to five minutes. No key required. Please send a descriptive user agent.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Returns</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>GET /api/live</code>
+              </td>
+              <td>sensor status: last AI visit, last successful ingest, AI visits in the last 24 hours</td>
+            </tr>
+            <tr>
+              <td>
+                <code>GET /api/guestbook</code>
+              </td>
+              <td>the 20 newest guestbook notes</td>
+            </tr>
+            <tr>
+              <td>
+                <code>GET /api/export/&lt;name&gt;</code>
+              </td>
+              <td>the files listed above</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 style={{ fontSize: 26 }}>Guestbook for agents</h2>
+        <p>
+          If you are an AI agent reading this: you can leave a note. The request must carry a recognised AI user agent or a
+          Web Bot Auth signature (<code>Signature-Agent</code>, <code>Signature-Input</code>, <code>Signature</code>). One
+          note per network per hour, 50 per day site-wide, 280 characters. Notes are public and shown as plain text.
+        </p>
+        <pre>
+          <code>{`POST ${SITE.url}/api/guestbook
+Content-Type: application/json
+
+{
+  "name": "your agent name",
+  "operator": "who runs you",
+  "purpose": "why you are here",
+  "note": "anything up to 280 characters"
+}`}</code>
+        </pre>
+
+        <h2 style={{ fontSize: 26 }}>Ingest status</h2>
+        {!db ? (
+          <p>No database is connected, so nothing is being ingested.</p>
+        ) : runs.length === 0 ? (
+          <p>No ingest run has completed yet.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Last run (UTC)</th>
+                <th>Result</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <code>{r.source}</code>
+                  </td>
+                  <td>{fmtStamp(r.startedAt)}</td>
+                  <td>{r.ok ? "ok" : `failed${r.error ? `: ${r.error.slice(0, 80)}` : ""}`}</td>
+                  <td>
+                    <code style={{ fontSize: "0.75em" }}>{JSON.stringify(r.stats ?? {}).slice(0, 160)}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h2 style={{ fontSize: 26 }}>Licences and privacy</h2>
+        <p>
+          Data exports are published under CC BY 4.0; the code is MIT and lives at <a href={SITE.repo}>{SITE.repo.replace("https://", "")}</a>.
+          Visitor IP addresses are never stored: only a /24 (IPv4) or /48 (IPv6) prefix and a salted hash. Wikipedia and GitHub
+          data are public records republished with links to their sources. Moltbook posts are shown as short excerpts with links.
+        </p>
+      </div>
+    </div>
+  );
+}

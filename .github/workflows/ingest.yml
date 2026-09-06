@@ -1,0 +1,35 @@
+name: ingest
+
+# Vercel Hobby cron only runs once a day, so GitHub Actions is the real scheduler.
+# Note: GitHub disables scheduled workflows after 60 days without repository activity.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Source to ingest (all, ipranges, wikipedia, moltbook, github, retention)"
+        default: "all"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger ingest
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SOURCE: ${{ github.event.inputs.source || 'all' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SITE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "SITE_URL variable or CRON_SECRET secret missing"; exit 1
+          fi
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "User-Agent: gcdTracker-actions/0.1 (+https://github.com/${GITHUB_REPOSITORY})" \
+            "${SITE_URL}/api/ingest/${SOURCE}")
+          echo "HTTP ${code}"
+          cat /tmp/out.json; echo
+          [ "$code" = "200" ]
