@@ -1,6 +1,6 @@
 import { TimelineChart } from "@/components/charts";
 import { BarList, Empty } from "@/components/ui";
-import { fmtDay, fmtInt, fmtPct } from "@/lib/format";
+import { fmtDate, fmtInt, fmtPct } from "@/lib/format";
 import { githubAgentLabel } from "@/lib/github/agents";
 import { GH_ARCHIVE } from "@/lib/ingest/gharchive";
 import { type ArchivePeriod, type ArchiveSummary, getArchiveAgents, getArchiveDaily, getArchiveMonthly } from "@/lib/stats-census";
@@ -60,7 +60,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
   return (
     <>
       <p className="page-sub" style={{ maxWidth: "76ch" }}>
-        Every public GitHub event since {summary.firstDay ? fmtDay(summary.firstDay) : "the backfill started"}, counted hour by hour from{" "}
+        Every public GitHub event since {summary.firstDay ? fmtDate(summary.firstDay) : "the backfill started"}, counted hour by hour from{" "}
         <a href={GH_ARCHIVE.site}>GH Archive</a>. No sampling and no search caps: an agent pull request is one opened by a known agent bot account
         or on an agent branch prefix, and the share is measured against every pull request opened that hour.{" "}
         {summary.hours > 0 ? `${fmtInt(summary.hours)} hours stored across ${fmtInt(summary.completeDays)} days.` : ""}
@@ -116,8 +116,8 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
             <>
               <BarList rows={commitSigs.rows.slice(0, 10).map((r) => ({ key: r.tool, label: TOOL_LABELS[r.tool] ?? r.tool, value: r.value }))} variant="neutral" />
               <p className="dim sans" style={{ fontSize: 12.5, marginTop: 8 }}>
-                Co-author trailers and “generated with” lines in commit messages. GitHub removed commit lists from the public event feed after {commitSigs.to}, so this
-                series ends there; the search-based signature counts on the “By agent” view continue it.
+                Co-author trailers and “generated with” lines in commit messages, {commitSigs.from} to {commitSigs.to}. GitHub removed commit lists from the public event
+                feed during 2025, so this series cannot extend past that point; the search-based signature counts on the “By agent” view continue it.
               </p>
             </>
           )}
