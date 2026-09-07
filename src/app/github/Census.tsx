@@ -67,7 +67,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
         barLabel="Agent PRs opened per month"
         line={monthly.map((p) => (p.prsOpened > 0 ? (100 * p.agentPrs) / p.prsOpened : 0))}
         lineLabel="Share of all PRs opened (%)"
-        annotations={AGENT_LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7)))}
+        annotations={AGENT_LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
         title="Agent pull requests across all of GitHub, by month"
       />
       {partialMonth && partialMonth.hours < 28 * 24 ? (

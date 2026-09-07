@@ -91,7 +91,7 @@ export default async function HomePage() {
               barLabel="Agent PRs opened per month, all of GitHub"
               line={archiveMonthly.map((m) => (m.prsOpened > 0 ? (100 * m.agentPrs) / m.prsOpened : 0))}
               lineLabel="Share of all PRs opened (%)"
-              annotations={AGENT_LAUNCHES.filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7)))}
+              annotations={AGENT_LAUNCHES.filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
               title="Agent pull requests across all of GitHub, by month"
             />
             <figcaption>
