@@ -1,52 +1,43 @@
-# Agents → destinations dashboard
+# Internet activity homepage and restored navigation
 
-This draft restores the homepage's original orange source-to-destination paths, moving dots, destination totals and record replay. It builds on QA hardening PR #1 and leaves that PR separate.
+This draft builds on QA hardening PR #1 and refocuses the interface on evidence from external public sources. PR #1 remains separate; neither draft is merged or deployed to production.
 
-## Evidence and interaction
+## What changed
 
-- Destination filters and a keyboard-accessible source selector reveal purpose, attribution evidence, units, observation dates, latest observation, latest collection run and explicit collection outcomes.
-- Website request categories show IP-range matches, checkable requests and verification coverage. Signature-header counts are labelled unverified.
-- Width and moving-dot density scale within the same feed and unit. Different sources have independent scales; they cannot establish a cross-platform volume ranking.
-- Destination totals retain their units. GitHub PR matches may overlap; Wikipedia/Wikidata edits and Commons files stay separate.
-- The chart uses 30 completed UTC calendar days. Dates containing rows do not imply continuous collection. The latest-record replay may extend beyond that window and does not indicate live event timing.
-- OSM includes only deduplicated collection version 2; Commons includes file additions to tracked categories, excluding non-file entries.
-- Pause stops both SVG motion and replay. Reduced-motion preferences stop automatic playback, including before hydration. The original wide diagram scrolls inside its container on small screens.
-- Aggregate reads share a five-minute cache. The homepage keeps the compact traffic chart and does not restore duplicated historical charts.
+- The original left “On this page” menu returns, with desktop section highlighting and an expandable mobile menu.
+- The Agents → destinations dashboard retains its orange paths, moving dots, destination filters, source inspection, record replay, Pause and reduced-motion behavior. Its destinations are code repositories, encyclopedias, maps and forums.
+- Three supporting reports show published web traffic (Cloudflare and Wikimedia), agent-attributed public GitHub PRs, and explicit crawler-blocking policies in Common Crawl samples.
+- Local visitor counts are removed from the homepage, Traffic, agent directory/profiles, Forums, Data and source-health API. The latest-record stream excludes site visits. Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums.
+- Page-request analytics and the hidden footer trap link are disabled. No migration, DELETE, TRUNCATE, repair or historical reprocessing is introduced by this follow-up.
 
-## Demo and deployment
+## Measurement boundaries
 
-The separate `/demo` page uses fixed, explicitly labelled synthetic data. It demonstrates populated paths, partial and failed collection, declared crawler purposes and IP-check coverage without a database. Its metadata requests no indexing. The observed homepage never silently substitutes sample data.
+These sources cover different parts of the internet; the site does not claim a representative whole-internet total. Every flow source retains purpose, evidence, units, observation dates, latest observation, last collector run and explicit collector outcomes. Widths and dot density compare only the same feed and unit. Counts across feeds must not be added.
 
-The new draft PR is stacked on `codex/qa-hardening`. Its Vercel preview includes both the observed homepage and `/demo`. Preview deployment protection remains enabled; a Vercel login may be required. Production is not deployed or modified.
+The flow uses 30 completed UTC days. Dates containing rows are not proof of continuous collection. GitHub Search matches may overlap. Bot accounts support account attribution, while branch names remain heuristics; neither identifies an underlying model. OSM uses capped, deduplicated collection v2. Commons counts additions of files to tracked categories, not uploads. Wikimedia automation includes conventional non-AI bots.
 
-No migration or repair job is required by this follow-up. Reverting its commits restores the compact homepage from PR #1.
+The homepage bounds monthly charts to 24 points and policy history to 18 samples. GitHub shares require comparable validated archive periods. Missing Wikimedia months remain gaps, including trailing missing months. Radar preserves the publisher's units, normalization, window and retrieval time. Policy charts use v2 explicit named-token full-block definitions without joining legacy definitions into their line; directives do not establish crawler compliance.
+
+Independent reads run together and shared report/flow data is cached for five minutes. The homepage does not render hidden full-history charts.
+
+## Data and compatibility
+
+Stored history remains in the existing database. The previous retention policy continues; this PR does not promise indefinite retention. Legacy visitor/guestbook exports and the hardened guestbook API remain available for compatibility, but are not linked as dashboard data sources. Known retired paths remain valid historical export buckets.
+
+The health endpoint now describes external collection only: `aiVisits24h` and `lastAiVisit` are removed. No preview database is created or connected by this change.
+
+## Preview and rollback
+
+The observed homepage uses configured external-source data; it never substitutes examples when unavailable. `/demo` uses fixed synthetic data for all four dashboard sections and is labelled and marked noindex.
+
+Vercel preview protection remains enabled and may require signing in. Preview deployment uses `PREVIEW_DATABASE_URL`, never an implicit production database fallback. Production is unchanged.
+
+There are no new migrations. Revert this follow-up's commits to restore PR #1's compact interface; reverting also restores its local visitor collector.
 
 ## Validation
 
-Local lint, TypeScript, all 195 unit tests and an offline production build pass. Seven browser checks cover the populated offline demo, four responsive widths and light/dark reduced-motion layouts. A direct motion check confirmed that the animated dots move and Pause removes their motion.
+Unit checks cover missing-month handling, withheld legacy archive shares, retained Radar metadata, disabled local analytics and independent flow scales. PostgreSQL checks verify that private local visit fixtures cannot enter the flow or latest external records, alongside UTC boundaries, collection failure and the coding-agent remainder.
 
-Hosted CI runs the complete browser suite and 27 actual PostgreSQL integration tests, including UTC boundaries, private-field exclusion, collection failure and the coding-agent remainder. The local Docker engine could not restart because Windows would not release its stale runtime socket; no production database was used. CI retains seeded homepage measurements and screenshots; the PR description records the final results and any limitations.
+Browser checks cover the restored rail, three additional reports, retired URLs, absence of local dashboard metrics, navigation, exports, saved records, hydration, animation and reduced motion, light/dark layouts, and widths of 390, 768, 1024 and 1440 pixels.
 
-## Seeded performance comparison
-
-Using the same QA fixture generator and 1440 × 1000 reduced-motion browser settings:
-
-| Measure | Original homepage | Restored dashboard | Reduction |
-|---|---:|---:|---:|
-| Decoded HTML | 1,043,943 bytes | 79,780 bytes | 92.4% |
-| DOM elements | 6,652 | 514 | 92.3% |
-| Primary font preloads | 7 | 2 | 71.4% |
-
-The original baseline was measured locally on Windows; the restored dashboard was measured in GitHub Actions on Linux. These are payload/DOM comparisons, not production latency or Core Web Vitals claims. The restored homepage adds about 24 KB and 148 DOM elements relative to PR #1's compact layout while retaining a large reduction from the original page.
-
-[Verified application run](https://github.com/eshin087/gcdtracker-site/actions/runs/34166394235): 195 unit, 27 PostgreSQL and 15 browser tests passed. The workflow explicitly includes the hidden `.qa` folder when uploading its selected reports, screenshots, logs and measurements.
-
-## Screenshots
-
-The sample-data demo at 1440 pixels:
-
-![Synthetic dashboard demo at 1440 pixels](qa/dashboard-demo-1440.png)
-
-Dark theme at 390 pixels. The wide diagram scrolls inside its frame:
-
-![Synthetic dashboard demo at 390 pixels](qa/dashboard-demo-dark-390.png)
+The PR description links the final CI run, its seeded homepage measurements and screenshots. Local Docker is unavailable because of a stale Windows runtime socket; actual database tests run against isolated PostgreSQL in GitHub Actions, never production. Payload comparisons use the same QA seed generator; the original baseline was measured on Windows and the updated homepage in Linux CI, so these are HTML/DOM comparisons rather than latency claims.
