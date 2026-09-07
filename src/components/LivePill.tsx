@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LiveInfo } from "@/lib/live-types";
-import { relTime } from "@/lib/format";
 
 type State = "loading" | "live" | "stale" | "degraded" | "offline";
 
@@ -39,11 +38,11 @@ export function LivePill() {
     };
   }, []);
 
-  const text = state === "loading" ? "checking sensor…"
-    : state === "offline" ? "sensor unavailable"
+  const text = state === "loading" ? "checking sources…"
+    : state === "offline" ? "sources unavailable"
     : state === "degraded" ? "collection needs attention"
     : state === "stale" ? "source data is stale"
-    : info?.lastAiVisit ? `sensor connected · last AI visit ${relTime(info.lastAiVisit)}` : "sensor connected · no AI visits yet";
+    : info?.sources.length ? "sources connected" : "no source runs yet";
 
   return (
     <Link href="/data" className="pill" title={text} aria-label={text + "; view collection status"}>

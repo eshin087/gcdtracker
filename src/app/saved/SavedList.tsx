@@ -19,7 +19,7 @@ export function SavedList() {
       <div className="empty">
         <strong>Nothing saved yet.</strong>
         <br />
-        Use the bookmark icon beside any record on the <Link href="/visitors">Visitors</Link>, <Link href="/github">GitHub</Link>, <Link href="/maps">Maps</Link> or <Link href="/forums">Forums</Link> pages.
+        Use the bookmark icon beside any record on the <Link href="/github">GitHub</Link>, <Link href="/maps">Maps</Link> or <Link href="/forums">Forums</Link> pages.
       </div>
     );
 

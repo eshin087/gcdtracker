@@ -1,28 +1,25 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { MiniChart, TimelineChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
-import { fmtDate, fmtDay, fmtInt, fmtPct, fmtStamp } from "@/lib/format";
-import { getCategoryBreakdown, getOverview, getTrafficByDay, hasDatabase } from "@/lib/stats";
+import { fmtDate, fmtInt, fmtStamp } from "@/lib/format";
+import { hasDatabase } from "@/lib/stats";
 import { getRadarSnapshot } from "@/lib/stats-sources";
 import type { RadarMetadata } from "@/lib/ingest/radar";
 import { isRadarStale, radarUnit, radarValue } from "@/components/radar-labels";
 import { getRobotsCensus, ROBOTS_OPERATORS } from "@/lib/stats-census";
 import { ROBOTS_CENSUS } from "@/lib/ingest/robots-census";
 import industry from "../../../data/industry.json";
-import { CATEGORY_LABELS } from "@/lib/agents/types";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Traffic",
-  description: "How much web traffic comes from AI: this site's own measurement and internet-scale figures from Cloudflare Radar.",
+  description: "AI crawler traffic observed by Cloudflare Radar and crawler policies sampled from Common Crawl.",
 };
 
 export default async function TrafficPage() {
   const db = hasDatabase();
-  const [overview, traffic, breakdown, radarSnapshot, census] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30), getRadarSnapshot(), getRobotsCensus()]);
-  const byDay = traffic.slice(Math.max(0, traffic.findIndex((d) => d.observed)));
+  const [radarSnapshot, census] = await Promise.all([getRadarSnapshot(), getRobotsCensus()]);
   const { series: radar, metadata: radarMeta } = radarSnapshot;
   const latestCrawl = census.at(-1) ?? null;
   const blockedShare = (token: string) => census.map((c) => (c.sites > 0 ? (100 * (c.tokens[token]?.blocked ?? 0)) / c.sites : 0));
@@ -32,8 +29,6 @@ export default async function TrafficPage() {
         .map(([t, v]) => ({ token: t, blocked: (100 * v.blocked) / latestCrawl.sites, mentioned: (100 * v.mentioned) / latestCrawl.sites }))
         .sort((a, b) => b.blocked - a.blocked)
     : [];
-  const days = byDay.map((d) => d.day);
-  const totalBreakdown = breakdown.reduce((a, b) => a + b.count, 0);
   const botShare = Object.entries(radar)
     .filter(([k]) => k.startsWith("bot-share:") && radarMeta["bot-share"])
     .map(([k, pts]) => ({ bot: k.replace("bot-share:", ""), value: pts[pts.length - 1]?.value ?? 0 }))
@@ -52,36 +47,15 @@ export default async function TrafficPage() {
     <div className="shell explorer">
       <PageHeader
         title="Traffic"
-        sub="AI systems read the web as well as write to it. This page follows the requests: first what this site sees, then what network operators who watch a large share of the internet publish."
+        sub="AI systems read the web as well as write to it. This page follows the requests: published measurements from network operators and crawler policies in sampled hosts."
       />
       <StatTiles
         tiles={[
-          { value: overview.db ? fmtPct(overview.aiShare7d) : "–", label: "AI share of requests to this site, 7 days", sub: `${fmtInt(overview.aiVisits7d)} of ${fmtInt(overview.requests7d)} recorded requests; ${overview.trafficDays7d}/7 UTC days observed` },
           { value: "4.2%", label: "of HTML requests from AI bots other than Googlebot", sub: "Cloudflare Radar, Dec 2025" },
           { value: "15×", label: "growth in user-triggered AI fetches in 2025", sub: "Cloudflare Radar, Dec 2025" },
           { value: hasRadar ? radarStale ? "stale snapshot" : "source snapshot" : "historical quotes", label: "Cloudflare Radar data", sub: latestRadar ? "Fetched " + fmtStamp(latestRadar) : "No snapshot with verified units is available" },
         ]}
       />
-
-      <p className="dim sans">Headline window: {overview.windowStart} to {overview.windowEnd} UTC, excluding today. Missing collection is not a measured zero.</p>
-      <div className="section-head">
-        <h2>This site</h2>
-        <Link className="more" href="/visitors">
-          visitor log →
-        </Link>
-      </div>
-      {byDay.some((d) => d.total > 0) ? (
-        <>
-          <TimelineChart sharedScale days={days} bars={byDay.map((d) => d.observed ? d.ai : null)} barLabel="AI requests per day" line={byDay.map((d) => d.observed ? d.total : null)} lineLabel="All requests" title="AI vs all requests to this site" />
-          <p className="dim sans">Gaps are unobserved days, not measured zeros. Today is incomplete.</p>
-          <p className="label" style={{ margin: "18px 0 8px" }}>
-            Who sends requests · 30 days
-          </p>
-          <BarList rows={breakdown.map((b) => ({ key: b.category, label: CATEGORY_LABELS[b.category] ?? b.category, value: b.count, title: totalBreakdown > 0 ? fmtPct(b.count / totalBreakdown) : "" }))} variant="neutral" />
-        </>
-      ) : (
-        <Empty db={db} />
-      )}
 
       <div className="section-head">
         <h2>Internet-scale, from Cloudflare Radar</h2>
@@ -152,7 +126,7 @@ export default async function TrafficPage() {
         (<code className="mono">Disallow: /</code> for that agent). Shares are of all sampled sites with a readable robots.txt, so they describe this Common Crawl sample. They cannot establish a whole-web rate, and sites that exclude Common Crawl are underrepresented.
       </p>
       {census.length === 0 ? (
-        <Empty db={db}>The robots.txt census runs weekly in GitHub Actions and backfills every crawl since 2023 on first launch.</Empty>
+        <Empty db={db}>No corrected v2 sample is available yet. Legacy records remain stored separately; no automatic historical repair is run.</Empty>
       ) : (
         <>
           <TimelineChart sharedScale
@@ -238,7 +212,7 @@ export default async function TrafficPage() {
         </tbody>
       </table>
       <p className="dim sans" style={{ fontSize: 12.5, marginTop: 10 }}>
-        Share of crawler traffic seen by Cloudflare. {fmtDay(days[days.length - 1] ?? "")} is the latest day on this site&apos;s own chart.
+        Historical share of crawler traffic observed by Cloudflare in the labelled publication periods.
       </p>
     </div>
   );

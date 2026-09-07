@@ -5,7 +5,7 @@ import { dayOf, daysAgo } from "../src/lib/format";
 
 const state = vi.hoisted(() => ({ db: null as Db | null }));
 vi.mock("../src/lib/db", () => ({ get db() { return state.db; } }));
-import { getFlowData } from "../src/lib/stats-sources";
+import { getFlowData, getLatestRecords } from "../src/lib/stats-sources";
 
 let bridge: Awaited<ReturnType<typeof createNeonBridge>>;
 beforeAll(async () => {
@@ -31,11 +31,11 @@ describe("dashboard aggregates against isolated PostgreSQL", () => {
     expect(data.sources.find(s => s.id === "maps:ai")).toMatchObject({total:7,observedDays:1});
     expect(data.sources.find(s => s.id === "gh:copilot")).toMatchObject({total:4,evidence:"Documented bot account"});
     expect(data.sources.find(s => s.id === "gh:codex-branch")).toMatchObject({total:2,evidence:"Branch-name heuristic"});
-    expect(data.sources.find(s => s.id === "web:ai-training-crawler")).toMatchObject({
-      total:3,observedDays:1,verification:{matched:1,checkable:2,requests:3,signatureHeaders:1},
-    });
-    expect(data.sources.filter(s => s.feed === "visits")).toHaveLength(1);
-    const serialized = JSON.stringify(data);
+    expect(data.sources.some(s => s.feed === "visits")).toBe(false);
+    expect(data.targets.some(t => t.id === "site")).toBe(false);
+    const records = await getLatestRecords();
+    expect(records.some(r => r.kind === "visit")).toBe(false);
+    const serialized = JSON.stringify({data, records});
     expect(serialized).not.toContain("PRIVATE_QA_SENTINEL");
     expect(serialized).not.toMatch(/ipPrefix|signatureAgent|referer|trapToken|agentSlug/);
   });
@@ -44,7 +44,7 @@ describe("dashboard aggregates against isolated PostgreSQL", () => {
     const data = await getFlowData();
     expect(data.feeds.find(f => f.key === "osm")).toMatchObject({outcome:"partial",stale:false});
     expect(data.feeds.find(f => f.key === "github")).toMatchObject({outcome:"failed",stale:false});
-    expect(data.feeds.find(f => f.key === "visits")).toMatchObject({outcome:"unknown",lastRun:null});
+    expect(data.feeds.some(f => f.key === "visits")).toBe(false);
     expect(data.sources.find(s => s.id === "maps:ai")?.total).toBe(7);
   });
   it("keeps matches outside the six largest coding series in an explicit remainder", async () => {

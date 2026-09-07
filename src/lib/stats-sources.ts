@@ -1,5 +1,4 @@
 import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { AI_CATEGORIES, CATEGORY_LABELS, type Category } from "@/lib/agents/types";
 import { FLOW_TARGETS, type FlowData, type FlowSource, type FlowFeed, type FlowLink } from "./flow";
 export { FLOW_TARGETS } from "./flow";
 export type { FlowNode, FlowData, FlowLink } from "./flow";
@@ -16,7 +15,6 @@ import {
   mcpServers,
   osmChangesets,
   osmDaily,
-  visits,
   watchedPrs,
   watchedRepos,
   watchedSignals,
@@ -26,13 +24,11 @@ import {
   wikiTagWatch,
 } from "@/lib/db/schema";
 import { dayOf, dayRange, daysAgo } from "@/lib/format";
-import { publicVisit, visitEvidenceColumns } from "./public-evidence";
 import { cacheSummary } from "./query-cache";
 import type { RadarMetadata } from "./ingest/radar";
 import { publicRadarMetadata } from "./public-radar";
 import { githubAgentLabel } from "@/lib/github/agents";
 
-const AI = [...AI_CATEGORIES] as string[];
 const n = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 const iso = (d: Date | string | null | undefined): string | null => {
   if (d === null || d === undefined) return null;
@@ -345,17 +341,11 @@ async function queryFlowData(days = 30): Promise<FlowData> {
     const since = new Date(windowStart + "T00:00:00Z");
     const until = new Date(windowEnd + "T00:00:00Z");
     const between = (col: Parameters<typeof gte>[0]) => and(gte(col, since), lt(col, until));
-    const [gh, web, wiki, wikidata, commons, maps, forums, runs] = await d.batch([
+    const [gh, wiki, wikidata, commons, maps, forums, runs] = await d.batch([
       d.select({ agent: githubDaily.agent, tier: githubDaily.tier, value: sql<number>`sum(${githubDaily.prs})::int`,
         days: sql<number>`count(distinct ${githubDaily.day})::int`, dates: sql<string[]>`array_agg(distinct ${githubDaily.day})`, latest: sql<string>`max(${githubDaily.day})` })
         .from(githubDaily).where(and(gte(githubDaily.day, windowStart), lt(githubDaily.day, windowEnd), inArray(githubDaily.tier, ["bot-account", "branch-prefix"])))
         .groupBy(githubDaily.agent, githubDaily.tier).orderBy(desc(sql`sum(${githubDaily.prs})`)),
-      d.select({ category: visits.category, value: count(), days: sql<number>`count(distinct ${visits.day})::int`,
-        latest: sql<Date>`max(${visits.ts})`,
-        matched: sql<number>`count(*) filter (where ${visits.verified} = true)::int`,
-        checkable: sql<number>`count(*) filter (where ${visits.verified} is not null)::int`,
-        signatures: sql<number>`count(*) filter (where ${visits.signed} = true)::int` })
-        .from(visits).where(and(between(visits.ts), inArray(visits.category, AI))).groupBy(visits.category),
       d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikiEdits.ts)})::int`, latest: sql<Date>`max(${wikiEdits.ts})` }).from(wikiEdits).where(between(wikiEdits.ts)),
       d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikidataBotEdits.ts)})::int`, latest: sql<Date>`max(${wikidataBotEdits.ts})` }).from(wikidataBotEdits).where(between(wikidataBotEdits.ts)),
       d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(commonsAiUploads.ts)})::int`, latest: sql<Date>`max(${commonsAiUploads.ts})` }).from(commonsAiUploads).where(and(between(commonsAiUploads.ts), sql`${commonsAiUploads.title} like ${"File:%"}`)),
@@ -372,8 +362,6 @@ async function queryFlowData(days = 30): Promise<FlowData> {
       const health = sourceHealth({ ...run, finishedAt: run.finishedAt });
       return { key, label, outcome: health.outcome, lastRun: health.lastRun, stale: health.stale };
     });
-    // Request recording is event-driven; collector timestamps cannot establish sensor uptime.
-    feeds.push({ key: "visits", label: "This site's request sensor", outcome: "unknown", lastRun: null, stale: false });
     const sources: FlowSource[] = [], links: FlowLink[] = [];
     const add = (source: FlowSource, target: string) => {
       if (source.total <= 0) return;
@@ -392,12 +380,6 @@ async function queryFlowData(days = 30): Promise<FlowData> {
       href: "/github", observedDays: new Set(otherCoding.flatMap(r => r.dates)).size,
       latestObservation: iso(otherCoding.map(r => r.latest).sort().at(-1)),
     }, "code");
-    for (const row of web) add({ id: "web:" + row.category, label: CATEGORY_LABELS[row.category as Category] ?? row.category,
-      total: n(row.value), feed: "visits", unit: "requests", purpose: CATEGORY_LABELS[row.category as Category] ?? row.category,
-      evidence: "User-agent classification + separate IP checks",
-      method: "Only requests to this website. Labels describe the declared purpose; signature headers are unverified. Earlier classification rules may affect retained history.",
-      href: "/visitors", observedDays: n(row.days), latestObservation: iso(row.latest),
-      verification: { matched: n(row.matched), checkable: n(row.checkable), requests: n(row.value), signatureHeaders: n(row.signatures) } }, "site");
     const append = (row: {value:number; days:number; latest:Date|string|null}|undefined, source: Omit<FlowSource,"total"|"observedDays"|"latestObservation">, target:string) =>
       add({ ...source, total:n(row?.value), observedDays:n(row?.days), latestObservation:iso(row?.latest) },target);
     append(wiki[0], { id:"wiki:flagged", label:"Flagged Wikipedia edits", feed:"wikipedia", unit:"edits", purpose:"Encyclopedia editing", evidence:"Platform filters / heuristics", method:"Filter-tagged and heuristic matches; possible AI involvement, not proven authorship.", href:"/wikipedia" }, "wikis");
@@ -408,7 +390,7 @@ async function queryFlowData(days = 30): Promise<FlowData> {
     return { ...empty, mode: "observed", sources, links, feeds };
   });
 }
-export const getFlowData = cacheSummary(queryFlowData, "agent-flow-metadata-v1");
+export const getFlowData = cacheSummary(queryFlowData, "internet-flow-v1");
 
 export interface LatestRecord {
   id: string;
@@ -423,8 +405,7 @@ export interface LatestRecord {
 export async function getLatestRecords(limit = 12): Promise<LatestRecord[]> {
   return safe([] as LatestRecord[], async (d) => {
     const per = Math.max(1, Math.min(100, limit));
-    const [v, w, p, f, o, c] = await Promise.all([
-      d.select(visitEvidenceColumns).from(visits).where(inArray(visits.category, AI)).orderBy(desc(visits.ts)).limit(per),
+    const [w, p, f, o, c] = await Promise.all([
       d.select().from(wikiEdits).orderBy(desc(wikiEdits.ts)).limit(per),
       d.select().from(watchedPrs).orderBy(desc(watchedPrs.createdAt)).limit(per),
       d.select().from(forumPosts).orderBy(desc(forumPosts.ts)).limit(per),
@@ -432,7 +413,6 @@ export async function getLatestRecords(limit = 12): Promise<LatestRecord[]> {
       d.select().from(commonsAiUploads).where(sql`${commonsAiUploads.title} like ${"File:%"}`).orderBy(desc(commonsAiUploads.ts)).limit(per),
     ]);
     const out: LatestRecord[] = [
-      ...v.map(publicVisit).map((r) => ({ id: `visit-${r.id}`, kind: "visit" as const, actor: r.agentName ?? r.agentSlug ?? "AI agent", action: "visited", target: `this site ${r.path}`, url: r.agentSlug ? `/agents/${encodeURIComponent(r.agentSlug)}` : null, ts: r.ts.toISOString() })),
       ...w.map((r) => ({ id: `wiki-${r.rcid}`, kind: "wiki" as const, actor: r.user, action: r.tier === 1 ? "made a filter-flagged edit to" : "made a possible AI edit to", target: r.title, url: r.url, ts: r.ts.toISOString() })),
       ...p.map((r) => ({ id: `pr-${r.id}`, kind: "pr" as const, actor: r.agentId ? githubAgentLabel(r.agentId) : (r.actorLogin ?? "someone"), action: r.attribution === "documented_agent" ? "opened a pull request in" : "disclosed AI help in", target: `${r.repository} · ${r.title}`, url: r.url, ts: r.createdAt.toISOString() })),
       ...f.map((r) => ({ id: `forum-${r.id}`, kind: "forum" as const, actor: r.agent, action: "posted", target: r.title, url: r.url, ts: r.ts.toISOString() })),

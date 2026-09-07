@@ -11,7 +11,6 @@ export interface FlowSource extends FlowNode {
   href: string;
   observedDays: number;
   latestObservation: string | null;
-  verification?: { matched: number; checkable: number; requests: number; signatureHeaders: number };
 }
 export interface FlowFeed {
   key: string;
@@ -36,7 +35,6 @@ export const FLOW_TARGETS: FlowData["targets"] = [
   { id: "wikis", label: "Encyclopedias & wikis" },
   { id: "maps", label: "Maps" },
   { id: "forums", label: "Forums" },
-  { id: "site", label: "This website" },
 ];
 /** Compare only the same publisher and unit, never unrelated activity totals. */
 export function flowWeight(source: FlowSource, sources: FlowSource[]): number {

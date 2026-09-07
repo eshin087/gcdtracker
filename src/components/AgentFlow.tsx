@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
-import { fmtInt, fmtPct, fmtStamp } from "@/lib/format";
+import { fmtInt, fmtStamp } from "@/lib/format";
 import { destinationCounts, flowWeight, type FlowData } from "@/lib/flow";
 import type { LatestRecord } from "@/lib/stats-sources";
 
@@ -40,12 +40,12 @@ export function AgentFlow({ data, records }: { data: FlowData; records: LatestRe
   }, [paused, reduced, records.length]);
   const currentIndex = records.length ? idx % records.length : 0;
   const current = records[currentIndex];
-  const status = selected?.feed === "visits" ? "Event-driven sensor" : !feed || feed.outcome === "unknown" ? "Collection status unavailable" :
+  const status = !feed || feed.outcome === "unknown" ? "Collection status unavailable" :
     (feed.stale ? "Stale · " : "") + feed.outcome;
   return (
     <div className="flow" data-mode={data.mode}>
       <div className="flow-toolbar">
-        <div className="flow-window"><span className={"badge" + (data.mode === "demo" ? " warn" : "")}>{data.mode === "demo" ? "Demo · synthetic data" : data.mode === "offline" ? "Sensor offline" : "Recorded observations"}</span><span>{data.days} completed UTC days · {data.windowStart} → {data.windowEnd} (exclusive)</span></div>
+        <div className="flow-window"><span className={"badge" + (data.mode === "demo" ? " warn" : "")}>{data.mode === "demo" ? "Demo · synthetic data" : data.mode === "offline" ? "Sources unavailable" : "Recorded observations"}</span><span>{data.days} completed UTC days · {data.windowStart} → {data.windowEnd} (exclusive)</span></div>
         <div className="flow-filters" role="group" aria-label="Filter destinations">
           <button type="button" aria-pressed={destination === "all"} onClick={() => setDestination("all")}>All destinations</button>
           {data.targets.map(t => <button key={t.id} type="button" aria-pressed={destination === t.id} onClick={() => setDestination(t.id)}>{t.label}</button>)}
@@ -92,13 +92,9 @@ export function AgentFlow({ data, records }: { data: FlowData; records: LatestRe
           <div><dt>Collection status</dt><dd className="flow-status">{status}</dd></div>
           <div><dt>Latest observation</dt><dd>{selected.latestObservation ? fmtStamp(selected.latestObservation) : "Unavailable"}</dd></div>
           <div><dt>Last collection run</dt><dd>{feed?.lastRun ? fmtStamp(feed.lastRun) : "Not available; no uptime inferred"}</dd></div>
-          {selected.verification ? <>
-            <div><dt>IP-range evidence</dt><dd>{fmtInt(selected.verification.matched)} matched / {fmtInt(selected.verification.checkable)} checkable requests</dd></div>
-            <div><dt>Verification coverage</dt><dd>{fmtPct(selected.verification.requests ? selected.verification.checkable / selected.verification.requests : null)} checkable · {fmtInt(selected.verification.signatureHeaders)} signature headers, unverified</dd></div>
-          </> : null}
         </dl>
         <p>{selected.method} Dates with rows do not establish complete collection or continuous uptime. <a href={selected.href}>Explore source evidence →</a></p>
-      </section> : <p className="flow-scale-note">Connect an isolated preview database, or <a href="/demo">open the labelled dashboard demo</a>.</p>}
+      </section> : <p className="flow-scale-note">Explore the public source pages, or <a href="/demo">open the labelled dashboard demo</a>.</p>}
       <div className="flow-ticker" aria-live={paused || reduced ? "polite" : "off"}>
         {current ? <><span className="label">Replaying {currentIndex + 1}/{records.length}</span><span className="flow-ticker-text"><strong>{current.actor}</strong> {current.action} {current.url ? <a href={current.url}>{current.target}</a> : current.target}<span className="dim"> · {fmtStamp(current.ts)}</span></span></> : <span className="dim">No recorded examples available.</span>}
         <span className="flow-ticker-controls">

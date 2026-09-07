@@ -13,7 +13,7 @@ function List({ items, active }: { items: RailItem[]; active: string | null }) {
     <ol>
       {items.map((it) => (
         <li key={it.id} className={it.level === 3 ? "sub" : undefined}>
-          <a href={`#${it.id}`} className={active === it.id ? "is-active" : undefined}>
+          <a href={`#${it.id}`} className={active === it.id ? "is-active" : undefined} aria-current={active === it.id ? "location" : undefined}>
             {it.title}
           </a>
         </li>

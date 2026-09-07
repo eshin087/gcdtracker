@@ -17,7 +17,7 @@ describe("dashboard comparison scales", () => {
   });
   it("does not rescale when an unrelated feed grows", () => {
     const source = DEMO_FLOW.sources[1];
-    const larger = DEMO_FLOW.sources.map(s => s.feed === "visits" ? {...s, total: 1e9} : s);
+    const larger = DEMO_FLOW.sources.map(s => s.feed === "wikimedia" ? {...s, total: 1e9} : s);
     expect(flowWeight(source, larger)).toBe(flowWeight(source, DEMO_FLOW.sources));
   });
   it("handles zero counts without invalid path widths", () => {

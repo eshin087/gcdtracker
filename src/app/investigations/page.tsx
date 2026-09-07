@@ -31,7 +31,7 @@ export default async function NotesPage() {
       ))}
       <section aria-labelledby="evidence-map">
         <FigureHead id="evidence-map" title="Evidence sources and destinations" sub="Recorded source counts over 30 completed UTC days. Each source has different coverage and units." />
-        <p className="sans dim">Lines connect recorded activity to destinations. Their visual scale is independent for each source and unit. Requests, edits, category additions, changesets and posts cannot be added into one activity measure. The replay shows recorded examples, not live events. See <Link href="/methods">Methods</Link> for attribution limits.</p>
+        <p className="sans dim">Lines connect recorded activity to destinations. Their visual scale is independent for each source and unit. Pull requests, edits, category additions, changesets and posts cannot be added into one activity measure. The replay shows recorded examples, not live events. See <Link href="/methods">Methods</Link> for attribution limits.</p>
         <AgentFlow data={flow} records={records} />
       </section>
       <p className="dim sans" style={{ fontSize: 12.5, marginTop: 18 }}>

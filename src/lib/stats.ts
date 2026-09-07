@@ -520,17 +520,12 @@ async function queryIngestStatus(): Promise<IngestRunRow[]> {
 
 export async function getLive(): Promise<LiveInfo> {
   const generatedAt = new Date().toISOString();
-  const fallback: LiveInfo = { db: false, status: "offline", sources: [], lastAiVisit: null, lastIngest: null, aiVisits24h: null, generatedAt };
+  const fallback: LiveInfo = { db: false, status: "offline", sources: [], lastIngest: null, generatedAt };
   if (!db) return fallback;
   return safe(fallback, async (d) => {
-    const since = new Date(Date.now() - 86_400_000);
-    const [v] = await d
-      .select({ last: sql<Date | null>`max(${visits.ts})`, c24: sql`count(*) filter (where ${visits.ts} >= ${since})` })
-      .from(visits)
-      .where(inArray(visits.category, AI));
     const [r] = await d.select({ last: sql<Date | null>`max(${ingestRuns.finishedAt})` }).from(ingestRuns).where(eq(ingestRuns.ok, true));
     const sources = (await queryIngestStatus()).filter((run) => run.finishedAt !== null).map((run) => sourceHealth({ ...run, finishedAt: run.finishedAt! }));
-    return { db: true, status: sensorStatus(sources), sources, lastAiVisit: iso(v?.last), lastIngest: iso(r?.last), aiVisits24h: n(v?.c24), generatedAt };
+    return { db: true, status: sensorStatus(sources), sources, lastIngest: iso(r?.last), generatedAt };
   }).catch(() => fallback);
 }
 
@@ -538,110 +533,32 @@ export async function getLive(): Promise<LiveInfo> {
 
 export interface Overview {
   db: boolean;
-  sensorSince: string | null;
-  aiVisitsTotal: number;
-  aiVisits7d: number;
-  requests7d: number;
-  trafficDays7d: number;
   windowStart: string;
   windowEnd: string;
-  aiShare7d: number | null;
-  distinctAgents30d: number;
-  verifiedShare30d: number | null;
-  violations: number;
   wikiFlagged7d: number;
   wikiFlaggedTotal: number;
   agentPrs7d: number;
   codexPrs7d: number;
   forumPosts7d: number;
-  guestbookCount: number;
-  lastAiVisit: string | null;
 }
-
 export const EMPTY_OVERVIEW: Overview = {
-  db: false, sensorSince: null, aiVisitsTotal: 0, aiVisits7d: 0, requests7d: 0, trafficDays7d: 0, windowStart: "", windowEnd: "", aiShare7d: null,
-  distinctAgents30d: 0, verifiedShare30d: null, violations: 0, wikiFlagged7d: 0, wikiFlaggedTotal: 0,
-  agentPrs7d: 0, codexPrs7d: 0, forumPosts7d: 0, guestbookCount: 0, lastAiVisit: null,
+  db: false, windowStart: "", windowEnd: "", wikiFlagged7d: 0, wikiFlaggedTotal: 0,
+  agentPrs7d: 0, codexPrs7d: 0, forumPosts7d: 0,
 };
-
 async function queryOverview(): Promise<Overview> {
-  if (!db) return EMPTY_OVERVIEW;
   return safe(EMPTY_OVERVIEW, async (d) => {
-    const week = daysAgo(7);
-    const today = dayOf();
-    const todayTs = new Date(`${today}T00:00:00Z`);
-    const weekTs = new Date(`${week}T00:00:00Z`);
-    const month = new Date(Date.now() - 30 * 86_400_000);
-    const [[v], [a], [t], [w], [g], [f], [gb]] = await d.batch([
-d
-      .select({
-        total: count(),
-        first: sql<Date | null>`min(${visits.ts})`,
-        last: sql<Date | null>`max(${visits.ts})`,
-        week: sql`count(*) filter (where ${visits.ts} >= ${weekTs} and ${visits.ts} < ${todayTs})`,
-        violations: sql`count(*) filter (where ${visits.robotsViolation} = true)`,
-      })
-      .from(visits)
-      .where(inArray(visits.category, AI)),
-d
-      .select({
-        agents: sql`count(distinct ${visits.agentSlug})`,
-        verified: sql`count(*) filter (where ${visits.verified} = true)`,
-        decided: sql`count(*) filter (where ${visits.verified} is not null)`,
-      })
-      .from(visits)
-      .where(and(inArray(visits.category, AI), gte(visits.ts, month))),
-d
-      .select({
-        all: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today}), 0)`,
-        lifetime: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.category} in (${sql.join(AI.map((c) => sql`${c}`), sql`, `)})), 0)`,
-        first: sql<string | null>`min(${trafficDaily.day})`,
-        coverage: sql<number>`count(distinct ${trafficDaily.day}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today})::int`,
-        ai: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today} and ${trafficDaily.category} in (${sql.join(AI.map((c) => sql`${c}`), sql`, `)})), 0)`,
-      })
-      .from(trafficDaily),
-d
-      .select({ total: count(), week: sql`count(*) filter (where ${wikiEdits.ts} >= ${weekTs} and ${wikiEdits.ts} < ${todayTs})` })
-      .from(wikiEdits),
-d
-      .select({
+    const week = daysAgo(7), today = dayOf();
+    const weekTs = new Date(week + "T00:00:00Z"), todayTs = new Date(today + "T00:00:00Z");
+    const [[w], [g], [f]] = await d.batch([
+      d.select({ total: count(), week: sql`count(*) filter (where ${wikiEdits.ts} >= ${weekTs} and ${wikiEdits.ts} < ${todayTs})` }).from(wikiEdits),
+      d.select({
         bots: sql`coalesce(sum(${githubDaily.prs}) filter (where ${githubDaily.tier} = 'bot-account'), 0)`,
         codex: sql`coalesce(sum(${githubDaily.prs}) filter (where ${githubDaily.agent} = 'codex-branch'), 0)`,
-      })
-      .from(githubDaily)
-      .where(and(gte(githubDaily.day, week), lt(githubDaily.day, dayOf()))),
-d.select({ posts: sql`coalesce(sum(${forumDaily.posts}), 0)` }).from(forumDaily).where(and(gte(forumDaily.day, week), lt(forumDaily.day, today))),
-d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false))
-]);
-
-
-
-
-
-
-    const all = n(t?.all);
-    const decided = n(a?.decided);
-    return {
-      db: true,
-      sensorSince: t?.first ? `${t.first}T00:00:00Z` : null,
-      aiVisitsTotal: n(t?.lifetime),
-      aiVisits7d: n(t?.ai),
-      requests7d: all,
-      trafficDays7d: n(t?.coverage),
-      windowStart: week,
-      windowEnd: today,
-      aiShare7d: all > 0 ? n(t?.ai) / all : null,
-      distinctAgents30d: n(a?.agents),
-      verifiedShare30d: decided > 0 ? n(a?.verified) / decided : null,
-      violations: n(v?.violations),
-      wikiFlagged7d: n(w?.week),
-      wikiFlaggedTotal: n(w?.total),
-      agentPrs7d: n(g?.bots),
-      codexPrs7d: n(g?.codex),
-      forumPosts7d: n(f?.posts),
-      guestbookCount: n(gb?.c),
-      lastAiVisit: iso(v?.last),
-    };
+      }).from(githubDaily).where(and(gte(githubDaily.day, week), lt(githubDaily.day, today))),
+      d.select({ posts: sql`coalesce(sum(${forumDaily.posts}), 0)` }).from(forumDaily).where(and(gte(forumDaily.day, week), lt(forumDaily.day, today))),
+    ]);
+    return { db: true, windowStart: week, windowEnd: today, wikiFlagged7d: n(w?.week),
+      wikiFlaggedTotal: n(w?.total), agentPrs7d: n(g?.bots), codexPrs7d: n(g?.codex), forumPosts7d: n(f?.posts) };
   });
 }
 
@@ -653,7 +570,7 @@ export async function getIngestStatus(): Promise<IngestRunRow[]> {
   const rows = await cachedIngestStatus();
   return rows.map((row) => ({ ...row, startedAt: new Date(row.startedAt), finishedAt: row.finishedAt ? new Date(row.finishedAt) : null }));
 }
-export const getOverview = cacheSummary(queryOverview, "overview");
+export const getOverview = cacheSummary(queryOverview, "research-overview-v1");
 
 export interface TimelinePoint {
   day: string;
@@ -680,27 +597,23 @@ export async function getTimeline(days = 60): Promise<TimelinePoint[]> {
 }
 
 export interface TableCounts {
-  visits: number;
   wikiEdits: number;
   githubDaily: number;
   githubEvents: number;
   forumPosts: number;
-  guestbook: number;
   ipRanges: number;
   watched: number;
 }
 
 export async function getTableCounts(): Promise<TableCounts> {
-  const empty: TableCounts = { visits: 0, wikiEdits: 0, githubDaily: 0, githubEvents: 0, forumPosts: 0, guestbook: 0, ipRanges: 0, watched: 0 };
+  const empty: TableCounts = { wikiEdits: 0, githubDaily: 0, githubEvents: 0, forumPosts: 0, ipRanges: 0, watched: 0 };
   return safe(empty, async (d) => {
     const { ipRanges } = await import("@/lib/db/schema");
     const rows = await d.batch([
-      d.select({ c: count() }).from(visits),
       d.select({ c: count() }).from(wikiEdits),
       d.select({ c: count() }).from(githubDaily),
       d.select({ c: count() }).from(githubEvents),
       d.select({ c: count() }).from(forumPosts),
-      d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false)),
       d.select({ c: count() }).from(ipRanges),
       d.select({ c: count() }).from(watchedPrs),
     ]);

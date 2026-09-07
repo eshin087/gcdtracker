@@ -42,11 +42,11 @@ test("Research disclosure supports clicks, keyboard and focus return", async ({ 
 });
 
 test("view controls navigate and expose the active view", async ({ page }) => {
-  await page.goto("/visitors");
-  const views = page.getByRole("navigation", { name: "Visitor views" });
-  await views.getByRole("link", { name: "Recent hits" }).click();
-  await expect(page).toHaveURL(/\/visitors\/recent$/);
-  await expect(views.getByRole("link", { name: "Recent hits" })).toHaveAttribute("aria-current", "page");
+  await page.goto("/github/day");
+  const views = page.getByRole("navigation", { name: "GitHub views" });
+  await views.getByRole("link", { name: "By agent" }).click();
+  await expect(page).toHaveURL(/\/github\/agents$/);
+  await expect(views.getByRole("link", { name: "By agent" })).toHaveAttribute("aria-current", "page");
   await page.goto("/wikipedia/edits");
   await page.getByRole("navigation", { name: "Confidence tier" }).getByRole("link", { name: "Filter-flagged" }).click();
   await expect(page).toHaveURL(/\/wikipedia\/edits\/1$/);
@@ -120,7 +120,10 @@ test("public APIs and exports omit private fixture fields", async ({ request }) 
   }
   const live = await request.get("/api/live");
   expect(live.status()).toBe(200);
-  expect((await live.json()).status).toMatch(/^(live|stale|offline|degraded)$/);
+  const health = await live.json();
+  expect(health.status).toMatch(/^(live|stale|offline|degraded)$/);
+  expect(health).not.toHaveProperty("aiVisits24h");
+  expect(health).not.toHaveProperty("lastAiVisit");
 });
 
 test("research flow pauses all motion and honors reduced-motion preferences", async ({ page, browser, baseURL }) => {
