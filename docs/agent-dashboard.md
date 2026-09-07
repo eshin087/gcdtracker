@@ -27,6 +27,20 @@ Local lint, TypeScript, all 195 unit tests and an offline production build pass.
 
 Hosted CI runs the complete browser suite and 27 actual PostgreSQL integration tests, including UTC boundaries, private-field exclusion, collection failure and the coding-agent remainder. The local Docker engine could not restart because Windows would not release its stale runtime socket; no production database was used. CI retains seeded homepage measurements and screenshots; the PR description records the final results and any limitations.
 
+## Seeded performance comparison
+
+Using the same QA fixture generator and 1440 × 1000 reduced-motion browser settings:
+
+| Measure | Original homepage | Restored dashboard | Reduction |
+|---|---:|---:|---:|
+| Decoded HTML | 1,043,943 bytes | 79,780 bytes | 92.4% |
+| DOM elements | 6,652 | 514 | 92.3% |
+| Primary font preloads | 7 | 2 | 71.4% |
+
+The original baseline was measured locally on Windows; the restored dashboard was measured in GitHub Actions on Linux. These are payload/DOM comparisons, not production latency or Core Web Vitals claims. The restored homepage adds about 24 KB and 148 DOM elements relative to PR #1's compact layout while retaining a large reduction from the original page.
+
+[Verified application run](https://github.com/eshin087/gcdtracker-site/actions/runs/34166394235): 195 unit, 27 PostgreSQL and 15 browser tests passed. The workflow explicitly includes the hidden `.qa` folder when uploading its selected reports, screenshots, logs and measurements.
+
 ## Screenshots
 
 The sample-data demo at 1440 pixels:

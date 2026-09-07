@@ -107,6 +107,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qa-evidence
+          include-hidden-files: true
           path: |
             .qa/playwright-report/
             .qa/test-results/
