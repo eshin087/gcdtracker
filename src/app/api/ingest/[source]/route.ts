@@ -18,6 +18,7 @@ import { ghArchiveJob } from "@/lib/ingest/gharchive";
 import { robotsCensusJob } from "@/lib/ingest/robots-census";
 import { packagesJob } from "@/lib/ingest/packages";
 import { aiRobotsHistoryJob } from "@/lib/ingest/ai-robots-history";
+import { baselineJob } from "@/lib/ingest/baseline";
 import { wikipediaJob } from "@/lib/ingest/wikipedia";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ const JOBS: Record<string, Job> = {
   radar: radarJob,
   github: githubJob,
   packages: packagesJob,
+  baseline: baselineJob,
   retention: retentionJob,
   // Fed by GitHub Actions workers that post pre-aggregated results (never part of `all`).
   gharchive: ghArchiveJob,
@@ -45,7 +47,7 @@ const JOBS: Record<string, Job> = {
 };
 
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */
-const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "packages", "github", "watched", "github-signatures", "retention"];
+const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "packages", "baseline", "github", "watched", "github-signatures", "retention"];
 
 async function handle(req: Request, source: string): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ ok: false, reason: "unauthorized" }, { status: 401 });

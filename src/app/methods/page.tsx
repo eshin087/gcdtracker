@@ -90,7 +90,7 @@ export default function MethodsPage() {
           The search API caps every query at a thousand results, so since phase 4 the headline GitHub numbers come from a census
           instead: GH Archive publishes every public GitHub event, hour by hour, and a worker in GitHub Actions streams each hourly
           file (70 to 150 MB) and counts pull requests opened by the same bot accounts and branch prefixes, alongside every pull
-          request opened that hour. That gives agent PRs as a share of all PRs, back to January 2025, with no sampling. Two
+          request opened that hour. That gives agent PRs as a share of all PRs, back to January 2022, with no sampling. Two
           caveats come from GitHub, not from us: during 2025 the public event payloads were slimmed, so commit messages (which
           carried AI co-author trailers) end in the autumn of 2025, and PR bodies end at the same time. The census marks which
           measures each hour supports rather than showing zeros.
@@ -124,8 +124,15 @@ export default function MethodsPage() {
           frameworks agents are built from (the MCP SDKs, the agent SDKs, CrewAI) are charted as installs per day. Downloads count
           machines and CI runs, not people. And a robots.txt census: Common Crawl archives the robots.txt of every host it visits,
           about monthly, and a worker samples a hundred of those archive files per crawl (tens of thousands of sites) and counts
-          which AI crawlers are named and which are fully blocked, back to early 2023. The sample is of the whole web, where
+          which AI crawlers are named and which are fully blocked, back to 2019. The sample is of the whole web, where
           blocking is rarer than on the large news and reference sites that most published figures describe.
+        </p>
+        <p>
+          The before-and-after page adds three quoted long series so the AI era has a baseline: Wikimedia&apos;s monthly page views
+          split by the Foundation&apos;s own agent classifier (humans, declared crawlers, undeclared automation) since 2015, Stack
+          Overflow questions per month from the public Stack Exchange API since 2012, and StatCounter&apos;s search-engine market share
+          since 2009. Each chart carries the same two markers, ChatGPT&apos;s launch in November 2022 and the first GPTBot token in
+          August 2023.
         </p>
 
         <h3 id="forums">Agent forums and guestbook</h3>

@@ -37,6 +37,7 @@ export const NAV: NavEntry[] = [
   { href: "/", label: "Report" },
   { label: "Sources", items: SOURCES },
   { href: "/traffic", label: "Traffic", blurb: "how much web traffic is AI, here and internet-wide" },
+  { href: "/before-after", label: "Before & after", blurb: "reading, asking, coding and crawling, with a baseline from before AI" },
   { href: "/agents", label: "Agents", blurb: "directory of known agent user-agent tokens and how to verify them" },
   { href: "/investigations", label: "Notes", blurb: "field notes and research briefs" },
   { href: "/saved", label: "Saved", blurb: "evidence you bookmarked in this browser" },

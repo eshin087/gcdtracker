@@ -64,7 +64,7 @@ export default async function GithubPage({ params }: { params: Promise<{ view?: 
     <div className="shell explorer">
       <PageHeader
         title="GitHub"
-        sub="Three measurements. A census of every public GitHub event since January 2025, counting pull requests by AI coding agents and their share of all PRs. Daily counts from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
+        sub="Three measurements. A census of every public GitHub event since 2022, counting pull requests by AI coding agents and their share of all PRs. Daily counts from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="GitHub views" />

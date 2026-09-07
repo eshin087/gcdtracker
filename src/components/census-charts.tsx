@@ -20,12 +20,34 @@ function niceMax(v: number): number {
 
 const fmtYear = (ms: number) => new Date(ms).toISOString().slice(0, 4);
 
-export function MultiLine({ series, format = (v) => String(v), title, height = 260, yMax }: { series: LineSeries[]; format?: (v: number) => string; title: string; height?: number; yMax?: number }) {
+export interface LineAnnotation {
+  day: string;
+  label: string;
+}
+
+export function MultiLine({
+  series,
+  format = (v) => String(v),
+  title,
+  height = 260,
+  yMax,
+  annotations = [],
+  labelWidth = 128,
+}: {
+  series: LineSeries[];
+  format?: (v: number) => string;
+  title: string;
+  height?: number;
+  yMax?: number;
+  annotations?: LineAnnotation[];
+  /** room on the right for end labels */
+  labelWidth?: number;
+}) {
   const W = 760;
   const H = height;
   const padL = 44;
-  const padR = 128;
-  const padT = 14;
+  const padR = labelWidth;
+  const padT = annotations.length ? 30 : 14;
   const padB = 26;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
@@ -88,6 +110,16 @@ export function MultiLine({ series, format = (v) => String(v), title, height = 2
         {fmtYear(x0)}
       </text>
       <line className="axis" x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} />
+      {annotations
+        .filter((a) => Date.parse(`${a.day}T00:00:00Z`) >= x0 && Date.parse(`${a.day}T00:00:00Z`) <= x1)
+        .map((a) => (
+          <g className="annot" key={`${a.day}-${a.label}`}>
+            <line x1={X(a.day)} x2={X(a.day)} y1={padT - 6} y2={padT + plotH} />
+            <text x={X(a.day) + 4} y={padT - 10} textAnchor="start">
+              {a.label}
+            </text>
+          </g>
+        ))}
       {series.map((s) => {
         const style = s.style ?? "ink";
         const opacity = style === "ink" ? 0.95 - (inkIndex++ / Math.max(1, inkCount)) * 0.55 : 1;

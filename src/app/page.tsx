@@ -9,7 +9,8 @@ import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
 import { getIngestStatus, getOverview, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
-import { AGENT_LAUNCHES, fmtMonth, getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive, ROBOTS_OPERATORS, ROBOTS_ROLES, shareByWeekday } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, AI_MARKERS, fmtMonth, getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive, ROBOTS_OPERATORS, ROBOTS_ROLES, shareByWeekday } from "@/lib/stats-census";
+import { getSeries } from "@/lib/stats-sources";
 import { CalendarHeatmap, type LineSeries, MultiLine } from "@/components/census-charts";
 import { BarList } from "@/components/ui";
 import { CensusTabs } from "@/components/CensusTabs";
@@ -26,7 +27,14 @@ const RAIL: RailItem[] = [
 
 export default async function HomePage() {
   const db = hasDatabase();
-  const [archive, archiveMonthly, packages, census, shareDays] = await Promise.all([getArchiveSummary(), getArchiveMonthly(), getPackageStats(), getRobotsCensus(), getArchiveShareByDay()]);
+  const [archive, archiveMonthly, packages, census, shareDays, wm] = await Promise.all([getArchiveSummary(), getArchiveMonthly(), getPackageStats(), getRobotsCensus(), getArchiveShareByDay(), getSeries("wm-pageviews")]);
+  const wmSeries: LineSeries[] = [
+    { key: "user", label: "Humans", style: "accent" as const, pts: wm["all-projects:user"] ?? [] },
+    { key: "spider", label: "Declared crawlers", style: "ink" as const, pts: wm["all-projects:spider"] ?? [] },
+    { key: "automated", label: "Undeclared bots", style: "control" as const, pts: wm["all-projects:automated"] ?? [] },
+  ]
+    .filter((s) => s.pts.length > 0)
+    .map(({ pts, ...s }) => ({ ...s, points: pts.map((p) => ({ x: `${p.period}-01`, y: p.value })) }));
   // Robots wall: the six most-blocked AI crawlers in the latest crawl, Googlebot as the control.
   const pct = (c: (typeof census)[number], t: string) => (c.sites > 0 ? (100 * (c.tokens[t]?.blocked ?? 0)) / c.sites : 0);
   const wallTokens = latestCrawlTokens(census);
@@ -65,14 +73,14 @@ export default async function HomePage() {
                 barLabel="Agent PRs opened per month, all of GitHub"
                 line={archiveMonthly.map((m) => (m.prsOpened > 0 ? (100 * m.agentPrs) / m.prsOpened : 0))}
                 lineLabel="Share of all PRs opened (%)"
-                annotations={AGENT_LAUNCHES.filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
+                annotations={[...AI_MARKERS, ...AGENT_LAUNCHES].filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
                 title="Agent pull requests across all of GitHub, by month"
                 xLabel={fmtMonth}
                 muted={archiveMonthly.map(isPartialArchive)}
               />
               <figcaption>
-                Pull requests opened by coding agents across every public repository, and their share of all pull requests opened: a census of GH Archive since January 2025,{" "}
-                {fmtInt(archive.hours)} hours counted.{archiveMonthly.some(isPartialArchive) ? " Pale bars: months where GH Archive captured only part of the feed; read the share, not the count." : ""}{" "}
+                Pull requests opened by coding agents across every public repository, and their share of all pull requests opened: a census of GH Archive since{" "}
+                {archive.firstDay ? fmtMonth(archive.firstDay) : "2025"}, {fmtInt(archive.hours)} hours counted.{archiveMonthly.some(isPartialArchive) ? " Pale bars: months where GH Archive captured only part of the feed; read the share, not the count." : ""}{" "}
                 <Link href="/github">Full census →</Link>
               </figcaption>
             </figure>
@@ -152,6 +160,21 @@ export default async function HomePage() {
           ),
         }
       : null,
+    wmSeries.length > 0
+      ? {
+          id: "before",
+          label: "Before and after",
+          panel: (
+            <figure className="home-chart">
+              <MultiLine series={wmSeries} format={(v) => `${(v / 1e9).toFixed(v >= 10e9 ? 0 : 1)}B`} title="Wikimedia page views per month by agent type" annotations={AI_MARKERS} labelWidth={150} height={240} />
+              <figcaption>
+                Every request to every Wikimedia project per month, split by the Foundation&apos;s own classifier into humans, declared crawlers and undeclared automation, back to 2015.
+                Bot reads climbed after the markers while human reads did not. <Link href="/before-after">Reading, asking, coding and crawling, before and after →</Link>
+              </figcaption>
+            </figure>
+          ),
+        }
+      : null,
   ].filter((t) => t !== null);
 
   return (
@@ -203,7 +226,7 @@ export default async function HomePage() {
 
         {tabs.length > 0 ? (
           <>
-            <FigureHead id="census" title="The census" sub="Three multi-year measurements kept by the workers: GitHub since January 2025, the web's robots.txt since January 2023." />
+            <FigureHead id="census" title="The census" sub="Multi-year measurements kept by the workers: GitHub, the web's robots.txt, and Wikimedia's readership, each with a baseline from before AI." />
             <CensusTabs label="Census views" tabs={tabs} />
           </>
         ) : null}
@@ -246,6 +269,7 @@ export default async function HomePage() {
           <Link href="/methods">Methods and the confidence ladder</Link>
           <Link href="/data">Data downloads and API</Link>
           <Link href="/agents">Agent directory</Link>
+          <Link href="/before-after">Before and after</Link>
           <Link href="/investigations">Notes</Link>
           <a href={SITE.repo}>Source code</a>
         </div>

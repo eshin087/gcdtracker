@@ -13,6 +13,9 @@ on:
       files:
         description: "WARC files sampled per crawl"
         default: "100"
+      since:
+        description: "Earliest crawl start date to consider (YYYY-MM-DD)"
+        default: "2023-01-01"
 
 jobs:
   census:
@@ -29,10 +32,11 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CRAWL: ${{ github.event.inputs.crawl }}
           FILES: ${{ github.event.inputs.files || '100' }}
+          SINCE: ${{ github.event.inputs.since || '2023-01-01' }}
         run: |
           set -euo pipefail
           if [ -n "$CRAWL" ]; then
             node scripts/robots-census.mjs --crawl "$CRAWL" --files "$FILES"
           else
-            node scripts/robots-census.mjs --files "$FILES"
+            node scripts/robots-census.mjs --files "$FILES" --since "$SINCE"
           fi

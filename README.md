@@ -8,12 +8,13 @@ gcdTracker is a living report plus data explorer. It watches every place where A
 |---|---|---|
 | **This site's visitors** | 150+ AI crawler and agent user agents (GPTBot, ClaudeBot, ChatGPT-User, Perplexity-User, Google-Agent, …), checked against operators' published IP ranges; Web Bot Auth signatures; three honeypot paths | verified user agent |
 | **Wikipedia & Wikimedia** | edits Wikipedia's edit filters tag as possibly AI-generated; heuristic matches on summaries/usernames; bot volume per Wikimedia project; agent-like Wikidata bots; AI-generated media on Commons | filter-flagged / heuristic |
-| **GitHub** | a GH Archive census of every public event since January 2025 (agent PRs by bot account and branch prefix as a share of all PRs, AI co-author trailers in commits while the feed carried them); PRs per day from the search API; a watched-repository collector storing every agent PR with evidence; self-disclosure signals with a review workflow | bot account / fingerprint / self-identified |
+| **GitHub** | a GH Archive census of every public event since January 2022 (agent PRs by bot account and branch prefix as a share of all PRs, AI co-author trailers in commits while the feed carried them); PRs per day from the search API; a watched-repository collector storing every agent PR with evidence; self-disclosure signals with a review workflow | bot account / fingerprint / self-identified |
 | **Maps** | OpenStreetMap changesets made with RapiD, MapWithAI, Osmose or bots, sampled from the public feed | self-identified |
 | **Forums** | posts on Moltbook (agent-only social network) and a guestbook visiting agents can sign | agent-only platform |
 | **Tooling** | npm and PyPI downloads of agent CLIs and agent frameworks (npm back to 2024); MCP registry servers per day; botcommits.dev AI-attributed commits; Hugging Face agent-usage | quoted source |
 | **New agents** | daily diff of ai.robots.txt and Cloudflare's signed-agent registry | self-identified |
-| **Traffic** | this site's AI share; Cloudflare Radar bot statistics (live with a token); a robots.txt census from Common Crawl (share of sites naming and blocking each AI crawler, per crawl since 2023) | quoted source / sampled |
+| **Traffic** | this site's AI share; Cloudflare Radar bot statistics (live with a token); a robots.txt census from Common Crawl (share of sites naming and blocking each AI crawler, per crawl since 2019) | quoted source / sampled |
+| **Before and after** | Wikimedia page views by agent type since 2015, Stack Overflow questions per month since 2012, StatCounter search share since 2009, plus the GitHub and robots.txt censuses, all with the same pre-AI markers | quoted source |
 
 Every number carries a confidence tier; see the Methods page. Records can be bookmarked (browser-local "Saved" page), and the Notes section holds field notes and research briefs written as markdown.
 
@@ -25,7 +26,7 @@ Next.js 16 (App Router, Turbopack) · Tailwind 4 · Drizzle ORM on Neon Postgres
 src/proxy.ts                 classifies every request, records hits after the response
 src/lib/agents/              catalog, classifier, IP-range verification
 src/lib/ingest/              one job per source (wikipedia, wikimedia, github, watched, github-signatures,
-                             moltbook, osm, mcp, botcommits, agentwatch, radar, packages, ipranges, retention;
+                             moltbook, osm, mcp, botcommits, agentwatch, radar, packages, baseline, ipranges, retention;
                              gharchive and robots-census receive results from the Actions workers)
 scripts/gharchive.mjs        GH Archive census worker (.github/workflows/gharchive.yml, every 3 hours + backfill)
 scripts/robots-census.mjs    Common Crawl robots.txt census worker (.github/workflows/robots-census.yml, weekly)
@@ -56,7 +57,7 @@ Trigger a job locally:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/ingest/watched
 ```
 
-Sources: `all`, `ipranges`, `wikipedia`, `wikimedia`, `moltbook`, `osm`, `mcp`, `botcommits`, `agentwatch`, `radar`, `packages`, `github`, `watched`, `github-signatures`, `retention`. `gharchive` and `robots-census` accept POSTed results from the workers and answer status questions on GET.
+Sources: `all`, `ipranges`, `wikipedia`, `wikimedia`, `moltbook`, `osm`, `mcp`, `botcommits`, `agentwatch`, `radar`, `packages`, `baseline`, `github`, `watched`, `github-signatures`, `retention`. `gharchive` and `robots-census` accept POSTed results from the workers and answer status questions on GET.
 
 Run a worker locally (Node 22.18+ or 24; `--dry` prints instead of posting):
 
