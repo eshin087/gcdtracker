@@ -41,3 +41,11 @@ Unit checks cover missing-month handling, withheld legacy archive shares, retain
 Browser checks cover the restored rail, three additional reports, retired URLs, absence of local dashboard metrics, navigation, exports, saved records, hydration, animation and reduced motion, light/dark layouts, and widths of 390, 768, 1024 and 1440 pixels.
 
 The PR description links the final CI run, its seeded homepage measurements and screenshots. Local Docker is unavailable because of a stale Windows runtime socket; actual database tests run against isolated PostgreSQL in GitHub Actions, never production. Payload comparisons use the same QA seed generator; the original baseline was measured on Windows and the updated homepage in Linux CI, so these are HTML/DOM comparisons rather than latency claims.
+
+## Screenshots
+
+All values in these demo screenshots are synthetic.
+
+![Expanded internet reports and left navigation at 1440 pixels](qa/dashboard-demo-1440.png)
+
+![Mobile dark-theme demo with scrollable chart frames](qa/dashboard-demo-dark-390.png)
