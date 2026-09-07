@@ -95,7 +95,7 @@ function fold(rows: Raw[]): ArchivePeriod[] {
 export const PARTIAL_ARCHIVE_PRS_PER_HOUR = 1_000;
 export const isPartialArchive = (p: ArchivePeriod) => p.hours > 0 && p.prsOpened / p.hours < PARTIAL_ARCHIVE_PRS_PER_HOUR;
 
-export const fmtMonth = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
+export const fmtMonth = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export async function getArchiveDaily(days = 90): Promise<ArchivePeriod[]> {
   const rows = await safe([] as Raw[], async (d) =>
