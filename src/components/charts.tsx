@@ -120,7 +120,7 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
       ))}
       {linePath ? <path className="line" d={linePath} /> : null}
       {days.map((d, i) =>
-        i === n - 1 || (i % labelEvery === 0 && x(n - 1) - x(i) >= lastLabelW) ? (
+        i === n - 1 || (i % labelEvery === 0 && x(n - 1) - x(i) >= lastLabelW + (xLabel(d).length * 6.2) / 2) ? (
           <text key={d} x={x(i)} y={H - 8} textAnchor={i === n - 1 && n > 1 ? "end" : "middle"}>
             {xLabel(d)}
           </text>
