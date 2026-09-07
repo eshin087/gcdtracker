@@ -1,18 +1,19 @@
 import Link from "next/link";
+import { AgentFlow } from "@/components/AgentFlow";
 import { TimelineChart } from "@/components/charts";
 import { SaveButton } from "@/components/SaveButton";
 import { BarList, Empty, FigureHead, StatTiles } from "@/components/ui";
 import { fmtInt, fmtPct, fmtStamp } from "@/lib/format";
 import { getCategoryBreakdown, getIngestStatus, getOverview, getTrafficByDay, hasDatabase } from "@/lib/stats";
-import { getLatestRecords } from "@/lib/stats-sources";
+import { getFlowData, getLatestRecords } from "@/lib/stats-sources";
 import { CATEGORY_LABELS } from "@/lib/agents/types";
 import { SITE } from "@/lib/site";
 
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [overview, trafficRows, categories, records, runs] = await Promise.all([
-    getOverview(), getTrafficByDay(30), getCategoryBreakdown(30), getLatestRecords(6), getIngestStatus(),
+  const [overview, trafficRows, categories, records, runs, flow] = await Promise.all([
+    getOverview(), getTrafficByDay(30), getCategoryBreakdown(30), getLatestRecords(12), getIngestStatus(), getFlowData(30),
   ]);
   const traffic = trafficRows.slice(Math.max(0, trafficRows.findIndex((d) => d.observed)));
   const latestIngest = runs.filter((r) => r.ok && r.finishedAt).map((r) => r.finishedAt!).sort((a, b) => b.getTime() - a.getTime())[0];
@@ -38,7 +39,12 @@ export default async function HomePage() {
         { value: overview.db ? fmtPct(overview.verifiedShare30d) : "–", label: "IP match among checkable visits, 30 days", sub: "Only operators with published ranges" },
       ]} />
 
-      <p className="dim sans">Headline window: {overview.windowStart} to {overview.windowEnd} UTC, excluding today. Missing collection is not a measured zero.</p>
+      <section id="flow" aria-labelledby="agents-destinations">
+        <FigureHead id="agents-destinations" title="Agents → destinations" sub="Follow the recorded traces: code, requests, edits, maps and forum activity." />
+        <AgentFlow data={flow} records={records} />
+      </section>
+
+      <p className="dim sans">{overview.db ? `Headline window: ${overview.windowStart} to ${overview.windowEnd} UTC, excluding today.` : "Traffic headlines are unavailable until the sensor is connected."} Missing collection is not a measured zero.</p>
       <FigureHead title="Requests to this site" sub="Daily counts over 30 UTC days. Today's bar is incomplete; missing collection can also lower a count." more={{ href: "/visitors", label: "Visitor evidence →" }} />
       {hasTraffic ? <figure className="home-chart">
         <TimelineChart sharedScale days={traffic.map((d) => d.day)} bars={traffic.map((d) => d.observed ? d.ai : null)} barLabel="AI-classified requests" line={traffic.map((d) => d.observed ? d.total : null)} lineLabel="All requests" title="Daily AI-classified and total requests to this site" />
@@ -60,7 +66,7 @@ export default async function HomePage() {
 
       <FigureHead title="Latest evidence across sources" sub="A mixed record feed, not a combined activity count." more={{ href: "/data", label: "Data and source status →" }} />
       {records.length === 0 ? <p className="empty">Records appear as collection runs succeed.</p> : <div className="records">
-        {records.map((r) => <div className="record" key={r.id}>
+        {records.slice(0, 6).map((r) => <div className="record" key={r.id}>
           <time className="when" dateTime={r.ts}>{fmtStamp(r.ts)}</time>
           <span className="what"><span className="badge kind">{r.kind}</span><strong>{r.actor}</strong> {r.action} {r.url ? <a href={r.url}>{r.target}</a> : r.target}</span>
           <SaveButton item={{ id: r.id, kind: r.kind, title: r.actor + " " + r.action + " " + r.target, url: r.url }} />

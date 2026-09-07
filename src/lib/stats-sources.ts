@@ -1,5 +1,9 @@
 import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { AI_CATEGORIES } from "@/lib/agents/types";
+import { AI_CATEGORIES, CATEGORY_LABELS, type Category } from "@/lib/agents/types";
+import { FLOW_TARGETS, type FlowData, type FlowSource, type FlowFeed, type FlowLink } from "./flow";
+export { FLOW_TARGETS } from "./flow";
+export type { FlowNode, FlowData, FlowLink } from "./flow";
+import { sourceHealth } from "./health";
 import { db, type Db } from "@/lib/db";
 import {
   agentSightings,
@@ -332,93 +336,71 @@ export async function getSightings(limit = 100): Promise<{ rows: SightingRow[]; 
 /* flow animation + latest records                                    */
 /* ------------------------------------------------------------------ */
 
-export interface FlowNode {
-  id: string;
-  label: string;
-  total: number;
-  group?: string;
-}
-export interface FlowLink {
-  source: string;
-  target: string;
-  value: number;
-}
-export interface FlowData {
-  sources: FlowNode[];
-  targets: FlowNode[];
-  links: FlowLink[];
-  days: number;
-}
-
-export const FLOW_TARGETS: FlowNode[] = [
-  { id: "code", label: "Code repositories", total: 0 },
-  { id: "wikis", label: "Encyclopedias & wikis", total: 0 },
-  { id: "maps", label: "Maps", total: 0 },
-  { id: "forums", label: "Forums", total: 0 },
-  { id: "site", label: "This website", total: 0 },
-];
-
-/** 30-day counts of who acts where, for the home-page animation. */
-export async function getFlowData(days = 30): Promise<FlowData> {
-  const empty: FlowData = { sources: [], targets: FLOW_TARGETS.map((t) => ({ ...t })), links: [], days };
+/** Fixed UTC windows and aggregate-only public evidence for the dashboard. */
+async function queryFlowData(days = 30): Promise<FlowData> {
+  const windowEnd = dayOf();
+  const windowStart = daysAgo(days);
+  const empty: FlowData = { sources: [], targets: FLOW_TARGETS, links: [], feeds: [], days, windowStart, windowEnd, mode: "offline" };
   return safe(empty, async (d) => {
-    const since = new Date(Date.now() - days * 86_400_000);
-    const sinceDay = daysAgo(days - 1);
-    const links: FlowLink[] = [];
-    const sources = new Map<string, FlowNode>();
-    const add = (id: string, label: string, target: string, value: number, group?: string) => {
-      if (value <= 0) return;
-      const s = sources.get(id) ?? { id, label, total: 0, group };
-      s.total += value;
-      sources.set(id, s);
-      links.push({ source: id, target, value });
-    };
-
-    // Coding agents → code repositories (bot-account search counts).
-    const gh = await d
-      .select({ agent: githubDaily.agent, prs: sql`sum(${githubDaily.prs})` })
-      .from(githubDaily)
-      .where(and(gte(githubDaily.day, sinceDay), inArray(githubDaily.tier, ["bot-account", "branch-prefix"])))
-      .groupBy(githubDaily.agent)
-      .orderBy(desc(sql`sum(${githubDaily.prs})`));
-    let other = 0;
-    gh.forEach((r, i) => {
-      if (i < 6) add(`gh:${r.agent}`, githubAgentLabel(r.agent).replace(/ \(.*\)$/, ""), "code", n(r.prs), "coding");
-      else other += n(r.prs);
+    const since = new Date(windowStart + "T00:00:00Z");
+    const until = new Date(windowEnd + "T00:00:00Z");
+    const between = (col: Parameters<typeof gte>[0]) => and(gte(col, since), lt(col, until));
+    const [gh, web, wiki, wikidata, commons, maps, forums, runs] = await d.batch([
+      d.select({ agent: githubDaily.agent, tier: githubDaily.tier, value: sql<number>`sum(${githubDaily.prs})::int`,
+        days: sql<number>`count(distinct ${githubDaily.day})::int`, latest: sql<string>`max(${githubDaily.day})` })
+        .from(githubDaily).where(and(gte(githubDaily.day, windowStart), lt(githubDaily.day, windowEnd)))
+        .groupBy(githubDaily.agent, githubDaily.tier).orderBy(desc(sql`sum(${githubDaily.prs})`)).limit(6),
+      d.select({ category: visits.category, value: count(), days: sql<number>`count(distinct ${visits.day})::int`,
+        latest: sql<Date>`max(${visits.ts})`,
+        matched: sql<number>`count(*) filter (where ${visits.verified} = true)::int`,
+        checkable: sql<number>`count(*) filter (where ${visits.verified} is not null)::int`,
+        signatures: sql<number>`count(*) filter (where ${visits.signed} = true)::int` })
+        .from(visits).where(and(between(visits.ts), inArray(visits.category, AI))).groupBy(visits.category),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikiEdits.ts)})::int`, latest: sql<Date>`max(${wikiEdits.ts})` }).from(wikiEdits).where(between(wikiEdits.ts)),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikidataBotEdits.ts)})::int`, latest: sql<Date>`max(${wikidataBotEdits.ts})` }).from(wikidataBotEdits).where(between(wikidataBotEdits.ts)),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(commonsAiUploads.ts)})::int`, latest: sql<Date>`max(${commonsAiUploads.ts})` }).from(commonsAiUploads).where(and(between(commonsAiUploads.ts), sql`${commonsAiUploads.title} like ${"File:%"}`)),
+      d.select({ value: sql<number>`coalesce(sum(${osmDaily.aiAssisted}),0)::int`, days: count(), latest: sql<string>`max(${osmDaily.day})` }).from(osmDaily).where(and(gte(osmDaily.day, windowStart), lt(osmDaily.day, windowEnd), eq(osmDaily.collectionVersion, 2))),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(forumPosts.ts)})::int`, latest: sql<Date>`max(${forumPosts.ts})` }).from(forumPosts).where(between(forumPosts.ts)),
+      d.selectDistinctOn([ingestRuns.source], { source: ingestRuns.source, finishedAt: ingestRuns.finishedAt, ok: ingestRuns.ok, stats: ingestRuns.stats })
+        .from(ingestRuns).orderBy(ingestRuns.source, desc(ingestRuns.startedAt)),
+    ]);
+    const feedDefs = [{ key: "github", label: "GitHub Search" }, { key: "wikipedia", label: "Wikipedia" },
+      { key: "wikimedia", label: "Wikimedia" }, { key: "osm", label: "OSM sample v2" }, { key: "moltbook", label: "Moltbook" }];
+    const feeds: FlowFeed[] = feedDefs.map(({ key, label }) => {
+      const run = runs.find(r => r.source === key && r.finishedAt);
+      if (!run?.finishedAt) return { key, label, outcome: "unknown", lastRun: null, stale: false };
+      const health = sourceHealth({ ...run, finishedAt: run.finishedAt });
+      return { key, label, outcome: health.outcome, lastRun: health.lastRun, stale: health.stale };
     });
-    add("gh:other", "Other coding agents", "code", other, "coding");
-
-    // Crawlers and fetchers → this website.
-    const v = await d
-      .select({ category: visits.category, c: count() })
-      .from(visits)
-      .where(and(gte(visits.ts, since), inArray(visits.category, AI)))
-      .groupBy(visits.category);
-    const cat = Object.fromEntries(v.map((r) => [r.category, n(r.c)]));
-    add("web:crawlers", "Training & search crawlers", "site", (cat["ai-training-crawler"] ?? 0) + (cat["ai-search-index"] ?? 0), "web");
-    add("web:fetchers", "User-triggered fetchers", "site", cat["ai-user-fetch"] ?? 0, "web");
-    add("web:agents", "Browsing & coding agents", "site", (cat["ai-browsing-agent"] ?? 0) + (cat["ai-coding-agent"] ?? 0) + (cat["ai-tooling"] ?? 0), "web");
-
-    // Wikis.
-    const [w] = await d.select({ c: count() }).from(wikiEdits).where(gte(wikiEdits.ts, since));
-    add("wiki:flagged", "Flagged Wikipedia editors", "wikis", n(w?.c), "wiki");
-    const [wd] = await d.select({ c: count() }).from(wikidataBotEdits).where(gte(wikidataBotEdits.ts, since));
-    add("wiki:wikidata", "Wikidata bots", "wikis", n(wd?.c), "wiki");
-    const [cm] = await d.select({ c: count() }).from(commonsAiUploads).where(gte(commonsAiUploads.ts, since));
-    add("wiki:commons", "AI-category files", "wikis", n(cm?.c), "wiki");
-
-    // Maps.
-    const [o] = await d.select({ c: sql`coalesce(sum(${osmDaily.aiAssisted}),0)` }).from(osmDaily).where(and(gte(osmDaily.day, sinceDay), eq(osmDaily.collectionVersion, 2)));
-    add("maps:ai", "AI-assisted map editors", "maps", n(o?.c), "maps");
-
-    // Forums.
-    const [f] = await d.select({ c: count() }).from(forumPosts).where(gte(forumPosts.ts, since));
-    add("forum:agents", "Forum agents", "forums", n(f?.c), "forum");
-
-    const targets = FLOW_TARGETS.map((t) => ({ ...t, total: links.filter((l) => l.target === t.id).reduce((a, l) => a + l.value, 0) }));
-    return { sources: [...sources.values()], targets, links, days };
+    // Request recording is event-driven; collector timestamps cannot establish sensor uptime.
+    feeds.push({ key: "visits", label: "This site's request sensor", outcome: "unknown", lastRun: null, stale: false });
+    const sources: FlowSource[] = [], links: FlowLink[] = [];
+    const add = (source: FlowSource, target: string) => {
+      if (source.total <= 0) return;
+      sources.push(source); links.push({ source: source.id, target, value: source.total });
+    };
+    for (const row of gh) add({ id: "gh:" + row.agent, label: githubAgentLabel(row.agent).replace(/ \(.*\)$/, ""),
+      total: n(row.value), feed: "github", unit: "PR matches", purpose: "Code contributions",
+      evidence: row.tier === "bot-account" ? "Documented bot account" : "Branch-name heuristic",
+      method: "GitHub Search matches; bot-account and branch-prefix queries may overlap. Counts are not unique contributions or proof of model authorship.",
+      href: "/github", observedDays: n(row.days), latestObservation: iso(row.latest) }, "code");
+    for (const row of web) add({ id: "web:" + row.category, label: CATEGORY_LABELS[row.category as Category] ?? row.category,
+      total: n(row.value), feed: "visits", unit: "requests", purpose: CATEGORY_LABELS[row.category as Category] ?? row.category,
+      evidence: "User-agent classification + separate IP checks",
+      method: "Only requests to this website. Labels describe the declared purpose; signature headers are unverified. Earlier classification rules may affect retained history.",
+      href: "/visitors", observedDays: n(row.days), latestObservation: iso(row.latest),
+      verification: { matched: n(row.matched), checkable: n(row.checkable), requests: n(row.value), signatureHeaders: n(row.signatures) } }, "site");
+    const append = (row: {value:number; days:number; latest:Date|string|null}|undefined, source: Omit<FlowSource,"total"|"observedDays"|"latestObservation">, target:string) =>
+      add({ ...source, total:n(row?.value), observedDays:n(row?.days), latestObservation:iso(row?.latest) },target);
+    append(wiki[0], { id:"wiki:flagged", label:"Flagged Wikipedia edits", feed:"wikipedia", unit:"edits", purpose:"Encyclopedia editing", evidence:"Platform filters / heuristics", method:"Filter-tagged and heuristic matches; possible AI involvement, not proven authorship.", href:"/wikipedia" }, "wikis");
+    append(wikidata[0], { id:"wiki:wikidata", label:"Wikidata bots", feed:"wikimedia", unit:"edits", purpose:"Structured-data editing", evidence:"Bot-account activity", method:"Tracked automation includes conventional scripts. Bot status does not establish AI use.", href:"/wikipedia/wikimedia" }, "wikis");
+    append(commons[0], { id:"wiki:commons", label:"Commons AI-category files", feed:"wikimedia", unit:"files", purpose:"Media categorization", evidence:"Tracked category additions", method:"Files added to tracked AI categories; not upload counts. Non-file entries are excluded.", href:"/wikipedia/wikimedia" }, "wikis");
+    append(maps[0], { id:"maps:ai", label:"AI-assisted map tools", feed:"osm", unit:"changesets", purpose:"Map editing", evidence:"Self-declared editor tags", method:"Collection v2: capped overlapping creation-time samples with persisted deduplication. Historical v1 counts are excluded.", href:"/maps" }, "maps");
+    append(forums[0], { id:"forum:agents", label:"Moltbook reported agents", feed:"moltbook", unit:"posts", purpose:"Forum discussion", evidence:"Platform-reported activity", method:"The platform describes these accounts as agents; this is not independent verification of authorship.", href:"/forums" }, "forums");
+    return { ...empty, mode: "observed", sources, links, feeds };
   });
 }
+export const getFlowData = cacheSummary(queryFlowData, "agent-flow-metadata-v1");
 
 export interface LatestRecord {
   id: string;
