@@ -6,7 +6,7 @@
   --surface: #fdfdfb;
   --ink: #17191c;
   --ink-2: #4b5057;
-  --muted: #7a8088;
+  --muted: #646b74;
   --rule: #dadde0;
   --rule-strong: #b9bdc2;
   --accent: #d9480f;
@@ -386,3 +386,48 @@
 .embed-card { border: 1px solid var(--rule); border-radius: 5px; background: var(--surface); padding: 16px 18px; margin: 0 0 14px; font-family: var(--font-inter), system-ui, sans-serif; font-size: 13.5px; }
 .embed-card h3 { font-family: var(--font-newsreader), Georgia, serif; font-size: 20px; font-weight: 400; margin: 0 0 6px; }
 .embed-card p { margin: 0 0 8px; color: var(--ink-2); }
+
+/* Responsive disclosure navigation and readable evidence layouts. */
+[hidden] { display: none !important; }
+.tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs > a, .tabs > .menu { flex: 0 0 auto; }
+.topbar-inner { gap: 14px; }
+.menu-panel { position: fixed; top: 56px; left: auto; right: max(12px, calc((100vw - 1132px) / 2)); width: min(520px, calc(100vw - 24px)); max-height: calc(100dvh - 76px); overflow-y: auto; overscroll-behavior: contain; }
+.menu-btn[data-active] { color: var(--ink); border-bottom-color: var(--accent); }
+.pill { flex: 0 0 auto; }
+.seg { display: flex; width: fit-content; max-width: 100%; flex-wrap: wrap; overflow: visible; }
+.seg a, .seg button { min-height: 38px; display: inline-flex; align-items: center; }
+.article, .explorer, .file-row > *, .record > *, .note, .source-card { min-width: 0; }
+.record .what, .note, .file-row, .prose td, .tbl td { overflow-wrap: anywhere; }
+.record .when { font-size: 11px; }
+.section-head { gap: 12px; flex-wrap: wrap; }
+.home-report .research-links { margin: 30px 0; }
+.home-report .source-card p { font-family: var(--font-inter), sans-serif; font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+.home-report .meta { font-family: var(--font-inter), sans-serif; font-size: 12px; color: var(--muted); margin: 18px 0; }
+.skip-link { position: fixed; left: 12px; top: -100px; z-index: 100; padding: 10px 16px; background: var(--surface); color: var(--ink); }
+.skip-link:focus { top: 8px; }
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+@media (max-width: 640px) {
+  .shell { padding-left: 16px; padding-right: 16px; }
+  .topbar-inner { gap: 8px; }
+  .tabs { margin-left: 0; }
+  .menu-panel { left: 12px; right: 12px; width: auto; }
+  .wordmark { font-size: 20px; }
+  .source-grid, .picture { grid-template-columns: minmax(0, 1fr); }
+  .explorer > div[style*="grid-template-columns"], .article > div[style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
+  .prose table { display: block; width: 100%; overflow-x: auto; }
+  .bar-row .k { white-space: normal; overflow-wrap: anywhere; }
+  .bar-row { grid-template-columns: minmax(78px, 1fr) minmax(30px, 1.5fr) 56px; gap: 8px; }
+  .flow-ticker { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+.chart-scroll { max-width: 100%; overflow-x: auto; margin-bottom: 8px; }
+.chart-scroll > .chart { min-width: 760px; }
+
+.pill .dot[data-state="stale"], .pill .dot[data-state="degraded"] { background: var(--warn); }
+
+@media (max-width: 800px) {
+  .chart-scroll::after { content: "Scroll chart →"; display: block; position: sticky; left: 0; width: max-content; padding-top: 6px; color: var(--muted); font-family: var(--font-inter), system-ui, sans-serif; font-size: 12px; }
+}

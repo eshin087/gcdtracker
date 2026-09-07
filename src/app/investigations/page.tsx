@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
+import { FigureHead, PageHeader } from "@/components/ui";
+import { AgentFlow } from "@/components/AgentFlow";
+import { getFlowData, getLatestRecords } from "@/lib/stats-sources";
 import { fmtDate } from "@/lib/format";
 import { listNotes } from "@/lib/notes";
 import { SITE } from "@/lib/site";
 
-export const dynamic = "force-static";
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Notes",
   description: "Field notes on what agents leave behind, how the evidence is read, and research briefs on notable cases.",
 };
 
-export default function NotesPage() {
+export default async function NotesPage() {
   const notes = listNotes();
+  const [flow, records] = await Promise.all([getFlowData(30), getLatestRecords(12)]);
   return (
     <div className="shell explorer">
       <PageHeader title="Notes" sub="Context behind the observations. Each note separates what the public record shows from how we interpret it. Research briefs summarise other people's work and never add records to the totals." />
@@ -26,6 +29,11 @@ export default function NotesPage() {
           <p>{n.summary}</p>
         </Link>
       ))}
+      <section aria-labelledby="evidence-map">
+        <FigureHead id="evidence-map" title="Evidence sources and destinations" sub="Recorded source counts over 30 days. Each source has different coverage and units." />
+        <p className="sans dim">Lines identify destinations; their width and motion do not encode volume. Requests, edits, category additions, changesets and posts cannot be added into one activity measure. The replay shows recorded examples, not live events. See <Link href="/methods">Methods</Link> for attribution limits.</p>
+        <AgentFlow data={flow} records={records} />
+      </section>
       <p className="dim sans" style={{ fontSize: 12.5, marginTop: 18 }}>
         Notes are markdown files in <a href={`${SITE.repo}/tree/main/content/investigations`}>content/investigations</a>. Corrections and new sources: open an issue.
       </p>

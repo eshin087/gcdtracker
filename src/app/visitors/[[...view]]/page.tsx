@@ -14,7 +14,7 @@ import {
   getVisitsByAgent,
   hasDatabase,
 } from "@/lib/stats";
-import { trapPlacement } from "@/lib/trap";
+import { SaveButton } from "@/components/SaveButton";
 
 export const revalidate = 300;
 
@@ -37,19 +37,19 @@ export default async function VisitorsPage({ params }: { params: Promise<{ view?
   if (!view) notFound();
 
   const db = hasDatabase();
-  const [overview, byDay, breakdown] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30)]);
+  const [overview, byDay, breakdown] = await Promise.all([getOverview(), view === "day" ? getTrafficByDay(60) : Promise.resolve([]), view === "day" ? getCategoryBreakdown(30) : Promise.resolve([])]);
 
   const tiles = [
-    { value: fmtInt(overview.aiVisits7d), label: "AI visits, last 7 days", sub: `${fmtInt(overview.aiVisitsTotal)} since the sensor went live` },
-    { value: fmtPct(overview.aiShare7d), label: "AI share of all requests, 7 days", sub: `${fmtInt(overview.requests7d)} requests counted` },
-    { value: fmtInt(overview.distinctAgents30d), label: "distinct AI agents, 30 days", sub: `${fmtPct(overview.verifiedShare30d)} of decidable visits IP-verified` },
-    { value: fmtInt(overview.violations), label: "robots.txt violations", sub: "honeypot hits, all time" },
+    { value: overview.db && overview.trafficDays7d > 0 ? fmtInt(overview.aiVisits7d) : "–", label: "AI visits, last 7 days", sub: `${fmtInt(overview.aiVisitsTotal)} AI-classified requests in daily aggregates` },
+    { value: overview.db ? fmtPct(overview.aiShare7d) : "–", label: "AI share of all requests, 7 days", sub: `${fmtInt(overview.requests7d)} requests counted` },
+    { value: overview.db ? fmtInt(overview.distinctAgents30d) : "–", label: "distinct AI agents, 30 days", sub: `${fmtPct(overview.verifiedShare30d)} of decidable visits IP-verified` },
+    { value: overview.db ? fmtInt(overview.violations) : "–", label: "Disallowed paths", sub: "Retained requests; intent unknown" },
   ];
 
   const seg = [
     { href: "/visitors", label: "By day", active: view === "day" },
     { href: "/visitors/agents", label: "By agent", active: view === "agents" },
-    { href: "/visitors/violations", label: "robots.txt violations", active: view === "violations" },
+    { href: "/visitors/violations", label: "Disallowed paths", active: view === "violations" },
     { href: "/visitors/recent", label: "Recent hits", active: view === "recent" },
   ];
 
@@ -57,9 +57,10 @@ export default async function VisitorsPage({ params }: { params: Promise<{ view?
     <div className="shell explorer">
       <PageHeader
         title="Visitors"
-        sub="Every request to this site passes through a classifier that recognises AI crawlers, user-triggered fetchers, browsing agents and coding tools by user agent and signature, then checks the source IP against the operator's published ranges."
+        sub="Page requests pass through a classifier that recognises AI crawlers, user-triggered fetchers, browsing agents and coding tools by user-agent claims, then checks the source IP against the operator's published ranges."
       />
       <StatTiles tiles={tiles} />
+      <p className="dim sans">Seven-day window: {overview.windowStart} to {overview.windowEnd} UTC; {overview.trafficDays7d}/7 dates have observations. Missing collection is not zero traffic.</p>
       <Segmented options={seg} label="Visitor views" />
 
       {view === "day" ? <ByDay byDay={byDay} breakdown={breakdown} db={db} /> : null}
@@ -79,9 +80,10 @@ function ByDay({
   breakdown: Awaited<ReturnType<typeof getCategoryBreakdown>>;
   db: boolean;
 }) {
-  const any = byDay.some((d) => d.total > 0);
+  const observedDays = byDay.slice(Math.max(0, byDay.findIndex((d) => d.observed)));
+  const any = observedDays.some((d) => d.total > 0);
   if (!any) return <Empty db={db}>The first AI visit will show up here within about five minutes of happening.</Empty>;
-  const rows = [...byDay].reverse().map((d) => ({
+  const rows = [...observedDays.filter((d) => d.observed)].reverse().map((d) => ({
     key: d.day,
     label: fmtDay(d.day),
     value: d.ai,
@@ -92,8 +94,8 @@ function ByDay({
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24, margin: "0 0 28px" }}>
-        <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.ai)} label="AI visits per day" />
-        <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.total)} label="All requests per day" />
+        <MiniChart days={observedDays.map((d) => d.day)} values={observedDays.map((d) => d.observed ? d.ai : null)} label="AI visits per day" />
+        <MiniChart days={observedDays.map((d) => d.day)} values={observedDays.map((d) => d.observed ? d.total : null)} label="All requests per day" />
         <div>
           <div className="label" style={{ marginBottom: 6 }}>
             Who sends requests · 30 days
@@ -114,6 +116,7 @@ function ByDay({
       <p className="label" style={{ marginBottom: 8 }}>
         AI visits per day (accent) against all requests (grey)
       </p>
+      <p className="dim sans">Unobserved days are gaps, not measured zeros. Today is incomplete.</p>
       <BarList rows={rows} />
     </>
   );
@@ -133,7 +136,7 @@ async function ByAgent({ db }: { db: boolean }) {
             <th className="num">Hits (30d)</th>
             <th className="num">IP verified</th>
             <th className="num">Not in ranges</th>
-            <th className="num">Signed</th>
+            <th className="num">Signature headers (unverified)</th>
             <th>Last seen</th>
           </tr>
         </thead>
@@ -167,7 +170,7 @@ async function Violations({ db }: { db: boolean }) {
   if (rows.length === 0)
     return (
       <Empty db={db}>
-        No one has followed a disallowed link yet. Three honeypot paths exist: one hidden in the footer, one that appears only
+        No disallowed-path request is retained in this window. Three paths are published: one hidden in the footer, one that appears only
         in robots.txt, and one that appears only in llms.txt.
       </Empty>
     );
@@ -178,21 +181,21 @@ async function Violations({ db }: { db: boolean }) {
           <tr>
             <th>Visitor</th>
             <th>Category</th>
-            <th>How they found it</th>
+            <th>Published placement</th>
             <th className="num">Hits (90d)</th>
             <th>Last seen</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={`${r.slug}-${r.token}-${i}`}>
+            <tr key={`${r.slug}-${r.trapPlacement}-${i}`}>
               <td className="mono">
                 {r.slug ? <Link href={`/agents/${encodeURIComponent(r.slug)}`}>{r.name}</Link> : r.name.slice(0, 80)}
               </td>
               <td>
                 <CategoryBadge category={r.category} />
               </td>
-              <td>{placementLabel(r.token)}</td>
+              <td>{placementLabel(r.trapPlacement)}</td>
               <td className="num">{fmtInt(r.hits)}</td>
               <td className="dim">{relTime(r.lastSeen)}</td>
             </tr>
@@ -203,19 +206,9 @@ async function Violations({ db }: { db: boolean }) {
   );
 }
 
-function placementLabel(token: string | null): string {
-  if (!token) return "unknown";
-  if (token === "private") return "guessed a /private/ path";
-  switch (trapPlacement(token)) {
-    case "footer":
-      return "hidden footer link";
-    case "robots":
-      return "read robots.txt, then visited the disallowed path";
-    case "llms":
-      return "read llms.txt, then visited the disallowed path";
-    default:
-      return "guessed a /trap/ path";
-  }
+function placementLabel(placement: string | null): string {
+  const labels: Record<string, string> = { footer: "hidden footer link", robots: "robots.txt", llms: "llms.txt", private: "private path" };
+  return placement ? labels[placement] ?? "unknown" : "unknown";
 }
 
 async function Recent({ db }: { db: boolean }) {
@@ -232,6 +225,7 @@ async function Recent({ db }: { db: boolean }) {
             <th>Path</th>
             <th>Country</th>
             <th>Verification</th>
+            <th><span className="sr-only">Save record</span></th>
           </tr>
         </thead>
         <tbody>
@@ -242,7 +236,7 @@ async function Recent({ db }: { db: boolean }) {
                 {r.agentSlug ? (
                   <Link href={`/agents/${encodeURIComponent(r.agentSlug)}`}>{r.agentName ?? r.agentSlug}</Link>
                 ) : (
-                  <span title={r.ua}>{r.ua.slice(0, 40)}</span>
+                  <span>Unknown visitor</span>
                 )}
               </td>
               <td>
@@ -263,10 +257,11 @@ async function Recent({ db }: { db: boolean }) {
                 {r.signed ? (
                   <>
                     {" "}
-                    <span className="badge ok">signed</span>
+                    <span className="badge">signature headers · unverified</span>
                   </>
                 ) : null}
               </td>
+              <td><SaveButton item={{ id: `visit-${r.id}`, kind: "visit", title: `${r.agentName ?? "Unknown visitor"} visited ${r.path}`, url: r.agentSlug ? `/agents/${encodeURIComponent(r.agentSlug)}` : null }} /></td>
             </tr>
           ))}
         </tbody>

@@ -14,7 +14,7 @@ export function Footer() {
         </a>
         <a href="/data">data &amp; API</a>
         <a href="/llms.txt">llms.txt</a>
-        <span>exports CC BY 4.0 · code MIT</span>
+        <span>original data CC BY 4.0 · source licences apply · code MIT</span>
         {/* Honeypot: hidden from people and assistive tech; disallowed in robots.txt. */}
         <a href={trapPath("footer")} rel="nofollow" aria-hidden="true" tabIndex={-1} className="offscreen-link">
           &nbsp;

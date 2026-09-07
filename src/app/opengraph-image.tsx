@@ -26,9 +26,9 @@ export default function Image() {
           {SITE.name}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -1 }}>Tracking autonomous AI agents on the public internet</div>
+          <div style={{ fontSize: 76, lineHeight: 1.05, letterSpacing: -1 }}>Tracking AI traffic on the public internet</div>
           <div style={{ fontSize: 28, color: "#4b5057", fontFamily: "Arial, sans-serif" }}>
-            AI crawlers visiting this site · Wikipedia edits flagged as AI · coding-agent pull requests · agent-only forums
+            Crawler and fetcher requests · published traffic trends · agent-attributed activity and its evidence
           </div>
         </div>
       </div>

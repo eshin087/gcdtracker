@@ -33,17 +33,17 @@ export default async function GithubPage({ params }: { params: Promise<{ view?: 
   const view = v as View;
 
   const db = hasDatabase();
-  const [overview, byDay, watched, watchedByDay, archive] = await Promise.all([getOverview(), getGithubByDay(60), getWatchedSummary(), getWatchedByDay(60), getArchiveSummary()]);
+  const [overview, byDay, watched, watchedByDay, archive] = await Promise.all([getOverview(), view === "day" ? getGithubByDay(60) : Promise.resolve([]), getWatchedSummary(), view === "day" ? getWatchedByDay(60) : Promise.resolve([]), getArchiveSummary()]);
   const lastDataDay = [...byDay].reverse().find((d) => d.botAccounts > 0 || d.branchPrefix > 0)?.day ?? null;
 
   const latest = archive.latest;
   const tiles = latest
     ? [
-        { value: fmtInt(archive.last7.agentPrs), label: `agent PRs opened, last ${archive.last7.days} complete days`, sub: `every public event on GitHub · ${archive.prior7.days > 0 ? `${archive.prior7.agentPrs < archive.last7.agentPrs ? "+" : ""}${fmtInt(archive.last7.agentPrs - archive.prior7.agentPrs)} vs prior week` : "GH Archive census"}` },
+        { value: fmtInt(archive.last7.agentPrs), label: `agent PRs opened, last ${archive.last7.days} complete days`, sub: `events observed by GH Archive · ${archive.prior7.days > 0 ? `${archive.prior7.agentPrs < archive.last7.agentPrs ? "+" : ""}${fmtInt(archive.last7.agentPrs - archive.prior7.agentPrs)} vs prior week` : "GH Archive census"}` },
         { value: archive.last7.prsOpened > 0 ? fmtPct(archive.last7.agentPrs / archive.last7.prsOpened, 2) : "–", label: "of all pull requests opened on GitHub", sub: `${fmtInt(archive.last7.prsOpened)} PRs opened in the same days` },
       ]
     : [
-        { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "all of GitHub, complete UTC days" },
+        { value: fmtInt(overview.agentPrs7d), label: "PRs by agent bot accounts, 7 days", sub: "GitHub search counts, complete UTC days" },
         { value: fmtInt(overview.codexPrs7d), label: "PRs on codex/ branches, 7 days", sub: "Codex pushes under the user's account" },
       ];
   tiles.push(
@@ -64,7 +64,7 @@ export default async function GithubPage({ params }: { params: Promise<{ view?: 
     <div className="shell explorer">
       <PageHeader
         title="GitHub"
-        sub="Three measurements. A census of every public GitHub event since 2022, counting pull requests by AI coding agents and their share of all PRs. Daily counts from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
+        sub="Three measurements. Archived public GitHub events, counting pull requests attributed to coding agents and their share of observed PRs. Daily counts from the public search API. And every documented or self-disclosed agent PR in a watch-list of repositories, collected with evidence."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="GitHub views" />

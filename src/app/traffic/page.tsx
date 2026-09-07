@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MiniChart, TimelineChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
-import { fmtDate, fmtDay, fmtInt, fmtPct } from "@/lib/format";
+import { fmtDate, fmtDay, fmtInt, fmtPct, fmtStamp } from "@/lib/format";
 import { getCategoryBreakdown, getOverview, getTrafficByDay, hasDatabase } from "@/lib/stats";
-import { getSeries } from "@/lib/stats-sources";
+import { getRadarSnapshot } from "@/lib/stats-sources";
+import type { RadarMetadata } from "@/lib/ingest/radar";
+import { isRadarStale, radarUnit, radarValue } from "@/components/radar-labels";
 import { getRobotsCensus, ROBOTS_OPERATORS } from "@/lib/stats-census";
 import { ROBOTS_CENSUS } from "@/lib/ingest/robots-census";
 import industry from "../../../data/industry.json";
@@ -19,7 +21,9 @@ export const metadata: Metadata = {
 
 export default async function TrafficPage() {
   const db = hasDatabase();
-  const [overview, byDay, breakdown, radar, census] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30), getSeries("radar"), getRobotsCensus()]);
+  const [overview, traffic, breakdown, radarSnapshot, census] = await Promise.all([getOverview(), getTrafficByDay(60), getCategoryBreakdown(30), getRadarSnapshot(), getRobotsCensus()]);
+  const byDay = traffic.slice(Math.max(0, traffic.findIndex((d) => d.observed)));
+  const { series: radar, metadata: radarMeta } = radarSnapshot;
   const latestCrawl = census.at(-1) ?? null;
   const blockedShare = (token: string) => census.map((c) => (c.sites > 0 ? (100 * (c.tokens[token]?.blocked ?? 0)) / c.sites : 0));
   const latestRanked = latestCrawl
@@ -31,15 +35,18 @@ export default async function TrafficPage() {
   const days = byDay.map((d) => d.day);
   const totalBreakdown = breakdown.reduce((a, b) => a + b.count, 0);
   const botShare = Object.entries(radar)
-    .filter(([k]) => k.startsWith("bot-share:"))
+    .filter(([k]) => k.startsWith("bot-share:") && radarMeta["bot-share"])
     .map(([k, pts]) => ({ bot: k.replace("bot-share:", ""), value: pts[pts.length - 1]?.value ?? 0 }))
     .sort((a, b) => b.value - a.value);
   const crawlRefer = Object.entries(radar)
-    .filter(([k]) => k.startsWith("crawl-refer:"))
+    .filter(([k]) => k.startsWith("crawl-refer:") && radarMeta["crawl-refer"])
     .map(([k, pts]) => ({ platform: k.replace("crawl-refer:", ""), value: pts[pts.length - 1]?.value ?? 0 }))
     .sort((a, b) => b.value - a.value);
-  const operators = Object.entries(radar).filter(([k]) => k.startsWith("operator:"));
-  const hasRadar = botShare.length > 0 || operators.length > 0;
+  const operators = Object.entries(radar).filter(([k]) => k.startsWith("operator:") && radarMeta.operator);
+  const hasRadar = botShare.length > 0 || crawlRefer.length > 0 || operators.length > 0;
+  const radarDates = Object.values(radarMeta).map((m) => m.fetchedAt).sort();
+  const latestRadar = radarDates.at(-1);
+  const radarStale = isRadarStale(latestRadar);
 
   return (
     <div className="shell explorer">
@@ -49,13 +56,14 @@ export default async function TrafficPage() {
       />
       <StatTiles
         tiles={[
-          { value: fmtPct(overview.aiShare7d), label: "AI share of requests to this site, 7 days", sub: `${fmtInt(overview.aiVisits7d)} of ${fmtInt(overview.requests7d)} requests` },
+          { value: overview.db ? fmtPct(overview.aiShare7d) : "–", label: "AI share of requests to this site, 7 days", sub: `${fmtInt(overview.aiVisits7d)} of ${fmtInt(overview.requests7d)} recorded requests; ${overview.trafficDays7d}/7 UTC days observed` },
           { value: "4.2%", label: "of HTML requests from AI bots other than Googlebot", sub: "Cloudflare Radar, Dec 2025" },
           { value: "15×", label: "growth in user-triggered AI fetches in 2025", sub: "Cloudflare Radar, Dec 2025" },
-          { value: hasRadar ? "live" : "static", label: "Cloudflare Radar data", sub: hasRadar ? "refreshed daily via the Radar API" : "add CLOUDFLARE_API_TOKEN for live charts" },
+          { value: hasRadar ? radarStale ? "stale snapshot" : "source snapshot" : "historical quotes", label: "Cloudflare Radar data", sub: latestRadar ? "Fetched " + fmtStamp(latestRadar) : "No snapshot with verified units is available" },
         ]}
       />
 
+      <p className="dim sans">Headline window: {overview.windowStart} to {overview.windowEnd} UTC, excluding today. Missing collection is not a measured zero.</p>
       <div className="section-head">
         <h2>This site</h2>
         <Link className="more" href="/visitors">
@@ -64,7 +72,8 @@ export default async function TrafficPage() {
       </div>
       {byDay.some((d) => d.total > 0) ? (
         <>
-          <TimelineChart days={days} bars={byDay.map((d) => d.ai)} barLabel="AI requests per day" line={byDay.map((d) => d.total)} lineLabel="All requests" title="AI vs all requests to this site" />
+          <TimelineChart sharedScale days={days} bars={byDay.map((d) => d.observed ? d.ai : null)} barLabel="AI requests per day" line={byDay.map((d) => d.observed ? d.total : null)} lineLabel="All requests" title="AI vs all requests to this site" />
+          <p className="dim sans">Gaps are unobserved days, not measured zeros. Today is incomplete.</p>
           <p className="label" style={{ margin: "18px 0 8px" }}>
             Who sends requests · 30 days
           </p>
@@ -91,28 +100,31 @@ export default async function TrafficPage() {
           {botShare.length > 0 ? (
             <div>
               <div className="label" style={{ marginBottom: 8 }}>
-                Share of bot traffic by bot · last 7 days
+                Bot traffic by bot · {radarUnit(radarMeta["bot-share"])}
               </div>
-              <BarList rows={botShare.slice(0, 12).map((b) => ({ key: b.bot, label: b.bot, value: b.value }))} format={(v) => `${v.toFixed(1)}%`} />
+              <RadarContext meta={radarMeta["bot-share"]} />
+              <BarList rows={botShare.slice(0, 12).map((b) => ({ key: b.bot, label: b.bot, value: b.value }))} format={(v) => radarValue(v, radarMeta["bot-share"])} />
             </div>
           ) : null}
           {crawlRefer.length > 0 ? (
             <div>
               <div className="label" style={{ marginBottom: 8 }}>
-                Pages crawled per referral · last 7 days
+                Crawl/referral metric · {radarUnit(radarMeta["crawl-refer"])}
               </div>
-              <BarList rows={crawlRefer.map((c) => ({ key: c.platform, label: c.platform, value: c.value }))} format={(v) => `${fmtInt(v)}:1`} variant="neutral" />
+              <RadarContext meta={radarMeta["crawl-refer"]} />
+              <BarList rows={crawlRefer.map((c) => ({ key: c.platform, label: c.platform, value: c.value }))} format={(v) => radarValue(v, radarMeta["crawl-refer"])} variant="neutral" />
             </div>
           ) : null}
+          {operators.length ? <RadarContext meta={radarMeta.operator} /> : null}
           {operators.slice(0, 4).map(([k, pts]) => (
-            <MiniChart key={k} days={pts.map((p) => p.period)} values={pts.map((p) => p.value)} label={`${k.replace("operator:", "")} · requests per day`} />
+            <MiniChart summarize={false} format={(v) => radarValue(v, radarMeta.operator)} key={k} days={pts.map((p) => p.period)} values={pts.map((p) => p.value)} label={`${k.replace("operator:", "")} · ${radarUnit(radarMeta.operator)}`} />
           ))}
         </div>
       ) : (
         <div className="embed-card">
-          <h3>Live Radar charts appear here once a free Cloudflare API token is configured.</h3>
+          <h3>No comparable Radar snapshot is available yet.</h3>
           <p>
-            Until then, the dashboards are one click away:{" "}
+            See the publisher&apos;s current dashboards:{" "}
             <a href="https://radar.cloudflare.com/ai-insights">AI Insights</a> (bot traffic by bot and purpose, crawl-to-refer ratios) and{" "}
             <a href="https://radar.cloudflare.com/bots">Bots</a>. Published figures we cite:
           </p>
@@ -129,7 +141,7 @@ export default async function TrafficPage() {
       )}
 
       <div className="section-head">
-        <h2>Who the web tells to go away</h2>
+        <h2>Crawler rules in sampled robots.txt files</h2>
         <a className="more" href={ROBOTS_CENSUS.site}>
           Common Crawl robots.txt archive ↗
         </a>
@@ -137,14 +149,13 @@ export default async function TrafficPage() {
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
         Every Common Crawl crawl (roughly monthly) archives the robots.txt of each site it visits. A worker samples {latestCrawl ? fmtInt(latestCrawl.files) : "100"} of
         those archive files per crawl, spread across the crawl, and counts sites whose robots.txt names an AI crawler and sites that block it completely
-        (<code className="mono">Disallow: /</code> for that agent). Shares are of all sampled sites with a readable robots.txt, so they describe the whole web, not the
-        top sites where blocking is far more common.
+        (<code className="mono">Disallow: /</code> for that agent). Shares are of all sampled sites with a readable robots.txt, so they describe this Common Crawl sample. They cannot establish a whole-web rate, and sites that exclude Common Crawl are underrepresented.
       </p>
       {census.length === 0 ? (
         <Empty db={db}>The robots.txt census runs weekly in GitHub Actions and backfills every crawl since 2023 on first launch.</Empty>
       ) : (
         <>
-          <TimelineChart
+          <TimelineChart sharedScale
             days={census.map((c) => c.date)}
             bars={blockedShare("GPTBot")}
             barLabel="Sites blocking GPTBot (%)"
@@ -231,4 +242,10 @@ export default async function TrafficPage() {
       </p>
     </div>
   );
+}
+
+function RadarContext({ meta }: { meta: RadarMetadata | undefined }) {
+  if (!meta) return null;
+  const window = meta.dateRange.map((r) => fmtStamp(r.startTime) + " – " + fmtStamp(r.endTime)).join("; ");
+  return <p className="dim sans" style={{ fontSize: 12 }}>Window: {window}. {radarUnit(meta)}. {meta.lastUpdated ? "Source updated " + fmtStamp(meta.lastUpdated) + ". " : ""}Fetched {fmtStamp(meta.fetchedAt)}. {meta.normalization.toUpperCase() === "RAW_VALUES" ? "Values retain the source units for this window." : "Normalized series describe this snapshot and are not raw request counts."}</p>;
 }

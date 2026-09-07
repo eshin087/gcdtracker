@@ -14,24 +14,23 @@ type Params = Promise<{ slug: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
-  const def = findAgent(decodeURIComponent(slug));
+  const def = findAgent(slug);
   return { title: def ? def.name : "Agent", description: def?.description ?? "AI agent profile" };
 }
 
 export default async function AgentPage({ params }: { params: Params }) {
   const { slug: raw } = await params;
-  const slug = decodeURIComponent(raw);
+  const slug = raw;
   const def = findAgent(slug);
-  const isSigned = slug.startsWith("signed:");
-  if (!def && !isSigned) notFound();
+  if (!def) notFound();
 
   const db = hasDatabase();
   const [detail, recent] = await Promise.all([getAgentDetail(slug, 60), getRecentVisits(25, { slug })]);
   const source = def?.ipSource ? ipSourceFor(def.ipSource) : undefined;
   const decided = detail.verified + detail.unverified;
 
-  const name = def?.name ?? `Signed agent (${slug.slice(7)})`;
-  const operator = def?.operator ?? slug.slice(7);
+  const name = def.name;
+  const operator = def.operator;
   const category = def?.category ?? "ai-browsing-agent";
 
   return (
@@ -49,7 +48,7 @@ export default async function AgentPage({ params }: { params: Params }) {
         <CategoryBadge category={category} />
         {def ? (
           <span className="badge">
-            robots.txt: {{ yes: "respects", no: "ignores", partial: "may ignore", unknown: "unknown" }[def.robots]}
+            robots.txt policy: {{ yes: "reported to respect", no: "reported noncompliance", partial: "mixed reports", unknown: "unknown" }[def.robots]}
           </span>
         ) : null}
         {def?.controlTokenOnly ? <span className="badge warn">control token only</span> : null}
@@ -61,7 +60,7 @@ export default async function AgentPage({ params }: { params: Params }) {
             </a>
           </span>
         ) : def?.rdns?.length ? (
-          <span className="badge">verifiable via reverse DNS ({def.rdns.join(", ")})</span>
+          <span className="badge">vendor documents reverse DNS; not checked here ({def.rdns.join(", ")})</span>
         ) : (
           <span className="badge">no published IP ranges</span>
         )}
@@ -85,10 +84,10 @@ export default async function AgentPage({ params }: { params: Params }) {
 
       <StatTiles
         tiles={[
-          { value: fmtInt(detail.hits), label: "hits recorded", sub: detail.firstSeen ? `first seen ${fmtDate(detail.firstSeen)}` : "not seen yet" },
+          { value: fmtInt(detail.hits), label: "requests retained", sub: detail.firstSeen ? `first retained ${fmtDate(detail.firstSeen)}` : "not seen yet" },
           { value: decided > 0 ? fmtPct(detail.verified / decided) : "–", label: "IP-verified share", sub: `${fmtInt(detail.verified)} verified · ${fmtInt(detail.unverified)} outside ranges` },
-          { value: fmtInt(detail.signed), label: "signed requests", sub: "Web Bot Auth headers present" },
-          { value: fmtInt(detail.violations), label: "robots.txt violations", sub: "honeypot hits" },
+          { value: fmtInt(detail.signed), label: "signature headers observed", sub: "Unverified; no cryptographic checks" },
+          { value: fmtInt(detail.violations), label: "disallowed-path requests", sub: "Intent and discovery route unknown" },
         ]}
       />
 
@@ -142,7 +141,7 @@ export default async function AgentPage({ params }: { params: Params }) {
                 <tr>
                   <th>When (UTC)</th>
                   <th>Path</th>
-                  <th>IP prefix</th>
+
                   <th>Country</th>
                   <th>Verification</th>
                 </tr>
@@ -160,14 +159,14 @@ export default async function AgentPage({ params }: { params: Params }) {
                         </>
                       ) : null}
                     </td>
-                    <td className="mono dim">{r.ipPrefix ?? "–"}</td>
+
                     <td className="dim">{r.country ?? "–"}</td>
                     <td>
                       <VerifiedBadge verified={r.verified} />
                       {r.signed ? (
                         <>
                           {" "}
-                          <span className="badge ok">signed</span>
+                          <span className="badge">signature headers · unverified</span>
                         </>
                       ) : null}
                     </td>

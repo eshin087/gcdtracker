@@ -11,7 +11,7 @@ export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "New agents",
-  description: "Newly published AI crawler tokens and agents that cryptographically sign their requests.",
+  description: "Newly published AI crawler tokens and entries in a public signing registry.",
 };
 
 export default async function NewAgentsPage() {
@@ -31,7 +31,7 @@ export default async function NewAgentsPage() {
       <StatTiles
         tiles={[
           { value: fmtInt(counts["ai-robots-txt"] ?? 0), label: "crawler tokens catalogued", sub: "ai.robots.txt" },
-          { value: fmtInt(counts["signature-registry"] ?? 0), label: "agents that sign requests", sub: "Web Bot Auth registry" },
+          { value: fmtInt(counts["signature-registry"] ?? 0), label: "signing-registry entries", sub: "Web Bot Auth registry" },
           { value: fmtInt(new30d), label: "crawler tokens first listed in the last 30 days", sub: "dated from the ai.robots.txt git history" },
         ]}
       />
@@ -58,14 +58,13 @@ export default async function NewAgentsPage() {
       ) : (
         <>
           <div className="section-head">
-            <h2>Signed agents</h2>
+            <h2>Signing-registry entries</h2>
             <a className="more" href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">
               about Web Bot Auth ↗
             </a>
           </div>
           <p className="page-sub" style={{ maxWidth: "72ch" }}>
-            Each entry publishes an Ed25519 key directory and signs its requests (RFC 9421). When one of them visits this site
-            the signature is recorded, which is the highest-confidence identity available.
+            These registry entries advertise signing keys. Membership does not establish the identity of a visitor here. Signature-header presence is recorded without cryptographic verification.
           </p>
           <div className="tbl-wrap">
             <table className="tbl">
@@ -88,7 +87,7 @@ export default async function NewAgentsPage() {
                       {relTime(r.firstSeen)}
                     </td>
                     <td>
-                      <SaveButton item={{ id: `sight-${r.id}`, kind: "signed agent", title: r.token, url: r.url, sub: "Web Bot Auth registry" }} />
+                      <SaveButton item={{ id: `sight-${r.id}`, kind: "signing-registry entry", title: r.token, url: r.url, sub: "Web Bot Auth registry" }} />
                     </td>
                   </tr>
                 ))}

@@ -20,6 +20,6 @@ Who ran the agents is inferred from what they wrote about themselves and from th
 
 ## Why it matters for this site
 
-The case is the clearest public example of the pattern gcdTracker is built to catch: agents treating a public site as scratch space. It also illustrates every rung of the confidence ladder at once. The edits are certain; the actor is self-identified; the motive is a hypothesis. That separation, kept visible, is the difference between a record and a story.
+The case is one reported example of a pattern relevant to gcdTracker: agents treating a public site as scratch space. It also illustrates every rung of the confidence ladder at once. The edits are certain; the actor is self-identified; the motive is a hypothesis. That separation, kept visible, is the difference between a record and a story.
 
-This site's own sensors would see such an event as a burst of edits from agent-like usernames on a wiki, a burst of requests carrying a vendor's user agent, and possibly a set of honeypot hits. It would not see the reasoning. Neither did the researchers, and they said so.
+The current collectors monitor selected Wikimedia projects and requests to this site; they would not automatically observe an unrelated wiki. Comparable public revision histories could support a future, explicitly scoped investigation. Neither request logs nor revisions expose a model's internal reasoning.

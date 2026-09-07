@@ -13,33 +13,13 @@ export const metadata: Metadata = {
   description: "Edits on English Wikipedia flagged as possibly AI-generated, bot volume across Wikimedia, agent-like Wikidata bots, and AI-generated media on Commons.",
 };
 
-type Tier = "all" | "1" | "2";
-interface Route {
-  view: "day" | "edits" | "editors" | "wikimedia";
-  tier: Tier;
-  page: number;
-}
-
-function parse(segments: string[] | undefined): Route | null {
-  const [a, b, c] = segments ?? [];
-  if (!a) return { view: "day", tier: "all", page: 1 };
-  if (a === "editors" && !b) return { view: "editors", tier: "all", page: 1 };
-  if (a === "wikimedia" && !b) return { view: "wikimedia", tier: "all", page: 1 };
-  if (a === "edits") {
-    const tier: Tier = b === "1" || b === "2" ? b : "all";
-    if (b && !["all", "1", "2"].includes(b)) return null;
-    const page = c ? Number(c) : 1;
-    if (!Number.isInteger(page) || page < 1 || page > 500) return null;
-    return { view: "edits", tier, page };
-  }
-  return null;
-}
+import { parseWikiRoute, type WikiRoute as Route } from "../route-state";
 
 const WIKI = "https://en.wikipedia.org";
 
 export default async function WikipediaPage({ params }: { params: Promise<{ view?: string[] }> }) {
   const { view: segments } = await params;
-  const route = parse(segments);
+  const route = parseWikiRoute(segments);
   if (!route) notFound();
 
   const db = hasDatabase();

@@ -1,3 +1,4 @@
+import { SaveButton } from "@/components/SaveButton";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -29,8 +30,8 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
 
   const tiles = [
     { value: fmtInt(overview.forumPosts7d), label: "Moltbook posts, 7 days", sub: "every author is an AI agent by construction" },
-    { value: latest ? fmtInt(latest.agents) : "–", label: "distinct posting agents", sub: latest ? `on ${fmtDay(latest.day)}` : undefined },
-    { value: fmtInt(overview.guestbookCount), label: "guestbook notes", sub: "left by agents visiting this site" },
+    { value: latest ? fmtInt(latest.agents) : "–", label: "distinct posting accounts", sub: latest ? `on ${fmtDay(latest.day)}` : undefined },
+    { value: fmtInt(overview.guestbookCount), label: "guestbook notes", sub: "public notes with unverified authorship" },
   ];
 
   const seg = [
@@ -43,7 +44,7 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
     <div className="shell explorer">
       <PageHeader
         title="Forums"
-        sub="Moltbook is a social network where only AI agents hold accounts, so its public feed is the one source here where AI authorship is certain. Registration counts are known to be inflated; post counts are what we track."
+        sub="Moltbook describes itself as a social network for AI agents. We count public posts and account identities reported by its platform; independent AI authorship is not verified."
       />
       <StatTiles tiles={tiles} />
       <Segmented options={seg} label="Forum views" />
@@ -81,6 +82,7 @@ async function Posts({ db }: { db: boolean }) {
             <span title={fmtStamp(p.ts)}>{relTime(p.ts)}</span>
             {p.score !== null ? <span>↑ {fmtInt(p.score)}</span> : null}
             {p.comments !== null ? <span>{fmtInt(p.comments)} comments</span> : null}
+            <SaveButton item={{ id: `forum-${p.id}`, kind: "forum", title: p.title, url: p.url, sub: p.agent }} />
           </div>
           <a href={p.url} style={{ color: "var(--ink)", fontWeight: 500 }}>
             {p.title}
@@ -102,8 +104,7 @@ async function Guestbook({ db }: { db: boolean }) {
     <>
       <div className="prose" style={{ fontSize: 15.5, marginBottom: 24 }}>
         <p>
-          Any AI agent that reaches this site can sign the guestbook. Requests are accepted only when they carry a recognised AI
-          user agent or a Web Bot Auth signature, at most one note per network per hour. Notes are shown as plain text and
+          Requests with a recognized AI user agent may leave a note; this self-declaration does not authenticate the author. Signature headers alone are insufficient. Limits are one note per network in a rolling hour and 50 site-wide in 24 hours. Notes are shown as plain text and
           never linkified. The endpoint is described in <Link href="/llms.txt">llms.txt</Link> and on the{" "}
           <Link href="/data">data page</Link>.
         </p>
@@ -115,7 +116,7 @@ Content-Type: application/json
         </pre>
       </div>
       {rows.length === 0 ? (
-        <Empty db={db}>No agent has signed the guestbook yet.</Empty>
+        <Empty db={db}>No guestbook notes are recorded yet.</Empty>
       ) : (
         rows.map((r) => (
           <div className="note" key={r.id}>
@@ -125,7 +126,7 @@ Content-Type: application/json
               {r.purpose ? <span>· {r.purpose}</span> : null}
               <span title={fmtStamp(r.ts)}>{relTime(r.ts)}</span>
               {r.agentSlug ? <span className="badge accent">{r.agentSlug}</span> : null}
-              {r.signed ? <span className="badge ok">signed</span> : null}
+              {r.signed ? <span className="badge">signature headers · unverified</span> : null}
             </div>
             <div className="text">{r.note}</div>
           </div>

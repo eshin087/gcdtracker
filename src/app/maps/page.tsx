@@ -23,7 +23,8 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function MapsPage() {
   const db = hasDatabase();
-  const [byDay, summary] = await Promise.all([getOsmByDay(60), getOsmSummary()]);
+  const [daily, summary] = await Promise.all([getOsmByDay(60), getOsmSummary()]);
+  const byDay = daily.slice(Math.max(0, daily.findIndex((d) => d.sampled > 0)));
   const share = summary.sampled7d > 0 ? summary.ai7d / summary.sampled7d : null;
   const any = byDay.some((d) => d.sampled > 0);
 
@@ -33,15 +34,16 @@ export default async function MapsPage() {
         title="Maps"
         sub="OpenStreetMap publishes every changeset. We sample the newest ones continuously and keep those made with AI-suggested geometry (RapiD, MapWithAI), automated QA tools, or bots. Editor names are self-declared by the software, so this is a self-identified rung."
       />
+      <p className="dim sans">Counts use the current collection method only. Earliest displayed changeset date: {byDay.find((d) => d.sampled > 0)?.day ?? "not yet available"}; earlier overlapping samples are excluded.</p>
       <StatTiles
         tiles={[
-          { value: fmtInt(summary.ai7d), label: "AI-assisted or bot changesets, 7 days", sub: `${fmtInt(summary.sampled7d)} changesets sampled` },
+          { value: any ? fmtInt(summary.ai7d) : "–", label: "AI-assisted or bot changesets, 7 days", sub: `${fmtInt(summary.sampled7d)} changesets sampled` },
           { value: fmtPct(share), label: "share of sampled changesets" },
           { value: summary.byEditor[0] ? summary.byEditor[0].editor : "–", label: "most common AI-assisted editor, 30 days", sub: summary.byEditor[0] ? `${fmtInt(summary.byEditor[0].c)} changesets` : undefined },
         ]}
       />
       {!any ? (
-        <Empty db={db}>The map poller runs with every ingest cycle.</Empty>
+        <Empty db={db}>No observations are available from the current collection method yet. Earlier overlapping samples are excluded from these totals.</Empty>
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24, margin: "0 0 28px" }}>
@@ -86,7 +88,7 @@ export default async function MapsPage() {
                     </td>
                     <td className="num">{r.changes !== null ? fmtInt(r.changes) : "–"}</td>
                     <td>
-                      <SaveButton item={{ id: `osm-${r.id}`, kind: "map changeset", title: r.comment ?? `changeset ${r.id}`, url: r.url, sub: `${r.editor} · ${fmtDay(r.ts.toISOString().slice(0, 10))}` }} />
+                      <SaveButton item={{ id: `map-${r.id}`, kind: "map changeset", title: r.comment ?? `changeset ${r.id}`, url: r.url, sub: `${r.editor} · ${fmtDay(r.ts.toISOString().slice(0, 10))}` }} />
                     </td>
                   </tr>
                 ))}

@@ -32,10 +32,11 @@ export default async function BeforeAfterPage() {
   const questions = so.questions ?? [];
   const google = sc.google ?? [];
   const latestWm = user.at(-1)?.period ?? null;
-  const yearAgoOf = (m: string | null) => (m ? `${Number(m.slice(0, 4)) - 3}${m.slice(4)}` : null); // same month, three years earlier (pre-ChatGPT)
+  const yearAgoOf = (m: string | null) => (m ? `${Number(m.slice(0, 4)) - 3}${m.slice(4)}` : null); // Same calendar month, three years earlier.
   const botShareNow = latestWm ? (() => {
-    const u = at(user, latestWm) ?? 0;
-    const b = (at(spider, latestWm) ?? 0) + (at(automated, latestWm) ?? 0);
+    const u = at(user, latestWm), s = at(spider, latestWm), a = at(automated, latestWm);
+    if (u === null || s === null || a === null) return null;
+    const b = s + a;
     return u + b > 0 ? b / (u + b) : null;
   })() : null;
   const humanChange = latestWm ? change(at(user, latestWm), at(user, yearAgoOf(latestWm)!)) : null;
@@ -60,9 +61,9 @@ export default async function BeforeAfterPage() {
   ].map((s) => ({ ...s, points: census.map((c) => ({ x: c.date, y: pct(c, s.key) })) }));
 
   const tiles = [
-    { value: botShareNow !== null ? fmtPct(botShareNow) : "–", label: "of Wikimedia page views now come from bots", sub: latestWm ? `${fmtMonth(monthDay(latestWm))} · declared crawlers plus undeclared automation` : "Wikimedia pageviews API" },
+    { value: botShareNow !== null ? fmtPct(botShareNow) : "–", label: "of latest reported Wikimedia views classified as bots", sub: latestWm ? `${fmtMonth(monthDay(latestWm))} · declared crawlers plus undeclared automation` : "Wikimedia pageviews API" },
     { value: signed(humanChange), label: "human Wikimedia reads vs three years earlier", sub: latestWm ? `${fmtMonth(monthDay(latestWm))} against ${fmtMonth(monthDay(yearAgoOf(latestWm)!))}` : undefined },
-    { value: signed(soChange), label: "Stack Overflow questions per month since ChatGPT", sub: latestSo ? `${fmtInt(latestSo.value)} in ${fmtMonth(monthDay(latestSo.period))} vs ${fmtInt(at(questions, "2022-11") ?? 0)} in Nov 2022` : undefined },
+    { value: signed(soChange), label: "Stack Overflow questions per month since ChatGPT", sub: latestSo ? `${fmtInt(latestSo.value)} in ${fmtMonth(monthDay(latestSo.period))} vs ${fmtInt(at(questions, "2022-11"))} in Nov 2022` : undefined },
     { value: latestGoogle ? `${latestGoogle.value.toFixed(1)}%` : "–", label: "Google's share of searches", sub: latestGoogle && googleThen !== null ? `${fmtMonth(monthDay(latestGoogle.period))} · ${googleThen.toFixed(1)}% in Nov 2022 · StatCounter, quoted` : "StatCounter, quoted" },
   ];
 
@@ -72,7 +73,7 @@ export default async function BeforeAfterPage() {
     <div className="shell explorer">
       <PageHeader
         title="Before and after"
-        sub="Four things people did on the public internet before AI assistants existed, measured the same way before and after: reading Wikipedia, asking Stack Overflow, opening pull requests on GitHub, and telling crawlers to go away. Every chart carries the same two markers: ChatGPT's launch and the first AI training crawler token."
+        sub="Long-term published trends in readership, questions, coding and crawler rules. Source definitions and coverage can change over time. Launch markers provide context; these observational series do not isolate the effects of AI."
       />
       <StatTiles tiles={tiles} />
       {empty ? (
@@ -87,8 +88,7 @@ export default async function BeforeAfterPage() {
       </div>
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
         Every request to every Wikimedia project, per month, split by the Foundation&apos;s own classifier: humans, declared crawlers (Googlebot, GPTBot and the
-        like, by user agent), and undeclared automation (traffic that behaves like a bot while claiming to be a browser; classified since 2020). Bot reads climbed
-        while human reads did not, which is the scraping wave in one picture.
+        like, by user agent), and undeclared automation (traffic that behaves like a bot while claiming to be a browser; classified since 2020). Automation categories include conventional bots as well as possible AI traffic, so these series cannot isolate AI scraping.
       </p>
       {wmSeries.length > 0 ? (
         <figure className="home-chart">
@@ -106,8 +106,7 @@ export default async function BeforeAfterPage() {
         </a>
       </div>
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
-        Questions asked on Stack Overflow each month, counted from the public API. The place developers went for answers before assistants existed; the
-        drop after November 2022 is the clearest single measure of where those questions went.
+        Questions asked on Stack Overflow each month, counted from the public API. Changes in posting can have many causes; this series does not show where people sought answers instead.
       </p>
       {questions.length > 0 ? (
         <figure className="home-chart">
@@ -146,9 +145,9 @@ export default async function BeforeAfterPage() {
             line={monthly.map((m) => m.prsOpened)}
             lineLabel="All PRs opened per month"
             annotations={AI_MARKERS.map((a) => ({ ...a, day: `${a.day.slice(0, 7)}-01` })).filter((a) => monthly.some((m) => m.period === a.day.slice(0, 7)))}
-            title="Pull requests per month: all of GitHub and by agents"
+            title="Pull requests per month: observed in GH Archive and attributed to agents"
             xLabel={fmtMonth}
-            muted={monthly.map(isPartialArchive)}
+            muted={monthly.map((p) => isPartialArchive(p) || p.validatedHours < p.hours)}
             height={240}
           />
           <figcaption>
@@ -173,7 +172,7 @@ export default async function BeforeAfterPage() {
         <figure className="home-chart">
           <MultiLine series={robotsSeries} format={(v) => `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}%`} title="Share of sampled sites fully blocking each crawler" annotations={AI_MARKERS} height={240} />
           <figcaption>
-            About 40,000 sites sampled per crawl; whole-web shares. Earliest crawl counted so far: {census[0].date.slice(0, 7)}. Rung: quoted source plus this site&apos;s own sample.
+            Hosts with readable robots.txt sampled from Common Crawl; results are not representative whole-web shares. Earliest crawl counted so far: {census[0].date.slice(0, 7)}. Rung: quoted source plus this site&apos;s own sample.
           </figcaption>
         </figure>
       ) : (

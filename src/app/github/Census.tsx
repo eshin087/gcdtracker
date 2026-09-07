@@ -1,9 +1,10 @@
+import { CalendarHeatmap } from "@/components/census-charts";
 import { TimelineChart } from "@/components/charts";
 import { BarList, Empty } from "@/components/ui";
 import { fmtDate, fmtInt, fmtPct } from "@/lib/format";
 import { githubAgentLabel } from "@/lib/github/agents";
 import { GH_ARCHIVE } from "@/lib/ingest/gharchive";
-import { AGENT_LAUNCHES, type ArchivePeriod, type ArchiveSummary, fmtMonth, getArchiveAgents, getArchiveDaily, getArchiveMonthly, isPartialArchive } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, type ArchivePeriod, type ArchiveSummary, fmtMonth, getArchiveAgents, getArchiveDaily, getArchiveMonthly, getArchiveShareByDay, isComparableArchivePeriod, isPartialArchive } from "@/lib/stats-census";
 
 const TOOL_LABELS: Record<string, string> = {
   claude: "Claude (Code)",
@@ -38,7 +39,7 @@ function sumTools(periods: ArchivePeriod[], pick: (p: ArchivePeriod) => Record<s
 }
 
 export async function Census({ summary, db }: { summary: ArchiveSummary; db: boolean }) {
-  const [monthly, daily, agents] = await Promise.all([getArchiveMonthly(), getArchiveDaily(90), getArchiveAgents(30)]);
+  const [monthly, daily, agents, shareDays] = await Promise.all([getArchiveMonthly(), getArchiveDaily(90), getArchiveAgents(30), getArchiveShareByDay()]);
   if (monthly.length === 0) {
     return (
       <Empty db={db}>
@@ -47,6 +48,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
     );
   }
   const completeDaily = daily.filter((d) => d.hours === 24);
+  const legacyHours = monthly.reduce((sum, p) => sum + Math.max(0, p.hours - p.validatedHours), 0);
   const commitSigs = sumTools(monthly, (p) => p.commitSignatures);
   const prSigs = sumTools(monthly, (p) => p.prSignatures);
   const partialMonth = monthly.at(-1);
@@ -55,9 +57,9 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
   return (
     <>
       <p className="page-sub" style={{ maxWidth: "76ch" }}>
-        Every public GitHub event since {summary.firstDay ? fmtDate(summary.firstDay) : "the backfill started"}, counted hour by hour from{" "}
-        <a href={GH_ARCHIVE.site}>GH Archive</a>. No sampling and no search caps: an agent pull request is one opened by a known agent bot account
-        or on an agent branch prefix, and the share is measured against every pull request opened that hour.{" "}
+        Public events observed by GH Archive since {summary.firstDay ? fmtDate(summary.firstDay) : "the backfill started"}, counted hour by hour from{" "}
+        <a href={GH_ARCHIVE.site}>GH Archive</a>. A pull request is attributed to an agent when opened by a known agent bot account
+        or on an agent branch prefix, and the share uses pull requests present in the same archived hours. Archive gaps can bias both counts and shares.{" "}
         {summary.hours > 0 ? `${fmtInt(summary.hours)} hours stored across ${fmtInt(summary.completeDays)} days.` : ""}
       </p>
 
@@ -65,31 +67,38 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
         days={monthly.map(monthLabel)}
         bars={monthly.map((p) => p.agentPrs)}
         barLabel="Agent PRs opened per month"
-        line={monthly.map((p) => (p.prsOpened > 0 ? (100 * p.agentPrs) / p.prsOpened : 0))}
+        line={monthly.map((p) => isComparableArchivePeriod(p) && p.prsOpened > 0 ? (100 * p.agentPrs) / p.prsOpened : null)}
         lineLabel="Share of all PRs opened (%)"
         annotations={AGENT_LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
-        title="Agent pull requests across all of GitHub, by month"
+        title="Agent-attributed pull requests observed in GH Archive, by month"
         xLabel={fmtMonth}
-        muted={monthly.map(isPartialArchive)}
+        muted={monthly.map((p) => isPartialArchive(p) || p.validatedHours < p.hours)}
       />
       <p className="dim sans" style={{ fontSize: 12.5, marginTop: 6 }}>
+        {legacyHours > 0 ? `${fmtInt(legacyHours)} archived hours use legacy collection rules. Pale bars include those legacy periods; current headline comparisons use only validated complete days. ` : ""}
         {partialMonth && partialMonth.hours < 28 * 24 ? `${partialMonth.period} covers ${fmtInt(partialMonth.hours)} hours so far. ` : ""}
         {monthly.some(isPartialArchive)
-          ? `Pale bars mark months where GH Archive captured only part of GitHub's public feed (fewer than ${fmtInt(1_000)} pull requests an hour where GitHub normally opens several thousand): their counts are floors, and the share line is the number to read.`
+          ? `Pale bars mark periods with incomplete or unusually low archive coverage (fewer than ${fmtInt(1_000)} pull requests an hour where GitHub normally opens several thousand): both counts and shares may be biased.`
           : ""}
       </p>
 
+      {shareDays.length > 0 ? <figure className="home-chart">
+        <h2>Agent share by day</h2>
+        <CalendarHeatmap label="Agent share of observed pull requests per UTC day" days={shareDays.map((d) => ({ day: d.day, value: d.share, partial: d.partial || d.hours !== 24, title: d.day + " · " + (d.share === null ? "share unavailable" : fmtPct(d.share)) + " · " + fmtInt(d.agentPrs) + " of " + fmtInt(d.prsOpened) + " observed PRs · " + d.hours + "/24 hours" }))} />
+        <figcaption>Hatching marks incomplete or unusually low archive coverage. Missing coverage can distort shares; it does not imply zero activity. Shares are withheld for legacy, incomplete and unusually low-coverage periods.</figcaption>
+      </figure> : null}
+
       {completeDaily.length > 1 ? (
         <div style={{ marginTop: 28 }}>
-          <TimelineChart
+          <TimelineChart sharedScale
             days={completeDaily.map((d) => d.period)}
             bars={completeDaily.map((d) => d.agentPrs)}
             barLabel="Agent PRs opened per day"
             line={completeDaily.map((d) => d.prsOpened)}
             lineLabel="All PRs opened"
-            title="Last 90 complete days"
+            title="Recent days with 24 archived hours; coverage and rule versions may differ"
             height={220}
-            muted={completeDaily.map(isPartialArchive)}
+            muted={completeDaily.map((p) => isPartialArchive(p) || p.validatedHours < p.hours)}
           />
         </div>
       ) : null}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { readSaved, type SavedItem, writeSaved } from "@/components/SaveButton";
+import { readSaved, type SavedItem, writeSaved, subscribeSaved } from "@/components/saved-storage";
 import { relTime } from "@/lib/format";
 
 export function SavedList() {
@@ -10,8 +10,7 @@ export function SavedList() {
   useEffect(() => {
     const sync = () => setItems(readSaved());
     sync();
-    window.addEventListener("gcd:saved-changed", sync);
-    return () => window.removeEventListener("gcd:saved-changed", sync);
+    return subscribeSaved(sync);
   }, []);
 
   if (items === null) return <p className="sans dim">Loading…</p>;
@@ -31,7 +30,7 @@ export function SavedList() {
     a.href = url;
     a.download = "gcdtracker-saved.json";
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -56,7 +55,7 @@ export function SavedList() {
               {it.url ? <a href={it.url}>{it.title}</a> : it.title}
               {it.sub ? <span className="dim"> · {it.sub}</span> : null}
             </span>
-            <button type="button" className="save-btn is-saved" title="Remove" onClick={() => writeSaved(readSaved().filter((s) => s.id !== it.id))}>
+            <button type="button" className="save-btn is-saved" title="Remove" aria-label={"Remove " + it.title + " from saved"} onClick={() => writeSaved(readSaved().filter((s) => s.id !== it.id))}>
               ×
             </button>
           </div>

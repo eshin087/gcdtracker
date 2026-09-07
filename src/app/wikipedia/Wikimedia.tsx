@@ -96,8 +96,8 @@ export async function Wikimedia({ db }: { db: boolean }) {
           category ↗
         </a>
       </div>
-      <p className="page-sub">Files that Commons editors placed in the AI-generated categories. A human-curated label: high precision, unknown recall. {fmtInt(commons.last30d)} uploads in 30 days.</p>
-      {commons.byDay.some((d) => d.c > 0) ? <MiniChart days={commons.byDay.map((d) => d.day)} values={commons.byDay.map((d) => d.c)} label="AI-generated uploads per day" /> : null}
+      <p className="page-sub">Files that Commons editors placed in the AI-generated categories. A human-curated label with unknown error rates. {fmtInt(commons.last30d)} category additions in 30 days; these timestamps are not upload dates.</p>
+      {commons.byDay.some((d) => d.c > 0) ? <MiniChart days={commons.byDay.map((d) => d.day)} values={commons.byDay.map((d) => d.c)} label="AI-category additions per day" /> : null}
       {commons.rows.length > 0 ? (
         <div className="tbl-wrap" style={{ marginTop: 12 }}>
           <table className="tbl">
@@ -110,7 +110,7 @@ export async function Wikimedia({ db }: { db: boolean }) {
                   </td>
                   <td className="dim">{r.category}</td>
                   <td>
-                    <SaveButton item={{ id: `commons-${r.pageid}`, kind: "commons upload", title: r.title, url: commonsUrl(r.title) }} />
+                    <SaveButton item={{ id: `commons-${r.pageid}`, kind: "commons category addition", title: r.title, url: commonsUrl(r.title) }} />
                   </td>
                 </tr>
               ))}

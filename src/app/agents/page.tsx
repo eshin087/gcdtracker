@@ -18,12 +18,12 @@ export const metadata: Metadata = {
 function verification(d: AgentDef): string {
   if (d.controlTokenOnly) return "control token only";
   if (d.ipSource) return "published IP ranges";
-  if (d.rdns?.length) return "reverse DNS";
+  if (d.rdns?.length) return "reverse DNS documented; not checked here";
   return "user agent only";
 }
 
 function robotsLabel(r: AgentDef["robots"]): string {
-  return { yes: "respects", no: "ignores", partial: "may ignore", unknown: "unknown" }[r];
+  return { yes: "reported respect", no: "reported noncompliance", partial: "mixed reports", unknown: "unknown" }[r];
 }
 
 export default async function AgentsPage() {
@@ -100,7 +100,7 @@ function AgentTable({ defs, stats }: { defs: AgentDef[]; stats: Map<string, Awai
             <th>Agent</th>
             <th>Operator</th>
             <th>Category</th>
-            <th>robots.txt</th>
+            <th>Reported robots.txt policy</th>
             <th>Verification</th>
             <th className="num">Hits (90d)</th>
             <th>Last seen</th>

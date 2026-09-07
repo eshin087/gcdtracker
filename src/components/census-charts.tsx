@@ -85,7 +85,7 @@ export function MultiLine({
   let inkIndex = 0;
 
   return (
-    <svg className="chart multiline" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+    <div className="chart-scroll" tabIndex={0} role="region" aria-label={title + "; scroll horizontally on small screens"}><svg className="chart multiline" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
       <title>{title}</title>
       {ticks.map((t) => (
         <g key={t}>
@@ -140,7 +140,7 @@ export function MultiLine({
           {e.s.label} {format(e.value)}
         </text>
       ))}
-    </svg>
+    </svg></div>
   );
 }
 

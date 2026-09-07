@@ -39,9 +39,9 @@ export interface Annotation {
 
 export interface TimelineProps {
   days: string[];
-  bars: number[];
+  bars: Array<number | null>;
   barLabel: string;
-  line?: number[];
+  line?: Array<number | null>;
   lineLabel?: string;
   annotations?: Annotation[];
   height?: number;
@@ -50,13 +50,15 @@ export interface TimelineProps {
   xLabel?: (day: string) => string;
   /** bars drawn in the soft colour, e.g. periods with incomplete source coverage */
   muted?: boolean[];
+  /** Use a common scale when both series have the same unit. */
+  sharedScale?: boolean;
 }
 
 /**
  * Bars on the left axis, optional line on the right axis, dotted grid,
  * annotations as vertical rules with labels above the plot.
  */
-export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotations = [], height = 260, title, xLabel = fmtDay, muted }: TimelineProps) {
+export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotations = [], height = 260, title, xLabel = fmtDay, muted, sharedScale = false }: TimelineProps) {
   const W = 760;
   const H = height;
   const padL = 44;
@@ -74,8 +76,8 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
   const slot = plotW / n;
   const barW = Math.max(1, slot * 0.7);
 
-  const barMax = niceMax(Math.max(...bars, 0));
-  const lineMax = line ? niceMax(Math.max(...line, 0)) : 1;
+  const barMax = niceMax(Math.max(...[...bars, ...(sharedScale ? line ?? [] : [])].filter((v): v is number => v !== null && Number.isFinite(v)), 0));
+  const lineMax = sharedScale ? barMax : line ? niceMax(Math.max(...line.filter((v): v is number => v !== null && Number.isFinite(v)), 0)) : 1;
   const y = (v: number, max: number) => padT + plotH - (v / max) * plotH;
   const x = (i: number) => padL + i * slot + slot / 2;
 
@@ -86,11 +88,11 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
   // that would collide with it are dropped. ~6.2px per character at 11px.
   const lastLabelW = n > 1 ? (xLabel(days[n - 1]).length * 6.2) / 2 + 10 : 0;
   const linePath = line
-    ? line.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v, lineMax).toFixed(1)}`).join(" ")
+    ? line.map((v, i) => v === null || !Number.isFinite(v) || !days[i] ? "" : `${i === 0 || line[i - 1] === null || !Number.isFinite(line[i - 1]) ? "M" : "L"}${x(i).toFixed(1)},${y(v, lineMax).toFixed(1)}`).join(" ")
     : null;
 
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title ?? barLabel}>
+    <div className="chart-scroll" tabIndex={0} role="region" aria-label={(title ?? barLabel) + "; scroll horizontally on small screens"}><svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title ?? barLabel}>
       {title ? <title>{title}</title> : null}
       {ticks.map((t) => (
         <g key={t}>
@@ -106,7 +108,7 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
         </g>
       ))}
       <line className="axis" x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} />
-      {bars.map((v, i) => (
+      {bars.map((v, i) => v === null || !Number.isFinite(v) || !days[i] ? null : (
         <rect
           key={days[i]}
           className={muted?.[i] ? "bar soft" : "bar"}
@@ -155,32 +157,33 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
           </g>
         ) : null}
       </g>
-    </svg>
+    </svg></div>
   );
 }
 
 /** A compact bar chart with its own scale; used in small-multiple rows. */
-export function MiniChart({ days, values, label }: { days: string[]; values: number[]; label: string }) {
+export function MiniChart({ days, values, label, summarize = true, format = fmtInt }: { days: string[]; values: Array<number | null>; label: string; summarize?: boolean; format?: (value: number) => string }) {
   const W = 240;
   const H = 90;
   const padB = 16;
-  const max = niceMax(Math.max(...values, 0));
+  const max = niceMax(Math.max(...values.filter((v): v is number => v !== null && Number.isFinite(v)), 0));
   const n = Math.max(1, days.length);
   const slot = W / n;
   const barW = Math.max(1, slot * 0.7);
-  const total = values.reduce((a, b) => a + b, 0);
+  const total = values.reduce<number>((a, b) => a + (b ?? 0), 0);
   return (
     <div>
       <div className="label" style={{ marginBottom: 6 }}>
-        {label} <span className="mono" style={{ textTransform: "none", letterSpacing: 0 }}>· {fmtInt(total)}</span>
+        {label} {summarize ? <span className="mono" style={{ textTransform: "none", letterSpacing: 0 }}>· {format(total)}</span> : null}
       </div>
       <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         <line className="axis" x1={0} x2={W} y1={H - padB} y2={H - padB} />
         {values.map((v, i) => {
+          if (v === null || !Number.isFinite(v) || !days[i]) return null;
           const h = (v / max) * (H - padB - 4);
           return (
             <rect key={days[i]} className="bar" x={i * slot + (slot - barW) / 2} y={H - padB - h} width={barW} height={h}>
-              <title>{`${fmtDay(days[i])}: ${fmtInt(v)}`}</title>
+              <title>{`${fmtDay(days[i])}: ${format(v)}`}</title>
             </rect>
           );
         })}
