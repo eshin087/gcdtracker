@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { AI_CATEGORIES } from "@/lib/agents/types";
 import { db, type Db } from "@/lib/db";
 import {
@@ -69,13 +69,14 @@ export const EMPTY_WATCHED: WatchedSummary = {
 
 export async function getWatchedSummary(): Promise<WatchedSummary> {
   return safe(EMPTY_WATCHED, async (d) => {
-    const week = new Date(Date.now() - 7 * 86_400_000);
+    const week = new Date(daysAgo(7) + "T00:00:00Z");
+    const today = new Date(dayOf() + "T00:00:00Z");
     const month = new Date(Date.now() - 30 * 86_400_000);
     const quarter = new Date(Date.now() - 90 * 86_400_000);
     const [t] = await d
       .select({
         total: count(),
-        week: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${week})`,
+        week: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${week} and ${watchedPrs.createdAt} < ${today})`,
         month: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month})`,
         documented: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month} and ${watchedPrs.attribution} = 'documented_agent')`,
         self: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month} and ${watchedPrs.attribution} = 'self_disclosed')`,
@@ -215,6 +216,7 @@ export async function getTagWatch(): Promise<TagWatchRow[]> {
 
 export interface OsmDay {
   day: string;
+  observed: boolean;
   sampled: number;
   ai: number;
 }
@@ -226,14 +228,14 @@ export async function getOsmByDay(days = 60): Promise<OsmDay[]> {
     d.select({ day: osmDaily.day, sampled: osmDaily.sampled, aiAssisted: osmDaily.aiAssisted }).from(osmDaily).where(and(gte(osmDaily.day, since), eq(osmDaily.collectionVersion, 2))),
   );
   const map = new Map(rows.map((r) => [r.day, r]));
-  return dayRange(since, dayOf()).map((day) => ({ day, sampled: n(map.get(day)?.sampled), ai: n(map.get(day)?.aiAssisted) }));
+  return dayRange(since, dayOf()).map((day) => ({ day, observed: map.has(day), sampled: n(map.get(day)?.sampled), ai: n(map.get(day)?.aiAssisted) }));
 }
 
 export async function getOsmSummary(): Promise<{ ai7d: number; sampled7d: number; byEditor: Array<{ editor: string; c: number }>; byKind: Array<{ kind: string; c: number }>; recent: OsmRow[] }> {
   const empty = { ai7d: 0, sampled7d: 0, byEditor: [] as Array<{ editor: string; c: number }>, byKind: [] as Array<{ kind: string; c: number }>, recent: [] as OsmRow[] };
   return safe(empty, async (d) => {
-    const week = daysAgo(6);
-    const [t] = await d.select({ ai: sql`coalesce(sum(${osmDaily.aiAssisted}),0)`, sampled: sql`coalesce(sum(${osmDaily.sampled}),0)` }).from(osmDaily).where(and(gte(osmDaily.day, week), eq(osmDaily.collectionVersion, 2)));
+    const week = daysAgo(7);
+    const [t] = await d.select({ ai: sql`coalesce(sum(${osmDaily.aiAssisted}),0)`, sampled: sql`coalesce(sum(${osmDaily.sampled}),0)` }).from(osmDaily).where(and(gte(osmDaily.day, week), lt(osmDaily.day, dayOf()), eq(osmDaily.collectionVersion, 2)));
     const since = new Date(Date.now() - 30 * 86_400_000);
     const byEditor = await d.select({ editor: osmChangesets.editor, c: count() }).from(osmChangesets).where(and(gte(osmChangesets.ts, since), eq(osmChangesets.collectionVersion, 2))).groupBy(osmChangesets.editor).orderBy(desc(count())).limit(12);
     const byKind = await d.select({ kind: osmChangesets.aiKind, c: count() }).from(osmChangesets).where(and(gte(osmChangesets.ts, since), eq(osmChangesets.collectionVersion, 2))).groupBy(osmChangesets.aiKind).orderBy(desc(count()));
@@ -255,7 +257,7 @@ export async function getMcpSummary(days = 60): Promise<{ ready: boolean; total:
     const [state] = await d.select({ state: collectorState.state }).from(collectorState).where(eq(collectorState.key, "mcp"));
     if (!state?.state.initialComplete) return empty;
     const active = and(eq(mcpServers.syncVersion, 2), eq(mcpServers.status, "active"));
-    const [t] = await d.select({ total: count(), week: sql`count(*) filter (where ${mcpServers.publishedAt} >= ${new Date(Date.now() - 7 * 86_400_000)})` }).from(mcpServers).where(active);
+    const [t] = await d.select({ total: count(), week: sql`count(*) filter (where ${mcpServers.publishedAt} >= ${new Date(daysAgo(7) + "T00:00:00Z")} and ${mcpServers.publishedAt} < ${new Date(dayOf() + "T00:00:00Z")})` }).from(mcpServers).where(active);
     const per = await d
       .select({ day: dayCol(mcpServers.publishedAt), c: count() })
       .from(mcpServers)

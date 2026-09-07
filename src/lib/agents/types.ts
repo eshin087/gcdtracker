@@ -38,7 +38,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   "ai-tooling": "AI tooling / data provider",
   "search-engine": "Search engine",
   "other-bot": "Other bot",
-  human: "Human",
+  human: "Browser-like / unidentified",
 };
 
 export const CATEGORY_DESCRIPTIONS: Record<Category, string> = {
@@ -50,7 +50,7 @@ export const CATEGORY_DESCRIPTIONS: Record<Category, string> = {
   "ai-tooling": "Scrapers, readers and data providers that feed AI products.",
   "search-engine": "Classic search-engine crawlers. Not counted as AI.",
   "other-bot": "Monitors, link previewers, SEO crawlers, scripts. Not counted as AI.",
-  human: "Everything else: browsers driven by people (or agents that hide as one).",
+  human: "Requests without a recognized automation signal; may include people or undeclared agents.",
 };
 
 export type RobotsRespect = "yes" | "no" | "partial" | "unknown";

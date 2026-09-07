@@ -123,14 +123,14 @@ test("public APIs and exports omit private fixture fields", async ({ request }) 
   expect((await live.json()).status).toMatch(/^(live|stale|offline|degraded)$/);
 });
 
-test("research flow pauses all motion and honors reduced-motion preferences", async ({ page }) => {
+test("research flow pauses all motion and honors reduced-motion preferences", async ({ page, browser, baseURL }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/investigations", { waitUntil: "networkidle" });
   await expect(page.locator(".flow animateMotion").first()).toBeAttached();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.locator(".flow animateMotion")).toHaveCount(0);
   const ticker = page.locator(".flow-ticker .label");
-  const paused = await ticker.innerText();
+  const paused = (await ticker.textContent()) ?? "";
   await page.waitForTimeout(4200);
   await expect(ticker).toHaveText(paused);
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -140,7 +140,14 @@ test("research flow pauses all motion and honors reduced-motion preferences", as
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.locator(".flow animateMotion")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Motion off", exact: true })).toBeDisabled();
-  const reduced = await ticker.innerText();
+  const reduced = (await ticker.textContent()) ?? "";
   await page.waitForTimeout(4200);
   await expect(ticker).toHaveText(reduced);
+  const initialContext = await browser.newContext({ baseURL, javaScriptEnabled: false, reducedMotion: "reduce", extraHTTPHeaders: { Purpose: "prefetch" } });
+  try {
+    const initial = await initialContext.newPage();
+    await initial.goto("/investigations");
+    await expect(initial.locator(".flow-dot").first()).toBeAttached();
+    await expect(initial.locator(".flow-dot").first()).toBeHidden();
+  } finally { await initialContext.close(); }
 });

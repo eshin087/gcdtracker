@@ -75,7 +75,7 @@ export default async function ToolingPage() {
       <StatTiles
         tiles={[
           { value: agentWeek > 0 ? fmtInt(agentWeek) : "–", label: "recorded agent CLI downloads, 7 UTC days", sub: `${agentPkgs.filter((p) => p.coverage7d === 7).length}/${agentPkgs.length} packages cover all 7 days; missing days are not zeros` },
-          { value: mcp.ready ? fmtInt(mcp.new7d) : "–", label: "MCP servers published, 7 days", sub: mcp.ready ? `${fmtInt(mcp.total)} active entries tracked` : "Initial registry reconciliation incomplete" },
+          { value: mcp.ready ? fmtInt(mcp.new7d) : "–", label: "Active MCP entries published, 7 UTC days", sub: mcp.ready ? `${fmtInt(mcp.total)} active entries tracked` : "Initial registry reconciliation incomplete" },
           { value: lastFull ? fmtInt(lastFull.value) : "–", label: "AI-attributed commits on GitHub, last full month", sub: lastFull ? `${lastFull.period} · botcommits.dev` : "botcommits.dev" },
           { value: hfLatest[0] ? `${hfLatest[0].value.toFixed(0)}%` : "–", label: hfLatest[0] ? `of agent requests to Hugging Face from ${hfLatest[0].agent}` : "Hugging Face agent usage", sub: hfLatest[0]?.day ? `on ${hfLatest[0].day}` : undefined },
           { value: hubRate !== null ? fmtInt(hubRate) : "–", label: "new Hub models per hour", sub: "from the newest 100 model repos" },
@@ -134,7 +134,7 @@ export default async function ToolingPage() {
         <Empty db={db}>No active entries recorded.</Empty>
       ) : (
         <>
-          <MiniChart days={mcp.byDay.map((d) => d.day)} values={mcp.byDay.map((d) => d.c)} label="Servers published per day" />
+          <MiniChart days={mcp.byDay.map((d) => d.day)} values={mcp.byDay.map((d) => d.c)} label="Active registry entries by publication day" />
           <div className="tbl-wrap" style={{ marginTop: 16 }}>
             <table className="tbl">
               <thead>

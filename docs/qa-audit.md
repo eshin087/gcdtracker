@@ -33,16 +33,16 @@ The reproducible before/after comparison uses the **same synthetic local databas
 
 | Homepage measure | Original main | Repaired | Reduction |
 |---|---:|---:|---:|
-| Decoded HTML | 1,043,943 bytes | 55,853 bytes | 94.7% |
+| Decoded HTML | 1,043,943 bytes | 55,897 bytes | 94.6% |
 | DOM elements | 6,652 | 366 | 94.5% |
-| Encoded HTML | 95,970 bytes | 10,749 bytes | 88.8% |
+| Encoded HTML | 95,970 bytes | 10,757 bytes | 88.8% |
 | Font preload links | 7 | 2 | 71.4% |
 
 The 60% reduction targets are exceeded. The seeded and live baseline sizes differ because their datasets differ; these are not interchangeable comparisons. TTFB/DCL are single-machine observations and are **not** production Core Web Vitals or Lighthouse scores. No INP claim is made.
 
 ## Validation
 
-Local validation: 191 unit tests and 24 PostgreSQL integration tests pass. The final browser and hosted CI results are recorded in the PR. Validation includes:
+Local validation: 191 unit tests, 24 PostgreSQL integration tests and all 13 Chromium browser tests pass. The PR records hosted CI results. Validation includes:
 
 - Full lint, TypeScript and unit suite; all-dependency audit; offline production build.
 - Real PostgreSQL through the production Neon HTTP/Drizzle driver: concurrent guestbook limits, post-lock visibility, rollback, IP normalization, privacy, collector replay, corrected archive replacement, OSM deduplication and checkpoint CAS.
@@ -62,6 +62,8 @@ No production quota tests, write requests, historical replay or database migrati
 ![Repaired mobile homepage, light theme](qa/home-light-390.png)
 
 ![Repaired mobile homepage, dark theme](qa/home-dark-390.png)
+
+![Research flow with units and motion controls, dark mobile layout](qa/investigations-dark-390.png)
 
 ## Remaining limitations
 

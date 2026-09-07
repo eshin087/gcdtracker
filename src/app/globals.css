@@ -421,7 +421,7 @@
   .bar-row { grid-template-columns: minmax(78px, 1fr) minmax(30px, 1.5fr) 56px; gap: 8px; }
   .flow-ticker { flex-wrap: wrap; }
 }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .flow-dot { display: none; } }
 
 .chart-scroll { max-width: 100%; overflow-x: auto; margin-bottom: 8px; }
 .chart-scroll > .chart { min-width: 760px; }

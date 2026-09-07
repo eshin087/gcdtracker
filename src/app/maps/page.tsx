@@ -35,6 +35,7 @@ export default async function MapsPage() {
         sub="OpenStreetMap publishes every changeset. We sample the newest ones continuously and keep those made with AI-suggested geometry (RapiD, MapWithAI), automated QA tools, or bots. Editor names are self-declared by the software, so this is a self-identified rung."
       />
       <p className="dim sans">Counts use the current collection method only. Earliest displayed changeset date: {byDay.find((d) => d.sampled > 0)?.day ?? "not yet available"}; earlier overlapping samples are excluded.</p>
+      <p className="meta">Seven-day totals use the preceding seven completed UTC dates. Gaps mean no sample was recorded; even an observed date may contain only a capped sample.</p>
       <StatTiles
         tiles={[
           { value: any ? fmtInt(summary.ai7d) : "–", label: "AI-assisted or bot changesets, 7 days", sub: `${fmtInt(summary.sampled7d)} changesets sampled` },
@@ -47,8 +48,8 @@ export default async function MapsPage() {
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24, margin: "0 0 28px" }}>
-            <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.ai)} label="AI-assisted changesets per day" />
-            <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.sampled)} label="Changesets sampled per day" />
+            <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.observed ? d.ai : null)} label="AI-assisted changesets per day" />
+            <MiniChart days={byDay.map((d) => d.day)} values={byDay.map((d) => d.observed ? d.sampled : null)} label="Changesets sampled per day" />
             <div>
               <div className="label" style={{ marginBottom: 6 }}>
                 By kind · 30 days
