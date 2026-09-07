@@ -131,7 +131,7 @@ export default async function HomePage() {
             <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: 24, alignItems: "start", marginTop: 14 }}>
               <div>
                 <div className="label" style={{ marginBottom: 6 }}>
-                  By weekday · complete days only
+                  By weekday · last 26 weeks, complete days only
                 </div>
                 <BarList rows={weekday.map((w) => ({ key: w.label, label: w.label, value: 100 * w.share, title: `${w.days} days` }))} format={(v) => `${v.toFixed(1)}%`} />
               </div>

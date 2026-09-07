@@ -128,11 +128,11 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: string }) {
   if (days.length === 0) return null;
-  const cell = 10;
-  const gap = 2;
+  const cell = 7;
+  const gap = 1;
   const step = cell + gap;
-  const padL = 30;
-  const padT = 18;
+  const padL = 28;
+  const padT = 16;
   const byDay = new Map(days.map((d) => [d.day, d]));
   const first = new Date(`${days[0].day}T00:00:00Z`);
   const last = new Date(`${days[days.length - 1].day}T00:00:00Z`);
@@ -151,7 +151,7 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
     const key = date.toISOString().slice(0, 10);
     const week = Math.floor(i / 7);
     const dow = (date.getUTCDay() + 6) % 7;
-    if (date.getUTCMonth() !== lastMonth && dow === 0) {
+    if (date.getUTCMonth() !== lastMonth && dow === 0 && date >= first) {
       lastMonth = date.getUTCMonth();
       monthLabels.push({ x: padL + week * step, text: date.getUTCMonth() === 0 ? `${MONTHS[0]} ${date.getUTCFullYear()}` : MONTHS[date.getUTCMonth()] });
     }
@@ -160,7 +160,7 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
   }
   return (
     <div style={{ overflowX: "auto" }}>
-      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={label} style={{ width: W, maxWidth: "none" }}>
+      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} style={{ minWidth: Math.min(W, 640) }}>
         <title>{label}</title>
         <defs>
           <pattern id="hatch" patternUnits="userSpaceOnUse" width={4} height={4} patternTransform="rotate(45)">

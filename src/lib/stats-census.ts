@@ -184,12 +184,13 @@ export async function getArchiveShareByDay(): Promise<ShareDay[]> {
   });
 }
 
-/** Agent share by weekday over complete, non-partial days. */
-export function shareByWeekday(days: ShareDay[]): Array<{ dow: number; label: string; share: number; days: number }> {
+/** Agent share by weekday over complete, non-partial days in the last `window` days. */
+export function shareByWeekday(days: ShareDay[], window = 182): Array<{ dow: number; label: string; share: number; days: number }> {
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const acc = labels.map((label, dow) => ({ dow, label, prs: 0, agent: 0, days: 0 }));
+  const since = daysAgo(window);
   for (const d of days) {
-    if (d.hours !== 24 || d.partial || d.share === null) continue;
+    if (d.day < since || d.hours !== 24 || d.partial || d.share === null) continue;
     const dow = (new Date(`${d.day}T00:00:00Z`).getUTCDay() + 6) % 7;
     acc[dow].prs += d.prsOpened;
     acc[dow].agent += d.agentPrs;
@@ -317,7 +318,6 @@ export const ROBOTS_ROLES: Record<string, "training" | "search" | "fetcher" | "c
   YouBot: "search",
   DuckAssistBot: "search",
   AI2Bot: "training",
-  PetalBot: "training",
   Googlebot: "control",
   Bingbot: "control",
 };
