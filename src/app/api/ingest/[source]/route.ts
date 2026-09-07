@@ -17,6 +17,7 @@ import { retentionJob } from "@/lib/ingest/retention";
 import { ghArchiveJob } from "@/lib/ingest/gharchive";
 import { robotsCensusJob } from "@/lib/ingest/robots-census";
 import { packagesJob } from "@/lib/ingest/packages";
+import { aiRobotsHistoryJob } from "@/lib/ingest/ai-robots-history";
 import { wikipediaJob } from "@/lib/ingest/wikipedia";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ const JOBS: Record<string, Job> = {
   // Fed by GitHub Actions workers that post pre-aggregated results (never part of `all`).
   gharchive: ghArchiveJob,
   "robots-census": robotsCensusJob,
+  "ai-robots-history": aiRobotsHistoryJob,
 };
 
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */

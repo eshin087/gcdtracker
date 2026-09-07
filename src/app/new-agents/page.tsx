@@ -3,7 +3,9 @@ import { SaveButton } from "@/components/SaveButton";
 import { Empty, PageHeader, StatTiles } from "@/components/ui";
 import { fmtInt, fmtStamp, relTime } from "@/lib/format";
 import { hasDatabase } from "@/lib/stats";
-import { getSightings } from "@/lib/stats-sources";
+import { getSeries, getSightings } from "@/lib/stats-sources";
+import { TimelineChart } from "@/components/charts";
+import { fmtMonth } from "@/lib/stats-census";
 
 export const revalidate = 300;
 
@@ -14,7 +16,9 @@ export const metadata: Metadata = {
 
 export default async function NewAgentsPage() {
   const db = hasDatabase();
-  const { rows, counts, new30d } = await getSightings(200);
+  const [{ rows, counts, new30d }, history] = await Promise.all([getSightings(200), getSeries("ai-robots-history")]);
+  const perMonth = history["new-tokens"] ?? [];
+  const cumulative = perMonth.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? 0) + p.value], []);
   const signed = rows.filter((r) => r.kind === "signature-registry");
   const tokens = rows.filter((r) => r.kind === "ai-robots-txt");
 
@@ -28,9 +32,27 @@ export default async function NewAgentsPage() {
         tiles={[
           { value: fmtInt(counts["ai-robots-txt"] ?? 0), label: "crawler tokens catalogued", sub: "ai.robots.txt" },
           { value: fmtInt(counts["signature-registry"] ?? 0), label: "agents that sign requests", sub: "Web Bot Auth registry" },
-          { value: fmtInt(new30d), label: "first seen in the last 30 days" },
+          { value: fmtInt(new30d), label: "first listed in the last 30 days", sub: "dated from the ai.robots.txt history" },
         ]}
       />
+      {perMonth.length > 3 ? (
+        <figure className="home-chart">
+          <TimelineChart
+            days={perMonth.map((p) => `${p.period}-01`)}
+            bars={perMonth.map((p) => p.value)}
+            barLabel="Crawler tokens first listed, per month"
+            line={cumulative}
+            lineLabel="Tokens on the list"
+            title="New AI crawler identities per month"
+            height={220}
+            xLabel={fmtMonth}
+          />
+          <figcaption>
+            When each token now on the ai.robots.txt list first appeared in the list&apos;s git history. The list records when maintainers noticed a crawler, which lags
+            launches by weeks; the March 2024 bar is the list&apos;s own start. Security teams read this as the number of new bot identities needing rules each month.
+          </figcaption>
+        </figure>
+      ) : null}
       {rows.length === 0 ? (
         <Empty db={db}>The agent watch runs daily.</Empty>
       ) : (

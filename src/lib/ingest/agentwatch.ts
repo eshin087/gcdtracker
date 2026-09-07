@@ -78,14 +78,16 @@ export const agentWatchJob: Job = async (ctx) => {
   // 3. Hugging Face agent-usage dataset (share of Hub requests per coding agent, per day).
   if (timeLeft(ctx) > 15_000) {
     const rows: Array<{ source: string; series: string; period: string; value: number; lo: number | null; hi: number | null }> = [];
-    let offset = 0;
-    let total = Infinity;
+    // The dataset grows past any fixed page count, so find its size and read the newest rows.
+    const probe = await fetchJson<{ num_rows_total?: number }>(`${AGENT_WATCH.hfDaily}&offset=0&length=1`);
+    const total = probe.status === 200 ? (probe.body?.num_rows_total ?? 0) : 0;
+    const window = 2_500;
+    let offset = Math.max(0, total - window);
     for (let page = 0; page < 25 && offset < total; page++) {
-      const { status, body } = await fetchJson<{ rows?: Array<{ row: { day: string; agent: string; pct_requests: number; pct_users: number } }>; num_rows_total?: number }>(
+      const { status, body } = await fetchJson<{ rows?: Array<{ row: { day: string; agent: string; pct_requests: number; pct_users: number } }> }>(
         `${AGENT_WATCH.hfDaily}&offset=${offset}&length=100`,
       );
       if (status !== 200 || !body?.rows) break;
-      total = body.num_rows_total ?? 0;
       for (const { row } of body.rows) {
         rows.push({ source: "hf-agent-usage", series: `${row.agent}:requests`, period: row.day, value: row.pct_requests, lo: null, hi: null });
         rows.push({ source: "hf-agent-usage", series: `${row.agent}:users`, period: row.day, value: row.pct_users, lo: null, hi: null });
@@ -100,6 +102,8 @@ export const agentWatchJob: Job = async (ctx) => {
         .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, fetchedAt: new Date() } });
     }
     stats.hfRows = rows.length;
+    stats.hfTotal = total;
+    stats.hfLatest = rows.map((r) => r.period).sort().at(-1) ?? null;
   }
 
   // 4. Hub creation rate: how many repos were created in the last hour (denominator for agent activity).

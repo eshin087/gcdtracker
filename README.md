@@ -29,6 +29,7 @@ src/lib/ingest/              one job per source (wikipedia, wikimedia, github, w
                              gharchive and robots-census receive results from the Actions workers)
 scripts/gharchive.mjs        GH Archive census worker (.github/workflows/gharchive.yml, every 3 hours + backfill)
 scripts/robots-census.mjs    Common Crawl robots.txt census worker (.github/workflows/robots-census.yml, weekly)
+scripts/ai-robots-history.mjs dates every crawler token from the ai.robots.txt git history (.github/workflows/ai-robots-history.yml, monthly)
 src/lib/github/signatures.ts self-disclosure rules
 src/app/api/ingest/[source]  protected job runner (Bearer CRON_SECRET)
 src/lib/stats*.ts            every page query, with empty shapes when the database is absent
@@ -96,6 +97,7 @@ Two heavier workers also run in Actions because their inputs are far too large f
 
 - `gharchive.yml` streams GH Archive hourly files every three hours (`--auto` fills any gap in the last week). A backfill is a manual run with `from`, `to` and `shards` (up to 16 parallel jobs; each hour takes 2 to 10 seconds, so a year is roughly 16 machine-hours). Re-running a backfill only processes hours still missing.
 - `robots-census.yml` samples 100 robots.txt archive files from every Common Crawl crawl not yet stored, weekly. A first run backfills every crawl since 2023 (about 35 crawls, a minute or two each).
+- `ai-robots-history.yml` clones the ai.robots.txt list and walks its git history to date every token's first listing (monthly, about 90 seconds). Sightings only ever move earlier.
 
 ## Reviewing self-disclosure signals
 
