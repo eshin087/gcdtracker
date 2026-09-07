@@ -257,6 +257,20 @@
 .chart .line { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
 .chart .line.secondary { stroke: var(--muted); stroke-dasharray: 4 3; }
 .chart .annot text { fill: var(--ink-2); font-size: 10.5px; }
+.multiline .series path { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
+.multiline .series circle { stroke: none; }
+.multiline .series.ink path { stroke: var(--ink); }
+.multiline .series.ink circle { fill: var(--ink); }
+.multiline .series.accent path { stroke: var(--accent); stroke-width: 2.2; }
+.multiline .series.accent circle { fill: var(--accent); }
+.multiline .series.control path { stroke: var(--muted); stroke-dasharray: 4 3; }
+.multiline .series.control circle { fill: var(--muted); }
+.multiline .end-label { font-size: 11px; fill: var(--ink-2); }
+.multiline .end-label.accent { fill: var(--accent-ink); font-weight: 600; }
+.multiline .end-label.control { fill: var(--muted); }
+.heatmap .cell { fill: var(--accent); }
+.heatmap .hatch { stroke: var(--bg); stroke-width: 1.4; }
+.heatmap text { font-size: 10px; }
 .chart .annot line { stroke: var(--rule-strong); }
 .chart .legend text { fill: var(--ink-2); }
 .spark { display: inline-block; vertical-align: middle; }

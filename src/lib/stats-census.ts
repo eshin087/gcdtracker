@@ -152,6 +152,52 @@ export async function getArchiveSummary(): Promise<ArchiveSummary> {
   return { latest, last7, prior7, firstDay: coverage.first, completeDays: coverage.days, hours: coverage.hours };
 }
 
+export interface ShareDay {
+  day: string;
+  hours: number;
+  prsOpened: number;
+  agentPrs: number;
+  /** 0..1, null when the day has no PRs */
+  share: number | null;
+  partial: boolean;
+}
+
+/** Agent share of all PRs opened, one row per day, for the calendar. */
+export async function getArchiveShareByDay(): Promise<ShareDay[]> {
+  const rows = await safe([] as Array<{ day: string; hours: number; agent: number; prs: number }>, async (d) =>
+    d
+      .select({
+        day: ghArchiveDaily.day,
+        hours: ghArchiveDaily.hours,
+        agent: sql<number>`coalesce(sum(case when ${ghArchiveDaily.kind} = 'agent-prs' then ${ghArchiveDaily.value} end), 0)::int`,
+        prs: sql<number>`coalesce(sum(case when ${ghArchiveDaily.kind} = 'total' and ${ghArchiveDaily.key} = 'prs_opened' then ${ghArchiveDaily.value} end), 0)::int`,
+      })
+      .from(ghArchiveDaily)
+      .where(sql`${ghArchiveDaily.kind} in ('agent-prs', 'total')`)
+      .groupBy(ghArchiveDaily.day, ghArchiveDaily.hours)
+      .orderBy(ghArchiveDaily.day),
+  );
+  return rows.map((r) => {
+    const prs = n(r.prs);
+    const hours = n(r.hours);
+    return { day: r.day, hours, prsOpened: prs, agentPrs: n(r.agent), share: prs > 0 ? n(r.agent) / prs : null, partial: hours > 0 && prs / hours < PARTIAL_ARCHIVE_PRS_PER_HOUR };
+  });
+}
+
+/** Agent share by weekday over complete, non-partial days. */
+export function shareByWeekday(days: ShareDay[]): Array<{ dow: number; label: string; share: number; days: number }> {
+  const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const acc = labels.map((label, dow) => ({ dow, label, prs: 0, agent: 0, days: 0 }));
+  for (const d of days) {
+    if (d.hours !== 24 || d.partial || d.share === null) continue;
+    const dow = (new Date(`${d.day}T00:00:00Z`).getUTCDay() + 6) % 7;
+    acc[dow].prs += d.prsOpened;
+    acc[dow].agent += d.agentPrs;
+    acc[dow].days++;
+  }
+  return acc.map((a) => ({ dow: a.dow, label: a.label, share: a.prs > 0 ? a.agent / a.prs : 0, days: a.days }));
+}
+
 /** Agent totals over the last N complete days, for ranking. */
 export async function getArchiveAgents(days = 30): Promise<Array<{ agent: string; prs: number; merged: number }>> {
   const rows = await safe([] as Array<{ kind: string; key: string; value: number }>, async (d) =>
@@ -243,6 +289,37 @@ export const ROBOTS_OPERATORS: Record<string, string> = {
   Googlebot: "Google (search, control)",
   Bingbot: "Microsoft (search, control)",
   "*": "every crawler",
+};
+
+/** How each operator splits its crawlers: what trains models, what serves search, what fetches for a user. */
+export const ROBOTS_ROLES: Record<string, "training" | "search" | "fetcher" | "control"> = {
+  GPTBot: "training",
+  "OAI-SearchBot": "search",
+  "ChatGPT-User": "fetcher",
+  ClaudeBot: "training",
+  "anthropic-ai": "training",
+  "Claude-Web": "training",
+  "Claude-SearchBot": "search",
+  "Claude-User": "fetcher",
+  CCBot: "training",
+  "Google-Extended": "training",
+  PerplexityBot: "search",
+  "Perplexity-User": "fetcher",
+  Bytespider: "training",
+  "Applebot-Extended": "training",
+  Amazonbot: "training",
+  "meta-externalagent": "training",
+  FacebookBot: "training",
+  "cohere-ai": "training",
+  Diffbot: "training",
+  ImagesiftBot: "training",
+  omgili: "training",
+  YouBot: "search",
+  DuckAssistBot: "search",
+  AI2Bot: "training",
+  PetalBot: "training",
+  Googlebot: "control",
+  Bingbot: "control",
 };
 
 /* ------------------------------------------------------------------ */

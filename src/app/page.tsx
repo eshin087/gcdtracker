@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AgentFlow } from "@/components/AgentFlow";
-import { MiniChart, TimelineChart } from "@/components/charts";
+import { TimelineChart } from "@/components/charts";
 import { Rail, type RailItem } from "@/components/Rail";
 import { SaveButton } from "@/components/SaveButton";
 import { SourceCard, StatTiles } from "@/components/ui";
@@ -9,7 +9,9 @@ import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
 import { getIngestStatus, getOverview, getTimeline, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
-import { AGENT_LAUNCHES, fmtMonth, getArchiveMonthly, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, fmtMonth, getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive, ROBOTS_OPERATORS, ROBOTS_ROLES, shareByWeekday } from "@/lib/stats-census";
+import { CalendarHeatmap, type LineSeries, MultiLine } from "@/components/census-charts";
+import { BarList } from "@/components/ui";
 
 export const revalidate = 60;
 
@@ -23,7 +25,15 @@ const RAIL: RailItem[] = [
 
 export default async function HomePage() {
   const db = hasDatabase();
-  const [archive, archiveMonthly, packages, census] = await Promise.all([getArchiveSummary(), getArchiveMonthly(), getPackageStats(), getRobotsCensus()]);
+  const [archive, archiveMonthly, packages, census, shareDays] = await Promise.all([getArchiveSummary(), getArchiveMonthly(), getPackageStats(), getRobotsCensus(), getArchiveShareByDay()]);
+  // Robots wall: the six most-blocked AI crawlers in the latest crawl, Googlebot as the control.
+  const pct = (c: (typeof census)[number], t: string) => (c.sites > 0 ? (100 * (c.tokens[t]?.blocked ?? 0)) / c.sites : 0);
+  const wallTokens = latestCrawlTokens(census);
+  const wallSeries: LineSeries[] = wallTokens.map((t, i) => ({ key: t, label: t, style: i === 0 ? "accent" : "ink", points: census.map((c) => ({ x: c.date, y: pct(c, t) })) }));
+  if (census.length) wallSeries.push({ key: "Googlebot", label: "Googlebot (control)", style: "control", points: census.map((c) => ({ x: c.date, y: pct(c, "Googlebot") })) });
+  const weekday = shareByWeekday(shareDays);
+  const maxShareDay = shareDays.reduce((m, d) => Math.max(m, d.share ?? 0), 0);
+  const weekendLift = weekday[6].share > 0 && weekday[0].share > 0 ? weekday[6].share / weekday[0].share : null;
   const latestCrawl = census.at(-1) ?? null;
   const agentInstalls7d = packages.filter((p) => p.def.role === "agent").reduce((s, p) => s + p.last7, 0);
   const [overview, timeline, watched, runs, flow, records, osm, mcp, sightings] = await Promise.all([
@@ -37,8 +47,6 @@ export default async function HomePage() {
     getMcpSummary(30),
     getSightings(1),
   ]);
-  const days = timeline.map((t) => t.day);
-  const anyTraffic = timeline.some((t) => t.aiVisits > 0);
   const lastIngest = runs.find((r) => r.ok)?.finishedAt ?? null;
 
   return (
@@ -107,23 +115,70 @@ export default async function HomePage() {
           </figure>
         ) : null}
 
-        <figure className="home-chart">
-          {anyTraffic ? (
-            <>
-              <TimelineChart days={days} bars={timeline.map((t) => t.aiVisits)} barLabel="AI visits to this site per day" annotations={overview.sensorSince ? [{ day: overview.sensorSince.slice(0, 10), label: "sensor live" }] : []} />
-              <figcaption>Requests classified as AI crawlers, user-triggered fetchers, browsing agents or coding tools, per UTC day.</figcaption>
-            </>
-          ) : (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 22 }}>
-                <MiniChart days={days} values={timeline.map((t) => t.wikiFlagged)} label="Wikipedia edits flagged" />
-                <MiniChart days={days} values={timeline.map((t) => t.agentPrs)} label="GitHub PRs by agent accounts" />
-                <MiniChart days={days} values={timeline.map((t) => t.forumPosts)} label="Agent-forum posts" />
+        {shareDays.length > 30 ? (
+          <figure className="home-chart">
+            <div className="label" style={{ marginBottom: 8 }}>
+              Agent share of every pull request opened on GitHub · one cell per UTC day since {fmtDate(shareDays[0].day)} · darker is higher, up to {fmtPct(maxShareDay)}
+            </div>
+            <CalendarHeatmap
+              label="Agent share of pull requests, per day"
+              days={shareDays.map((d) => ({
+                day: d.day,
+                value: d.share,
+                partial: d.partial,
+                title: `${d.day} · ${d.share === null ? "no data" : fmtPct(d.share)} · ${fmtInt(d.agentPrs)} of ${fmtInt(d.prsOpened)} PRs${d.hours < 24 ? ` · ${d.hours} of 24 hours` : ""}${d.partial ? " · partial archive" : ""}`,
+              }))}
+            />
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: 24, alignItems: "start", marginTop: 14 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>
+                  By weekday · complete days only
+                </div>
+                <BarList rows={weekday.map((w) => ({ key: w.label, label: w.label, value: 100 * w.share, title: `${w.days} days` }))} format={(v) => `${v.toFixed(1)}%`} />
               </div>
-              <figcaption>The last 60 days per sensor, each on its own scale.</figcaption>
-            </>
-          )}
-        </figure>
+              <figcaption style={{ marginTop: 0 }}>
+                Share is the honest encoding: the pale hatched days are ones where GH Archive captured only part of GitHub&apos;s feed, and a share survives that where a count does not.
+                {weekendLift ? ` Agents take a larger slice at the weekend (${fmtPct(weekday[6].share)} on Sundays against ${fmtPct(weekday[0].share)} on Mondays), because humans open fewer pull requests then.` : ""}{" "}
+                The share is the same at 3 a.m. as at 3 p.m., so a person is still pressing the button. Bot accounts and agent branch prefixes both count; the method is on the{" "}
+                <Link href="/github">census page</Link>.
+              </figcaption>
+            </div>
+          </figure>
+        ) : null}
+
+        {wallSeries.length > 1 && latestCrawl ? (
+          <figure className="home-chart">
+            <MultiLine series={wallSeries} format={(v) => `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}%`} title="Share of the web that fully blocks each AI crawler, per Common Crawl crawl" height={280} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24, alignItems: "start", marginTop: 12 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>
+                  Blocked outright · crawl of {fmtDate(latestCrawl.date)} · {fmtInt(latestCrawl.sites)} sites
+                </div>
+                <BarList
+                  rows={rankedTokens(latestCrawl).map((r) => ({
+                    key: r.token,
+                    label: (
+                      <>
+                        {r.token} <span className="dim">· {ROBOTS_OPERATORS[r.token] ?? ""}</span> <span className={`badge ${r.role === "training" ? "warn" : ""}`}>{r.role}</span>
+                      </>
+                    ),
+                    value: r.blocked,
+                    secondary: r.mentioned,
+                    title: `named by ${r.mentioned.toFixed(2)}% of sites`,
+                  }))}
+                  format={(v) => `${v.toFixed(2)}%`}
+                />
+              </div>
+              <figcaption style={{ marginTop: 0 }}>
+                Every Common Crawl crawl archives the robots.txt of the sites it visits; a sample of about {fmtInt(Math.round(latestCrawl.sites / 1000) * 1000)} per crawl is read here, back to
+                January 2023. A site counts as blocking when it gives that crawler <code className="mono">Disallow: /</code>. These are whole-web shares, far below the figures
+                published for large news sites, and each crawl samples different hosts, so read the trend, not one point. The training crawlers draw nearly all of the blocking; the
+                fetchers that read a page for a user (ChatGPT-User, Claude-User) are almost never named, partly because they are younger tokens and partly because their operators say
+                robots.txt may not apply to them. Grey bars: share of sites naming the token at all. <Link href="/traffic">More on the traffic page</Link>.
+              </figcaption>
+            </div>
+          </figure>
+        ) : null}
 
         <h2 id="collected" className="page-title" style={{ fontSize: 26, margin: "10px 0 12px", scrollMarginTop: 80 }}>
           What is collected
@@ -192,4 +247,23 @@ export default async function HomePage() {
       </div>
     </div>
   );
+}
+
+/** The six AI crawlers most often blocked in the latest crawl (controls and the wildcard excluded). */
+function latestCrawlTokens(census: Awaited<ReturnType<typeof getRobotsCensus>>): string[] {
+  const latest = census.at(-1);
+  if (!latest) return [];
+  return Object.entries(latest.tokens)
+    .filter(([t]) => ROBOTS_ROLES[t] && ROBOTS_ROLES[t] !== "control")
+    .sort((a, b) => b[1].blocked - a[1].blocked)
+    .slice(0, 6)
+    .map(([t]) => t);
+}
+
+function rankedTokens(c: Awaited<ReturnType<typeof getRobotsCensus>>[number]) {
+  return Object.entries(c.tokens)
+    .filter(([t]) => ROBOTS_ROLES[t] && ROBOTS_ROLES[t] !== "control")
+    .map(([t, v]) => ({ token: t, role: ROBOTS_ROLES[t], blocked: (100 * v.blocked) / c.sites, mentioned: (100 * v.mentioned) / c.sites }))
+    .sort((a, b) => b.blocked - a.blocked)
+    .slice(0, 12);
 }
