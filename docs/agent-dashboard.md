@@ -23,4 +23,16 @@ No migration or repair job is required by this follow-up. Reverting its commits 
 
 ## Validation
 
-Static checks, unit tests, an offline production build, browser interaction checks and isolated PostgreSQL aggregation regressions accompany this change. CI saves viewport/theme screenshots and seeded homepage measurements. Final measured results are recorded below after verification.
+Local lint, TypeScript, all 195 unit tests and an offline production build pass. Seven browser checks cover the populated offline demo, four responsive widths and light/dark reduced-motion layouts. A direct motion check confirmed that the animated dots move and Pause removes their motion.
+
+Hosted CI runs the complete browser suite and 27 actual PostgreSQL integration tests, including UTC boundaries, private-field exclusion, collection failure and the coding-agent remainder. The local Docker engine could not restart because Windows would not release its stale runtime socket; no production database was used. CI retains seeded homepage measurements and screenshots; the PR description records the final results and any limitations.
+
+## Screenshots
+
+The sample-data demo at 1440 pixels:
+
+![Synthetic dashboard demo at 1440 pixels](qa/dashboard-demo-1440.png)
+
+Dark theme at 390 pixels. The wide diagram scrolls inside its frame:
+
+![Synthetic dashboard demo at 390 pixels](qa/dashboard-demo-dark-390.png)

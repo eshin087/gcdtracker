@@ -11,7 +11,6 @@ let bridge: Awaited<ReturnType<typeof createNeonBridge>>;
 beforeAll(async () => {
   bridge = await createNeonBridge();
   state.db = bridge.db;
-
 });
 afterAll(async () => { state.db = null; await bridge?.close(); });
 

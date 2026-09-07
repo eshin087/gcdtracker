@@ -63,13 +63,13 @@ export function AgentFlow({ data, records }: { data: FlowData; records: LatestRe
             const duration = 5 + (1 - weight) * 4;
             return <g key={link.source} className={selected?.id === link.source ? "flow-selected" : undefined}>
               <path className="flow-link" d={path(link.source, link.target)} strokeWidth={1.5 + Math.sqrt(weight) * 12} onClick={() => setSelection(link.source)}>
-                <title>{source.label} → {targets.find(t => t.id === link.target)?.label}: {fmtInt(link.value)} {source.unit}. {source.evidence}. Independent {source.feed}/{source.unit} scale.</title>
+                <title>{`${source.label} → ${targets.find(t => t.id === link.target)?.label}: ${fmtInt(link.value)} ${source.unit}. ${source.evidence}. Independent ${source.feed}/${source.unit} scale.`}</title>
               </path>
               {!reduced && !paused ? Array.from({length:dots}, (_, k) => <circle key={k} className="flow-dot" r={2.6}><animateMotion dur={`${duration}s`} begin={`${k * duration / dots}s`} repeatCount="indefinite"><mpath href={`#${id}-flow-path-${i}`} /></animateMotion></circle>) : null}
             </g>;
           })}
           {sources.map(source => <g key={source.id} className={"flow-node" + (source.id === selected?.id ? " is-selected" : "")} onClick={() => setSelection(source.id)}>
-            <title>{source.label}: {fmtInt(source.total)} {source.unit}; {source.evidence}</title>
+            <title>{`${source.label}: ${fmtInt(source.total)} ${source.unit}; ${source.evidence}`}</title>
             <circle cx={left} cy={sourceY(source.id)} r={4} />
             <text x={left - 12} y={sourceY(source.id) + 2} textAnchor="end" className="flow-label">{source.label}</text>
             <text x={left - 12} y={sourceY(source.id) + 17} textAnchor="end" className="flow-count">{fmtInt(source.total)} {source.unit}</text>

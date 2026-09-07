@@ -23,7 +23,7 @@ export interface FlowFeed {
 export interface FlowLink { source: string; target: string; value: number; }
 export interface FlowData {
   sources: FlowSource[];
-  targets: FlowNode[];
+  targets: Array<Pick<FlowNode, "id" | "label">>;
   links: FlowLink[];
   feeds: FlowFeed[];
   days: number;
@@ -31,12 +31,12 @@ export interface FlowData {
   windowEnd: string;
   mode: "observed" | "demo" | "offline";
 }
-export const FLOW_TARGETS: FlowNode[] = [
-  { id: "code", label: "Code repositories", total: 0 },
-  { id: "wikis", label: "Encyclopedias & wikis", total: 0 },
-  { id: "maps", label: "Maps", total: 0 },
-  { id: "forums", label: "Forums", total: 0 },
-  { id: "site", label: "This website", total: 0 },
+export const FLOW_TARGETS: FlowData["targets"] = [
+  { id: "code", label: "Code repositories" },
+  { id: "wikis", label: "Encyclopedias & wikis" },
+  { id: "maps", label: "Maps" },
+  { id: "forums", label: "Forums" },
+  { id: "site", label: "This website" },
 ];
 /** Compare only the same publisher and unit, never unrelated activity totals. */
 export function flowWeight(source: FlowSource, sources: FlowSource[]): number {
