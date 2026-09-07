@@ -7,7 +7,7 @@ import { SourceCard, StatTiles } from "@/components/ui";
 import industry from "../../data/industry.json";
 import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
-import { getIngestStatus, getOverview, getTimeline, hasDatabase } from "@/lib/stats";
+import { getIngestStatus, getOverview, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
 import { AGENT_LAUNCHES, fmtMonth, getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive, ROBOTS_OPERATORS, ROBOTS_ROLES, shareByWeekday } from "@/lib/stats-census";
 import { CalendarHeatmap, type LineSeries, MultiLine } from "@/components/census-charts";
@@ -36,9 +36,8 @@ export default async function HomePage() {
   const weekendLift = weekday[6].share > 0 && weekday[0].share > 0 ? weekday[6].share / weekday[0].share : null;
   const latestCrawl = census.at(-1) ?? null;
   const agentInstalls7d = packages.filter((p) => p.def.role === "agent").reduce((s, p) => s + p.last7, 0);
-  const [overview, timeline, watched, runs, flow, records, osm, mcp, sightings] = await Promise.all([
+  const [overview, watched, runs, flow, records, osm, mcp, sightings] = await Promise.all([
     getOverview(),
-    getTimeline(60),
     getWatchedSummary(),
     getIngestStatus(),
     getFlowData(30),
