@@ -57,7 +57,12 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
   const H = height;
   const padL = 44;
   const padR = line ? 44 : 16;
-  const padT = annotations.length ? 40 : 16;
+  // Legend geometry: ~6.2px per character at 11px Inter; wrap the line label under
+  // the bar label when both will not fit across the plot.
+  const textW = (t: string) => t.length * 6.2;
+  const lineLegendX = 24 + textW(barLabel) + 16;
+  const legendWraps = Boolean(line && lineLabel) && lineLegendX + 26 + textW(lineLabel ?? "") > W - 44 - 16;
+  const padT = (annotations.length ? 40 : 16) + (legendWraps ? 14 : 0);
   const padB = 28;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
@@ -129,18 +134,18 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
       <g className="legend">
         <rect className="bar" x={padL} y={H - 2} width={0} height={0} />
       </g>
-      <g className="legend" transform={`translate(${padL}, ${padT - (annotations.length ? 28 : 4)})`}>
+      <g className="legend" transform={`translate(${padL}, ${padT - (annotations.length ? 28 : 4) - (legendWraps ? 14 : 0)})`}>
         <rect className="bar" x={0} y={-8} width={10} height={10} />
         <text x={14} y={1}>
           {barLabel}
         </text>
         {line && lineLabel ? (
-          <>
-            <line className="line" x1={120} x2={140} y1={-3} y2={-3} />
-            <text x={146} y={1}>
+          <g transform={legendWraps ? "translate(0, 14)" : `translate(${lineLegendX}, 0)`}>
+            <line className="line" x1={0} x2={20} y1={-3} y2={-3} />
+            <text x={26} y={1}>
               {lineLabel}
             </text>
-          </>
+          </g>
         ) : null}
       </g>
     </svg>
