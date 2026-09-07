@@ -210,7 +210,9 @@ export function SourceList({ items }: { items: SourceCardProps[] }) {
           <span className="src-title">
             {s.title} <span className="badge">{s.rung}</span>
           </span>
-          <span className="src-what">{s.what}</span>
+          <span className="src-what" title={s.what}>
+            {s.what}
+          </span>
           <span className="src-value">
             <span className="num">{s.value}</span>
             <span className="lbl">{s.valueLabel}</span>
