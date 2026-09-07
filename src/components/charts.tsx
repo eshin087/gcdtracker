@@ -82,6 +82,9 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   const labelEvery = n > 40 ? 7 : n > 14 ? 3 : 1;
   const dayIndex = new Map(days.map((d, i) => [d, i]));
+  // The last point is always labelled (anchored to its right edge); periodic labels
+  // that would collide with it are dropped. ~6.2px per character at 11px.
+  const lastLabelW = n > 1 ? xLabel(days[n - 1]).length * 6.2 + 10 : 0;
   const linePath = line
     ? line.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v, lineMax).toFixed(1)}`).join(" ")
     : null;
@@ -117,7 +120,7 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
       ))}
       {linePath ? <path className="line" d={linePath} /> : null}
       {days.map((d, i) =>
-        i === n - 1 || (i % labelEvery === 0 && n - 1 - i >= Math.ceil(labelEvery / 2)) ? (
+        i === n - 1 || (i % labelEvery === 0 && x(n - 1) - x(i) >= lastLabelW) ? (
           <text key={d} x={x(i)} y={H - 8} textAnchor={i === n - 1 && n > 1 ? "end" : "middle"}>
             {xLabel(d)}
           </text>
