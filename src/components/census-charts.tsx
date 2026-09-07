@@ -146,6 +146,7 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
   const cells: Array<{ x: number; y: number; d: HeatDay }> = [];
   const monthLabels: Array<{ x: number; text: string }> = [];
   let lastMonth = -1;
+  let lastLabelEnd = -Infinity; // ~5.6px per character at 10px
   for (let i = 0; i < totalDays; i++) {
     const date = new Date(start.getTime() + i * 86_400_000);
     const key = date.toISOString().slice(0, 10);
@@ -153,7 +154,12 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
     const dow = (date.getUTCDay() + 6) % 7;
     if (date.getUTCMonth() !== lastMonth && dow === 0 && date >= first) {
       lastMonth = date.getUTCMonth();
-      monthLabels.push({ x: padL + week * step, text: date.getUTCMonth() === 0 ? `${MONTHS[0]} ${date.getUTCFullYear()}` : MONTHS[date.getUTCMonth()] });
+      const x = padL + week * step;
+      const text = date.getUTCMonth() === 0 || monthLabels.length === 0 ? `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}` : MONTHS[date.getUTCMonth()];
+      if (x >= lastLabelEnd) {
+        monthLabels.push({ x, text });
+        lastLabelEnd = x + text.length * 5.6 + 8;
+      }
     }
     const d = byDay.get(key);
     if (d) cells.push({ x: padL + week * step, y: padT + dow * step, d });

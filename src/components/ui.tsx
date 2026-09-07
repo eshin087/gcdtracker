@@ -184,6 +184,43 @@ export interface SourceCardProps {
   href: string;
 }
 
+/** One heading rhythm for every home figure: serif title left, optional sub, "more" link right. */
+export function FigureHead({ id, title, sub, more }: { id?: string; title: string; sub?: ReactNode; more?: { href: string; label: string } }) {
+  return (
+    <div className="figure-head" id={id} style={id ? { scrollMarginTop: 80 } : undefined}>
+      <div className="section-head" style={{ margin: "0 0 4px" }}>
+        <h2>{title}</h2>
+        {more ? (
+          <Link className="more" href={more.href}>
+            {more.label}
+          </Link>
+        ) : null}
+      </div>
+      {sub ? <p className="page-sub" style={{ margin: "0 0 12px" }}>{sub}</p> : null}
+    </div>
+  );
+}
+
+/** Compact one-row-per-source list; the same entries as the cards, a third of the height. */
+export function SourceList({ items }: { items: SourceCardProps[] }) {
+  return (
+    <div className="source-list">
+      {items.map((s) => (
+        <Link key={s.href} href={s.href} className="row">
+          <span className="src-title">
+            {s.title} <span className="badge">{s.rung}</span>
+          </span>
+          <span className="src-what">{s.what}</span>
+          <span className="src-value">
+            <span className="num">{s.value}</span>
+            <span className="lbl">{s.valueLabel}</span>
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export function SourceCard({ title, what, rung, value, valueLabel, href }: SourceCardProps) {
   return (
     <Link href={href} className="source-card">
