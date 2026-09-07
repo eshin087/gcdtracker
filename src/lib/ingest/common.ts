@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import type { Db } from "@/lib/db";
 import { ingestRuns } from "@/lib/db/schema";
 import { SITE } from "@/lib/site";
@@ -13,7 +13,11 @@ export interface JobContext {
   query?: URLSearchParams;
 }
 
+export type JobOutcome = "success" | "partial" | "failed" | "disabled";
+
 export interface JobResult {
+  outcome?: JobOutcome;
+  error?: string;
   stats: Record<string, unknown>;
   cursor?: string | null;
   partial?: boolean;
@@ -22,6 +26,7 @@ export interface JobResult {
 export type Job = (ctx: JobContext) => Promise<JobResult>;
 
 export interface RunReport {
+  outcome: JobOutcome;
   source: string;
   ok: boolean;
   ms: number;
@@ -63,24 +68,35 @@ export async function lastCursor(db: Db, source: string): Promise<string | null>
   const [row] = await db
     .select({ cursor: ingestRuns.cursor })
     .from(ingestRuns)
-    .where(and(eq(ingestRuns.source, source), isNotNull(ingestRuns.cursor)))
+    .where(and(eq(ingestRuns.source, source), isNotNull(ingestRuns.cursor), or(eq(ingestRuns.ok, true), sql`${ingestRuns.stats}->>'outcome' = 'partial'`)))
     .orderBy(desc(ingestRuns.startedAt))
     .limit(1);
   return row?.cursor ?? null;
 }
 
-/** Run one job, record it in ingest_runs, never throw. */
-export async function runJob(source: string, job: Job, ctx: JobContext): Promise<RunReport> {
+/** Compatibility for collectors being moved to explicit outcomes. */
+export function jobOutcome(result: JobResult): JobOutcome {
+  if (result.outcome) return result.outcome;
+  if ((Array.isArray(result.stats.failed) && result.stats.failed.length > 0) || (typeof result.stats.failures === "number" && result.stats.failures > 0)) return "failed";
+  if (result.stats.skipped) return "disabled";
+  if (result.partial || result.stats.partial === true) return "partial";
+  return "success";
+}
+
+/** Run one job. Status reads use record:false and never alter freshness/run history. */
+export async function runJob(source: string, job: Job, ctx: JobContext, options: { record?: boolean } = {}): Promise<RunReport> {
   const startedAt = new Date();
   let report: RunReport;
   try {
     const result = await job(ctx);
-    report = { source, ok: true, ms: Date.now() - startedAt.getTime(), stats: result.stats, cursor: result.cursor, partial: result.partial };
+    const outcome = jobOutcome(result);
+    report = { source, outcome, ok: outcome === "success", ms: Date.now() - startedAt.getTime(), stats: result.stats, cursor: result.cursor, partial: outcome === "partial", error: result.error };
   } catch (err) {
     const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
     console.error(`ingest ${source} failed`, err);
-    report = { source, ok: false, ms: Date.now() - startedAt.getTime(), stats: {}, error: message.slice(0, 500) };
+    report = { source, outcome: "failed", ok: false, ms: Date.now() - startedAt.getTime(), stats: {}, error: message.slice(0, 500) };
   }
+  if (options.record === false) return report;
   try {
     await ctx.db.insert(ingestRuns).values({
       source,
@@ -88,11 +104,12 @@ export async function runJob(source: string, job: Job, ctx: JobContext): Promise
       finishedAt: new Date(),
       ok: report.ok,
       cursor: report.cursor ?? null,
-      stats: { ...report.stats, partial: report.partial ?? false },
+      stats: { ...report.stats, outcome: report.outcome, partial: report.partial ?? false },
       error: report.error ?? null,
     });
   } catch (err) {
     console.error("could not record ingest run", err);
+    report = { ...report, ok: false, outcome: "failed", error: "could not persist ingest outcome" };
   }
   return report;
 }

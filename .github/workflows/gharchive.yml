@@ -18,6 +18,13 @@ on:
         description: "Parallel jobs for a backfill (1-16)"
         default: "8"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: gharchive
+  cancel-in-progress: false
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -25,10 +32,12 @@ jobs:
       shards: ${{ steps.plan.outputs.shards }}
     steps:
       - id: plan
+        env:
+          REQUESTED_SHARDS: ${{ github.event.inputs.shards || '1' }}
+          FROM: ${{ github.event.inputs.from }}
         run: |
-          n="${{ github.event.inputs.shards || '1' }}"
-          if [ -z "${{ github.event.inputs.from }}" ]; then n=1; fi
-          echo "shards=$(node -e "console.log(JSON.stringify([...Array(Math.min(16, Math.max(1, Number('$n')))).keys()]))")" >> "$GITHUB_OUTPUT"
+          if [ -z "$FROM" ]; then export REQUESTED_SHARDS=1; fi
+          node -e 'const n=Number(process.env.REQUESTED_SHARDS);if(!Number.isInteger(n)||n<1||n>16)throw new Error("shards must be 1..16");console.log("shards="+JSON.stringify(Array.from({length:n},(_,i)=>i)))' >> "$GITHUB_OUTPUT"
 
   census:
     needs: plan

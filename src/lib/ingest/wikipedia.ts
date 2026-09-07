@@ -70,6 +70,7 @@ async function rcFetch(params: Record<string, string>): Promise<RcResponse> {
   const { status, body } = await fetchJson<RcResponse>(`${API}?${qs}`);
   if (status !== 200 || !body) throw new Error(`recentchanges ${status}`);
   if (body.error) throw new Error(`recentchanges ${body.error.code}: ${body.error.info}`);
+  if (!Array.isArray(body.query?.recentchanges)) throw new Error("recentchanges missing result list");
   return body;
 }
 
@@ -110,6 +111,7 @@ async function upsertEdits(ctx: Parameters<Job>[0], rows: Array<{ rc: RecentChan
 export const wikipediaJob: Job = async (ctx) => {
   const stats: Record<string, unknown> = { tier1: 0, tier2: 0, pages: 0 };
   let partial = false;
+  const failed: string[] = [];
 
   // Tier 1: first-party tags, last 48 hours, a few pages per tag.
   const rcend = new Date(Date.now() - 48 * 3_600_000).toISOString();
@@ -128,6 +130,7 @@ export const wikipediaJob: Job = async (ctx) => {
       cont = body.continue?.rccontinue;
       if (!cont) break;
     }
+    if (cont) partial = true;
   }
 
   // Tier 2: heuristic scan of non-bot edits since the cursor.
@@ -155,30 +158,50 @@ export const wikipediaJob: Job = async (ctx) => {
     cont = body.continue?.rccontinue;
     if (!cont) break;
   }
+  if (cont) partial = true;
   stats.scannedUntil = newest;
 
-  // Daily totals from the metrics API (lags a few days; 404 means not yet available).
+  // Daily totals lag upstream; unavailable components must not erase cached values.
   if (timeLeft(ctx) > 15_000) {
     const start = compactDay(daysAgo(12));
     const end = compactDay(daysAgo(2));
     const series: Record<string, Map<string, number>> = {};
-    for (const editor of ["all-editor-types", "group-bot", "anonymous"]) {
-      const { status, body } = await fetchJson<{ items?: Array<{ results?: Array<{ timestamp: string; edits: number }> }> }>(
-        `${METRICS}/${editor}/all-page-types/daily/${start}/${end}`,
-      );
-      const map = new Map<string, number>();
-      if (status === 200) for (const r of body?.items?.[0]?.results ?? []) map.set(r.timestamp.slice(0, 10), r.edits);
-      series[editor] = map;
+    const editors = ["all-editor-types", "group-bot", "anonymous"];
+    for (const editor of editors) {
+      try {
+        const { status, body } = await fetchJson<{ items?: Array<{ results?: Array<{ timestamp: string; edits: number }> }> }>(
+          `${METRICS}/${editor}/all-page-types/daily/${start}/${end}`,
+        );
+        if (status === 404) { partial = true; continue; }
+        const values = body?.items?.[0]?.results;
+        if (status !== 200 || !Array.isArray(values)) throw new Error(`metrics ${editor} ${status}: missing results`);
+        const map = new Map<string, number>();
+        for (const value of values) {
+          if (typeof value?.timestamp !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value.timestamp) || !Number.isFinite(value.edits) || value.edits < 0) throw new Error(`metrics ${editor}: invalid observation`);
+          map.set(value.timestamp.slice(0, 10), value.edits);
+        }
+        if (map.size === 0) partial = true;
+        series[editor] = map;
+      } catch (error) {
+        failed.push(editor);
+        stats[editor] = (error instanceof Error ? error.message : String(error)).slice(0, 160);
+      }
     }
-    const days = [...series["all-editor-types"].keys()];
-    for (const day of days) {
-      await ctx.db
-        .insert(wikiDaily)
-        .values({ day, wiki: WIKI, total: series["all-editor-types"].get(day) ?? null, bot: series["group-bot"].get(day) ?? null, anon: series["anonymous"].get(day) ?? null })
-        .onConflictDoUpdate({ target: [wikiDaily.day, wikiDaily.wiki], set: { total: sql`excluded.total`, bot: sql`excluded.bot`, anon: sql`excluded.anon` } });
+    let updated = 0;
+    if (editors.every((editor) => series[editor])) {
+      const days = new Set(editors.flatMap((editor) => [...series[editor].keys()]));
+      for (const day of days) {
+        if (editors.some((editor) => !series[editor].has(day))) { partial = true; continue; }
+        await ctx.db.insert(wikiDaily).values({
+          day, wiki: WIKI, total: series["all-editor-types"].get(day)!, bot: series["group-bot"].get(day)!, anon: series["anonymous"].get(day)!,
+        }).onConflictDoUpdate({ target: [wikiDaily.day, wikiDaily.wiki], set: { total: sql`excluded.total`, bot: sql`excluded.bot`, anon: sql`excluded.anon` } });
+        updated++;
+      }
     }
-    stats.metricsDays = days.length;
+    stats.metricsDays = updated;
+  } else {
+    partial = true;
   }
-
-  return { stats, cursor: newest, partial };
+  stats.failed = failed;
+  return { stats, cursor: newest, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

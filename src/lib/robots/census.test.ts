@@ -4,6 +4,15 @@ import { namedTool } from "@/lib/github/signatures";
 import { parseRobots } from "../../../scripts/robots-census.mjs";
 
 describe("parseRobots", () => {
+  it("merges repeated groups before deciding a full block", () => {
+    expect([...parseRobots("User-agent: GPTBot\nDisallow: /\nUser-agent: GPTBot\nAllow: /public").blocked]).toEqual([]);
+  });
+  it("keeps wildcard directives separate from named-token directives", () => {
+    expect([...parseRobots("User-agent: *\nDisallow: /\nUser-agent: GPTBot\nAllow: /").blocked]).toEqual(["*"]);
+  });
+  it("ignores extension fields between user-agent lines", () => {
+    expect([...parseRobots("User-agent: GPTBot\nCrawl-delay: 10\nUser-agent: ClaudeBot\nDisallow: /").blocked].sort()).toEqual(["ClaudeBot", "GPTBot"]);
+  });
   it("attributes a full block to every agent in the group", () => {
     const { mentioned, blocked } = parseRobots(["User-agent: GPTBot", "User-agent: ClaudeBot", "Disallow: /", "", "User-agent: *", "Disallow: /admin"].join("\n"));
     expect([...mentioned].sort()).toEqual(["*", "ClaudeBot", "GPTBot"]);

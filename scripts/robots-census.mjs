@@ -30,7 +30,9 @@ const SECRET = process.env.CRON_SECRET ?? "";
 const DRY = args.has("dry");
 const FILES = Number(args.get("files") ?? 100);
 const SINCE = args.get("since") ?? "2023-01-01";
-const MAX_CRAWLS = Number(args.get("max-crawls") ?? 40);
+const MAX_CRAWLS = Number(args.get("max-crawls") ?? 1);
+const PARSER_VERSION = 2;
+const DEADLINE = Date.now() + 20 * 60_000;
 const UA = "gcdTracker-robots-census/0.4 (+https://github.com/eshin087/gcdtracker-site)";
 const CC = "https://data.commoncrawl.org/";
 
@@ -38,7 +40,8 @@ const TOKENS_LC = new Map(ROBOTS_TOKENS.map((t) => [t.toLowerCase(), t]));
 
 async function fetchRetry(url, tries = 4) {
   for (let i = 0; i < tries; i++) {
-    const res = await fetch(url, { headers: { "user-agent": UA } });
+    if (Date.now() >= DEADLINE) throw new Error("census time budget exhausted; no partial crawl committed");
+    const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(45_000) });
     if (res.ok) return res;
     if (res.status === 404) return null;
     await new Promise((r) => setTimeout(r, 2_000 * (i + 1)));
@@ -53,7 +56,7 @@ async function fetchRetry(url, tries = 4) {
  */
 export function parseRobots(text) {
   const mentioned = new Set();
-  const blocked = new Set();
+  const rules = new Map();
   let agents = [];
   let inRules = false;
   let disallowAll = false;
@@ -61,8 +64,10 @@ export function parseRobots(text) {
   const flush = () => {
     if (agents.length === 0) return;
     for (const a of agents) {
+      if (!a) continue;
       mentioned.add(a);
-      if (disallowAll && !allowSomething) blocked.add(a);
+      const previous = rules.get(a) ?? { disallowAll: false, allowSomething: false };
+      rules.set(a, { disallowAll: previous.disallowAll || disallowAll, allowSomething: previous.allowSomething || allowSomething });
     }
     agents = [];
     inRules = false;
@@ -89,12 +94,10 @@ export function parseRobots(text) {
       if (field === "allow" && value && value !== "") allowSomething = true;
       continue;
     }
-    if (field === "sitemap") continue;
-    inRules = true;
+    // Extension fields do not terminate groups or count as Allow/Disallow rules.
   }
   flush();
-  mentioned.delete(null);
-  blocked.delete(null);
+  const blocked = new Set([...rules].filter(([, r]) => r.disallowAll && !r.allowSomething).map(([token]) => token));
   return { mentioned, blocked };
 }
 
@@ -117,7 +120,7 @@ function* warcRecords(buf) {
     if (type !== "response" || !uri) continue;
     const status = Number(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/.exec(body)?.[1] ?? 0);
     const sep = body.indexOf("\r\n\r\n");
-    yield { url: uri, status, body: sep === -1 ? "" : body.slice(sep + 4) };
+    yield { url: uri, status, body: sep === -1 ? "" : body.slice(sep + 4), truncated: bodyStart + len > text.length || /WARC-Truncated:/i.test(head) };
   }
 }
 
@@ -130,19 +133,20 @@ async function censusCrawl(crawl) {
   const counts = Object.fromEntries(ROBOTS_TOKENS.map((t) => [t, { mentioned: 0, blocked: 0 }]));
   const hosts = new Set();
   let files = 0;
+  let excluded = 0;
   for (const p of chosen) {
     const res = await fetchRetry(`${CC}${p}`);
-    if (!res) continue;
+    if (!res) throw new Error(`sample file missing: ${p}; no partial crawl committed`);
     let buf;
     try {
       buf = gunzipSync(Buffer.from(await res.arrayBuffer()));
     } catch (err) {
-      console.warn(`  skip ${p}: ${err.message}`);
-      continue;
+      throw new Error(`invalid sample file ${p}: ${err.message}; no partial crawl committed`);
     }
     files++;
     for (const rec of warcRecords(buf)) {
       if (rec.status !== 200) continue;
+      if (rec.truncated || rec.body.length > 200_000) { excluded++; continue; }
       let host;
       try {
         host = new URL(rec.url).host.replace(/^www\./, "");
@@ -151,14 +155,14 @@ async function censusCrawl(crawl) {
       }
       if (hosts.has(host)) continue;
       hosts.add(host);
-      const { mentioned, blocked } = parseRobots(rec.body.slice(0, 200_000));
+      const { mentioned, blocked } = parseRobots(rec.body);
       for (const t of mentioned) counts[t].mentioned++;
       for (const t of blocked) counts[t].blocked++;
     }
     process.stdout.write(`\r  ${crawl.id}: ${files}/${chosen.length} files, ${hosts.size} sites`);
   }
   process.stdout.write("\n");
-  return { id: crawl.id, date: crawl.from.slice(0, 10), files, sites: hosts.size, tokens: counts };
+  return { id: crawl.id, date: crawl.from.slice(0, 10), files, sites: hosts.size, excluded, tokens: counts, parserVersion: PARSER_VERSION };
 }
 
 async function site(path, init = {}) {
@@ -171,14 +175,15 @@ async function site(path, init = {}) {
 async function main() {
   if (!DRY && (!SITE_URL || !SECRET)) throw new Error("SITE_URL and CRON_SECRET are required (or pass --dry)");
   const all = await (await fetchRetry("https://index.commoncrawl.org/collinfo.json")).json();
-  let crawls = all.filter((c) => c.from && c.from.slice(0, 10) >= SINCE).sort((a, b) => a.from.localeCompare(b.from));
+  let crawls = all.filter((c) => c.from && c.from.slice(0, 10) >= SINCE).sort((a, b) => b.from.localeCompare(a.from));
   if (args.has("crawl")) crawls = crawls.filter((c) => c.id === args.get("crawl"));
   else if (!DRY) {
-    const status = await site("/api/ingest/robots-census");
+    const status = await site("/api/ingest/robots-census?parserVersion=2");
     const done = new Set(status.reports?.[0]?.stats?.done ?? []);
     crawls = crawls.filter((c) => !done.has(c.from.slice(0, 10)));
   }
-  crawls = crawls.slice(-MAX_CRAWLS);
+  if (!Number.isSafeInteger(FILES) || FILES < 1 || FILES > 100 || !Number.isSafeInteger(MAX_CRAWLS) || MAX_CRAWLS < 1 || MAX_CRAWLS > 40) throw new Error("invalid files/max-crawls bounds");
+  crawls = crawls.slice(0, MAX_CRAWLS);
   console.log(`${crawls.length} crawl(s) to census: ${crawls.map((c) => c.id).join(", ") || "none"}`);
   for (const crawl of crawls) {
     const record = await censusCrawl(crawl);

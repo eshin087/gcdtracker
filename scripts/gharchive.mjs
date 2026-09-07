@@ -36,6 +36,7 @@ const SECRET = process.env.CRON_SECRET ?? "";
 const DRY = args.has("dry");
 const MAX_MINUTES = Number(args.get("max-minutes") ?? 330);
 const BATCH = Number(args.get("batch") ?? 6);
+if (!Number.isInteger(BATCH) || BATCH < 1 || BATCH > 24) throw new Error("--batch must be between 1 and 24");
 const started = Date.now();
 
 const BOT_IDS = new Map(GITHUB_AGENTS.filter((a) => a.id).map((a) => [a.id, a.key]));
@@ -46,7 +47,10 @@ const SIG_PRECHECK = /co-authored-by|generated (?:with|by|using)|made (?:with|by
 function normalizeHour(h) {
   const m = /^(\d{4}-\d{2}-\d{2})[-T](\d{1,2})$/.exec(h.trim());
   if (!m) throw new Error(`bad hour ${h}`);
-  return { hour: `${m[1]}T${m[2].padStart(2, "0")}`, file: `${m[1]}-${Number(m[2])}` };
+  const hour = `${m[1]}T${m[2].padStart(2, "0")}`;
+  const date = new Date(`${hour}:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 13) !== hour) throw new Error(`bad hour ${h}`);
+  return { hour, file: `${m[1]}-${Number(m[2])}` };
 }
 function hourToDate(hour) {
   return new Date(`${hour}:00:00Z`);
@@ -65,7 +69,7 @@ function bump(map, key, by = 1) {
 async function processHour(hour) {
   const { file } = normalizeHour(hour);
   const url = `https://data.gharchive.org/${file}.json.gz`;
-  const res = await fetch(url, { headers: { "user-agent": "gcdTracker-gharchive/0.4 (+https://github.com/eshin087/gcdtracker-site)" } });
+  const res = await fetch(url, { signal: AbortSignal.timeout(180_000), headers: { "user-agent": "gcdTracker-gharchive/0.4 (+https://github.com/eshin087/gcdtracker-site)" } });
   if (res.status === 404) return null; // not published yet
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
 
@@ -141,6 +145,7 @@ async function processHour(hour) {
 
 async function site(path, init = {}) {
   const res = await fetch(`${SITE_URL}${path}`, {
+    signal: AbortSignal.timeout(240_000),
     ...init,
     headers: { authorization: `Bearer ${SECRET}`, "content-type": "application/json", "user-agent": "gcdTracker-gharchive/0.4", ...(init.headers ?? {}) },
   });
@@ -155,7 +160,7 @@ async function post(batch) {
     for (const h of batch) console.log(JSON.stringify(h));
     return;
   }
-  const out = await site("/api/ingest/gharchive", { method: "POST", body: JSON.stringify({ hours: batch }) });
+  const out = await site("/api/ingest/gharchive", { method: "POST", body: JSON.stringify({ ingestVersion: 2, hours: batch }) });
   const r = out.reports?.[0];
   console.log(`posted ${batch[0].hour}..${batch[batch.length - 1].hour}: ${r?.ok ? "ok" : `FAILED ${r?.error}`} ${JSON.stringify(r?.stats ?? {})}`);
   if (!r?.ok) throw new Error("ingest rejected the batch");
@@ -165,7 +170,9 @@ async function post(batch) {
 async function missingHours(from, to) {
   if (DRY) return [...hoursBetween(from, to)];
   const out = await site(`/api/ingest/gharchive?from=${from}&to=${to}`);
-  return out.reports?.[0]?.stats?.missing ?? [];
+  const report = out.reports?.[0];
+  if (report?.outcome !== "success" || !Array.isArray(report.stats?.missing)) throw new Error("invalid missing-hour status");
+  return report.stats.missing;
 }
 
 async function main() {

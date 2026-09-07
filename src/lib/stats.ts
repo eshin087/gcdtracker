@@ -1,5 +1,4 @@
 import { and, count, desc, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
-import { findAgent } from "@/lib/agents/catalog";
 import { AI_CATEGORIES, type Category } from "@/lib/agents/types";
 import { db, type Db } from "@/lib/db";
 import {
@@ -15,8 +14,11 @@ import {
   wikiDaily,
   wikiEdits,
 } from "@/lib/db/schema";
+import { cacheSummary } from "./query-cache";
+import { sourceHealth, sensorStatus } from "./health";
 import { dayRange, daysAgo, dayOf } from "@/lib/format";
 import type { LiveInfo } from "@/lib/live-types";
+import { publicAgentIdentity, publicPath, publicTrapPlacement, publicVisit, publicGuestbookNote, visitEvidenceColumns, guestbookEvidenceColumns, type PublicVisit, type PublicGuestbookNote, type PublicTrapPlacement } from "@/lib/public-evidence";
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -30,14 +32,14 @@ const iso = (d: Date | string | null | undefined): string | null => {
   return Number.isNaN(date.getTime()) ? String(d) : date.toISOString();
 };
 
-/** Run a query when the database exists; otherwise (or on error) return the fallback shape. */
+/** Missing configuration renders an offline state; query failures surface as unavailable. */
 async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
   if (!db) return fallback;
   try {
     return await fn(db);
   } catch (err) {
     console.error("stats query failed", err);
-    return fallback;
+    throw new Error("Data temporarily unavailable", { cause: err });
   }
 }
 
@@ -54,9 +56,10 @@ export interface TrafficDay {
   otherBot: number;
   human: number;
   total: number;
+  observed: boolean;
 }
 
-export async function getTrafficByDay(days = 60): Promise<TrafficDay[]> {
+async function queryTrafficByDay(days = 60): Promise<TrafficDay[]> {
   const since = daysAgo(days - 1);
   const rows = await safe([] as Array<{ day: string; category: string; count: number }>, async (d) =>
     d
@@ -66,12 +69,13 @@ export async function getTrafficByDay(days = 60): Promise<TrafficDay[]> {
   );
   const byDay = new Map<string, TrafficDay>();
   for (const day of dayRange(since, dayOf())) {
-    byDay.set(day, { day, ai: 0, searchEngine: 0, otherBot: 0, human: 0, total: 0 });
+    byDay.set(day, { day, ai: 0, searchEngine: 0, otherBot: 0, human: 0, total: 0, observed: false });
   }
   for (const r of rows) {
     const t = byDay.get(r.day);
     if (!t) continue;
     const c = n(r.count);
+    t.observed = true;
     if (AI.includes(r.category)) t.ai += c;
     else if (r.category === "search-engine") t.searchEngine += c;
     else if (r.category === "human") t.human += c;
@@ -86,7 +90,7 @@ export interface CategoryCount {
   count: number;
 }
 
-export async function getCategoryBreakdown(days = 30): Promise<CategoryCount[]> {
+async function queryCategoryBreakdown(days = 30): Promise<CategoryCount[]> {
   const since = daysAgo(days - 1);
   const rows = await safe([] as Array<{ category: string; count: unknown }>, async (d) =>
     d
@@ -148,21 +152,18 @@ export async function getVisitsByAgent(days = 30, limit = 200): Promise<AgentRow
         .orderBy(desc(count()))
         .limit(limit),
   );
-  return rows.map((r) => ({
-    slug: r.slug ?? "unknown",
-    name: r.name ?? findAgent(r.slug ?? "")?.name ?? r.slug ?? "unknown",
-    operator: r.operator ?? "",
-    category: r.category as Category,
-    hits: n(r.hits),
-    verified: n(r.verified),
-    unverified: n(r.unverified),
-    signed: n(r.signed),
-    lastSeen: iso(r.lastSeen),
-    firstSeen: iso(r.firstSeen),
-  }));
+  return rows.flatMap((r) => {
+    const identity = publicAgentIdentity(r.slug);
+    if (!identity.agentSlug) return [];
+    return [{
+      slug: identity.agentSlug, name: identity.agentName ?? "Unknown visitor", operator: identity.operator ?? "",
+      category: r.category as Category, hits: n(r.hits), verified: n(r.verified),
+      unverified: n(r.unverified), signed: n(r.signed), lastSeen: iso(r.lastSeen), firstSeen: iso(r.firstSeen),
+    }];
+  });
 }
 
-export type VisitRow = typeof visits.$inferSelect;
+export type VisitRow = PublicVisit;
 
 export async function getRecentVisits(limit = 50, opts: { slug?: string; trapOnly?: boolean } = {}): Promise<VisitRow[]> {
   return safe([] as VisitRow[], async (d) => {
@@ -170,12 +171,13 @@ export async function getRecentVisits(limit = 50, opts: { slug?: string; trapOnl
     if (opts.slug) conds.push(eq(visits.agentSlug, opts.slug));
     if (opts.trapOnly) conds.push(eq(visits.robotsViolation, true));
     if (!opts.slug && !opts.trapOnly) conds.push(inArray(visits.category, AI));
-    return d
-      .select()
+    const rows = await d
+      .select(visitEvidenceColumns)
       .from(visits)
       .where(and(...conds))
       .orderBy(desc(visits.ts))
       .limit(limit);
+    return rows.map(publicVisit);
   });
 }
 
@@ -183,7 +185,7 @@ export interface ViolationRow {
   slug: string | null;
   name: string;
   category: Category;
-  token: string | null;
+  trapPlacement: PublicTrapPlacement;
   hits: number;
   lastSeen: string | null;
 }
@@ -196,7 +198,7 @@ export async function getRobotsViolations(days = 90): Promise<ViolationRow[]> {
       d
         .select({
           slug: visits.agentSlug,
-          name: sql<string | null>`max(coalesce(${visits.agentName}, ${visits.ua}))`,
+          name: sql<string | null>`max(${visits.agentName})`,
           category: visits.category,
           token: visits.trapToken,
           hits: count(),
@@ -209,10 +211,10 @@ export async function getRobotsViolations(days = 90): Promise<ViolationRow[]> {
         .limit(100),
   );
   return rows.map((r) => ({
-    slug: r.slug,
-    name: r.name ?? "unknown",
+    slug: publicAgentIdentity(r.slug).agentSlug,
+    name: publicAgentIdentity(r.slug).agentName ?? "Unidentified visitor",
     category: r.category as Category,
-    token: r.token,
+    trapPlacement: publicTrapPlacement(r.token),
     hits: n(r.hits),
     lastSeen: iso(r.lastSeen),
   }));
@@ -281,7 +283,11 @@ export async function getAgentDetail(slug: string, days = 60): Promise<AgentDeta
       firstSeen: iso(totals?.firstSeen),
       lastSeen: iso(totals?.lastSeen),
       byDay,
-      topPaths: topPaths.map((p) => ({ path: p.path, hits: n(p.hits) })),
+      topPaths: Array.from(topPaths.reduce((paths, p) => {
+        const path = publicPath(p.path);
+        paths.set(path, (paths.get(path) ?? 0) + n(p.hits));
+        return paths;
+      }, new Map<string, number>()), ([path, hits]) => ({ path, hits })),
       countries: countries.map((c) => ({ country: c.country ?? "??", hits: n(c.hits) })),
     };
   });
@@ -483,12 +489,13 @@ export async function getForumPosts(limit = 50): Promise<ForumPostRow[]> {
   return safe([] as ForumPostRow[], async (d) => d.select().from(forumPosts).orderBy(desc(forumPosts.ts)).limit(limit));
 }
 
-export type GuestbookRow = typeof guestbookNotes.$inferSelect;
+export type GuestbookRow = PublicGuestbookNote;
 
 export async function getGuestbook(limit = 20): Promise<GuestbookRow[]> {
-  return safe([] as GuestbookRow[], async (d) =>
-    d.select().from(guestbookNotes).where(eq(guestbookNotes.hidden, false)).orderBy(desc(guestbookNotes.ts)).limit(limit),
-  );
+  return safe([] as GuestbookRow[], async (d) => {
+    const rows = await d.select(guestbookEvidenceColumns).from(guestbookNotes).where(eq(guestbookNotes.hidden, false)).orderBy(desc(guestbookNotes.ts)).limit(limit);
+    return rows.map(publicGuestbookNote);
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -497,9 +504,9 @@ export async function getGuestbook(limit = 20): Promise<GuestbookRow[]> {
 
 export type IngestRunRow = typeof ingestRuns.$inferSelect;
 
-export async function getIngestStatus(): Promise<IngestRunRow[]> {
+async function queryIngestStatus(): Promise<IngestRunRow[]> {
   return safe([] as IngestRunRow[], async (d) => {
-    const rows = await d.select().from(ingestRuns).orderBy(desc(ingestRuns.startedAt)).limit(60);
+    const rows = await d.selectDistinctOn([ingestRuns.source]).from(ingestRuns).orderBy(ingestRuns.source, desc(ingestRuns.startedAt));
     const seen = new Set<string>();
     const latest: IngestRunRow[] = [];
     for (const r of rows) {
@@ -513,7 +520,7 @@ export async function getIngestStatus(): Promise<IngestRunRow[]> {
 
 export async function getLive(): Promise<LiveInfo> {
   const generatedAt = new Date().toISOString();
-  const fallback: LiveInfo = { db: false, lastAiVisit: null, lastIngest: null, aiVisits24h: 0, generatedAt };
+  const fallback: LiveInfo = { db: false, status: "offline", sources: [], lastAiVisit: null, lastIngest: null, aiVisits24h: null, generatedAt };
   if (!db) return fallback;
   return safe(fallback, async (d) => {
     const since = new Date(Date.now() - 86_400_000);
@@ -522,9 +529,12 @@ export async function getLive(): Promise<LiveInfo> {
       .from(visits)
       .where(inArray(visits.category, AI));
     const [r] = await d.select({ last: sql<Date | null>`max(${ingestRuns.finishedAt})` }).from(ingestRuns).where(eq(ingestRuns.ok, true));
-    return { db: true, lastAiVisit: iso(v?.last), lastIngest: iso(r?.last), aiVisits24h: n(v?.c24), generatedAt };
-  });
+    const sources = (await queryIngestStatus()).filter((run) => run.finishedAt !== null).map((run) => sourceHealth({ ...run, finishedAt: run.finishedAt! }));
+    return { db: true, status: sensorStatus(sources), sources, lastAiVisit: iso(v?.last), lastIngest: iso(r?.last), aiVisits24h: n(v?.c24), generatedAt };
+  }).catch(() => fallback);
 }
+
+
 
 export interface Overview {
   db: boolean;
@@ -532,6 +542,9 @@ export interface Overview {
   aiVisitsTotal: number;
   aiVisits7d: number;
   requests7d: number;
+  trafficDays7d: number;
+  windowStart: string;
+  windowEnd: string;
   aiShare7d: number | null;
   distinctAgents30d: number;
   verifiedShare30d: number | null;
@@ -546,62 +559,77 @@ export interface Overview {
 }
 
 export const EMPTY_OVERVIEW: Overview = {
-  db: false, sensorSince: null, aiVisitsTotal: 0, aiVisits7d: 0, requests7d: 0, aiShare7d: null,
+  db: false, sensorSince: null, aiVisitsTotal: 0, aiVisits7d: 0, requests7d: 0, trafficDays7d: 0, windowStart: "", windowEnd: "", aiShare7d: null,
   distinctAgents30d: 0, verifiedShare30d: null, violations: 0, wikiFlagged7d: 0, wikiFlaggedTotal: 0,
   agentPrs7d: 0, codexPrs7d: 0, forumPosts7d: 0, guestbookCount: 0, lastAiVisit: null,
 };
 
-export async function getOverview(): Promise<Overview> {
+async function queryOverview(): Promise<Overview> {
   if (!db) return EMPTY_OVERVIEW;
   return safe(EMPTY_OVERVIEW, async (d) => {
-    const week = daysAgo(6);
+    const week = daysAgo(7);
+    const today = dayOf();
+    const todayTs = new Date(`${today}T00:00:00Z`);
     const weekTs = new Date(`${week}T00:00:00Z`);
     const month = new Date(Date.now() - 30 * 86_400_000);
-    const [v] = await d
+    const [[v], [a], [t], [w], [g], [f], [gb]] = await d.batch([
+d
       .select({
         total: count(),
         first: sql<Date | null>`min(${visits.ts})`,
         last: sql<Date | null>`max(${visits.ts})`,
-        week: sql`count(*) filter (where ${visits.ts} >= ${weekTs})`,
+        week: sql`count(*) filter (where ${visits.ts} >= ${weekTs} and ${visits.ts} < ${todayTs})`,
         violations: sql`count(*) filter (where ${visits.robotsViolation} = true)`,
       })
       .from(visits)
-      .where(inArray(visits.category, AI));
-    const [a] = await d
+      .where(inArray(visits.category, AI)),
+d
       .select({
         agents: sql`count(distinct ${visits.agentSlug})`,
         verified: sql`count(*) filter (where ${visits.verified} = true)`,
         decided: sql`count(*) filter (where ${visits.verified} is not null)`,
       })
       .from(visits)
-      .where(and(inArray(visits.category, AI), gte(visits.ts, month)));
-    const [t] = await d
+      .where(and(inArray(visits.category, AI), gte(visits.ts, month))),
+d
       .select({
-        all: sql`coalesce(sum(${trafficDaily.count}), 0)`,
-        ai: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.category} in (${sql.join(AI.map((c) => sql`${c}`), sql`, `)})), 0)`,
+        all: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today}), 0)`,
+        lifetime: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.category} in (${sql.join(AI.map((c) => sql`${c}`), sql`, `)})), 0)`,
+        first: sql<string | null>`min(${trafficDaily.day})`,
+        coverage: sql<number>`count(distinct ${trafficDaily.day}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today})::int`,
+        ai: sql`coalesce(sum(${trafficDaily.count}) filter (where ${trafficDaily.day} >= ${week} and ${trafficDaily.day} < ${today} and ${trafficDaily.category} in (${sql.join(AI.map((c) => sql`${c}`), sql`, `)})), 0)`,
       })
-      .from(trafficDaily)
-      .where(gte(trafficDaily.day, week));
-    const [w] = await d
-      .select({ total: count(), week: sql`count(*) filter (where ${wikiEdits.ts} >= ${weekTs})` })
-      .from(wikiEdits);
-    const [g] = await d
+      .from(trafficDaily),
+d
+      .select({ total: count(), week: sql`count(*) filter (where ${wikiEdits.ts} >= ${weekTs} and ${wikiEdits.ts} < ${todayTs})` })
+      .from(wikiEdits),
+d
       .select({
         bots: sql`coalesce(sum(${githubDaily.prs}) filter (where ${githubDaily.tier} = 'bot-account'), 0)`,
         codex: sql`coalesce(sum(${githubDaily.prs}) filter (where ${githubDaily.agent} = 'codex-branch'), 0)`,
       })
       .from(githubDaily)
-      .where(and(gte(githubDaily.day, week), lt(githubDaily.day, dayOf())));
-    const [f] = await d.select({ posts: sql`coalesce(sum(${forumDaily.posts}), 0)` }).from(forumDaily).where(gte(forumDaily.day, week));
-    const [gb] = await d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false));
+      .where(and(gte(githubDaily.day, week), lt(githubDaily.day, dayOf()))),
+d.select({ posts: sql`coalesce(sum(${forumDaily.posts}), 0)` }).from(forumDaily).where(and(gte(forumDaily.day, week), lt(forumDaily.day, today))),
+d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false))
+]);
+
+
+
+
+
+
     const all = n(t?.all);
     const decided = n(a?.decided);
     return {
       db: true,
-      sensorSince: iso(v?.first),
-      aiVisitsTotal: n(v?.total),
-      aiVisits7d: n(v?.week),
+      sensorSince: t?.first ? `${t.first}T00:00:00Z` : null,
+      aiVisitsTotal: n(t?.lifetime),
+      aiVisits7d: n(t?.ai),
       requests7d: all,
+      trafficDays7d: n(t?.coverage),
+      windowStart: week,
+      windowEnd: today,
       aiShare7d: all > 0 ? n(t?.ai) / all : null,
       distinctAgents30d: n(a?.agents),
       verifiedShare30d: decided > 0 ? n(a?.verified) / decided : null,
@@ -616,6 +644,16 @@ export async function getOverview(): Promise<Overview> {
     };
   });
 }
+
+export const getTrafficByDay = cacheSummary(queryTrafficByDay, "traffic-daily");
+export const getCategoryBreakdown = cacheSummary(queryCategoryBreakdown, "category-breakdown");
+const cachedIngestStatus = cacheSummary(queryIngestStatus, "ingest-status");
+export async function getIngestStatus(): Promise<IngestRunRow[]> {
+  // Next data-cache serialization converts Date fields to ISO strings.
+  const rows = await cachedIngestStatus();
+  return rows.map((row) => ({ ...row, startedAt: new Date(row.startedAt), finishedAt: row.finishedAt ? new Date(row.finishedAt) : null }));
+}
+export const getOverview = cacheSummary(queryOverview, "overview");
 
 export interface TimelinePoint {
   day: string;
@@ -655,17 +693,17 @@ export interface TableCounts {
 export async function getTableCounts(): Promise<TableCounts> {
   const empty: TableCounts = { visits: 0, wikiEdits: 0, githubDaily: 0, githubEvents: 0, forumPosts: 0, guestbook: 0, ipRanges: 0, watched: 0 };
   return safe(empty, async (d) => {
-    const one = async (q: Promise<Array<{ c: number }>>) => n((await q)[0]?.c);
     const { ipRanges } = await import("@/lib/db/schema");
-    return {
-      visits: await one(d.select({ c: count() }).from(visits)),
-      wikiEdits: await one(d.select({ c: count() }).from(wikiEdits)),
-      githubDaily: await one(d.select({ c: count() }).from(githubDaily)),
-      githubEvents: await one(d.select({ c: count() }).from(githubEvents)),
-      forumPosts: await one(d.select({ c: count() }).from(forumPosts)),
-      guestbook: await one(d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false))),
-      ipRanges: await one(d.select({ c: count() }).from(ipRanges)),
-      watched: await one(d.select({ c: count() }).from(watchedPrs)),
-    };
+    const rows = await d.batch([
+      d.select({ c: count() }).from(visits),
+      d.select({ c: count() }).from(wikiEdits),
+      d.select({ c: count() }).from(githubDaily),
+      d.select({ c: count() }).from(githubEvents),
+      d.select({ c: count() }).from(forumPosts),
+      d.select({ c: count() }).from(guestbookNotes).where(eq(guestbookNotes.hidden, false)),
+      d.select({ c: count() }).from(ipRanges),
+      d.select({ c: count() }).from(watchedPrs),
+    ]);
+    return Object.fromEntries(Object.keys(empty).map((key, i) => [key, n(rows[i][0]?.c)])) as unknown as TableCounts;
   });
 }

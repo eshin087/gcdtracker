@@ -33,7 +33,7 @@ export const GITHUB_AGENTS: GithubAgent[] = [
   { key: "greptile", label: "Greptile", vendor: "Greptile", query: "author:app/greptile-apps", tier: "bot-account", id: 165735046, url: "https://github.com/apps/greptile-apps" },
   { key: "kiro", label: "Kiro", vendor: "Amazon", query: "author:app/kiro-agent", tier: "bot-account", id: 245459735, url: "https://github.com/apps/kiro-agent" },
   { key: "openhands", label: "OpenHands", vendor: "All Hands AI", query: "author:openhands-agent", tier: "bot-account", id: 175740463, url: "https://github.com/openhands-agent" },
-  { key: "codex-branch", label: "Codex (codex/ branches)", vendor: "OpenAI", query: "head:codex/", tier: "branch-prefix", note: "PRs whose head branch starts with codex/. High confidence: the prefix is distinctive." },
+  { key: "codex-branch", label: "Codex (codex/ branches)", vendor: "OpenAI", query: "head:codex/", tier: "branch-prefix", note: "PRs whose head branch starts with codex/. Branch naming is a heuristic and does not prove tool use." },
   { key: "claude-branch", label: "Claude (claude/ branches)", vendor: "Anthropic", query: "head:claude/", tier: "branch-prefix", note: "Medium confidence: short prefix, some human branches collide." },
   { key: "cursor-branch", label: "Cursor (cursor/ branches)", vendor: "Anysphere", query: "head:cursor/", tier: "branch-prefix", note: "Medium confidence." },
 ];

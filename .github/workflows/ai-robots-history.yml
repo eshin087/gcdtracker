@@ -7,6 +7,13 @@ on:
     - cron: "23 5 1 * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-robots-history
+  cancel-in-progress: false
+
 jobs:
   history:
     runs-on: ubuntu-latest

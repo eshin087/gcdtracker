@@ -19,7 +19,11 @@ interface Data {
 /** Curated monthly series of AI-attributed commits on GitHub, quoted from botcommits.dev. */
 export const botcommitsJob: Job = async (ctx) => {
   const { status, body } = await fetchJson<Data>(BOTCOMMITS.url);
-  if (status !== 200 || !body?.labels || !body.tools) throw new Error(`botcommits ${status}`);
+  if (status !== 200 || !Array.isArray(body?.labels) || body.labels.length === 0 || body.labels.some((label) => typeof label !== "string" || !label) || !body.tools || typeof body.tools !== "object" || Array.isArray(body.tools) || Object.keys(body.tools).length === 0) throw new Error(`botcommits ${status}: invalid series response`);
+  const values = [...Object.values(body.tools), ...[body.claude_lo, body.claude_hi, body.total6].filter((v) => v !== undefined)];
+  if (values.some((series) => !Array.isArray(series) || series.length > body.labels!.length || series.some((value) => value !== null && (typeof value !== "number" || !Number.isFinite(value) || value < 0)))) {
+    throw new Error("botcommits invalid numeric series");
+  }
   const rows: Array<{ source: string; series: string; period: string; value: number; lo: number | null; hi: number | null }> = [];
   const labels = body.labels;
   for (const [tool, values] of Object.entries(body.tools)) {
@@ -38,11 +42,12 @@ export const botcommitsJob: Job = async (ctx) => {
   body.total6?.forEach((v, i) => {
     if (v !== null && v !== undefined && labels[i]) rows.push({ source: "botcommits", series: "total", period: labels[i], value: v, lo: null, hi: null });
   });
+  if (rows.length === 0) throw new Error("botcommits response contains no observations");
   for (let i = 0; i < rows.length; i += 200) {
     await ctx.db
       .insert(externalSeries)
       .values(rows.slice(i, i + 200))
       .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, lo: sql`excluded.lo`, hi: sql`excluded.hi`, fetchedAt: new Date() } });
   }
-  return { stats: { rows: rows.length, updated: body.updated ?? null, lastFullMonth: body.last_full_month ?? null, toolLabels: body.tool_labels ?? {} } };
+  return { outcome: "success", stats: { rows: rows.length, updated: body.updated ?? null, lastFullMonth: body.last_full_month ?? null, toolLabels: body.tool_labels ?? {} } };
 };

@@ -8,8 +8,9 @@ export interface Classification {
   category: Category;
   /** the catalog token that matched */
   token: string | null;
-  /** Web Bot Auth headers present (Signature-Agent + Signature-Input + Signature) */
+  /** @deprecated Header presence only, never cryptographic verification. */
   signed: boolean;
+  signatureStatus: "absent" | "unverified";
   /** host from the Signature-Agent header, e.g. "chatgpt.com" */
   signatureAgent: string | null;
 }
@@ -73,12 +74,14 @@ function stripQuotes(v: string): string {
 }
 
 export function signatureAgentHost(value: string | null | undefined): string | null {
-  if (!value) return null;
+  if (!value || value.length > 2048) return null;
   const raw = stripQuotes(value);
   try {
-    return new URL(raw.startsWith("http") ? raw : `https://${raw}`).host.toLowerCase() || null;
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.host.toLowerCase().slice(0, 256) || null;
   } catch {
-    return raw.slice(0, 120) || null;
+    return null;
   }
 }
 
@@ -86,6 +89,7 @@ export function classify(ua: string | null | undefined, headers: HeaderGetter): 
   const m = classifyUA(ua);
   const sigAgent = headers("signature-agent");
   const signed = Boolean(sigAgent && headers("signature-input") && headers("signature"));
+  const signatureStatus = signed ? "unverified" : "absent";
   const signatureAgent = signed ? signatureAgentHost(sigAgent) : null;
 
   if (m.def) {
@@ -96,20 +100,10 @@ export function classify(ua: string | null | undefined, headers: HeaderGetter): 
       category: m.def.category,
       token: m.token,
       signed,
+      signatureStatus,
       signatureAgent,
     };
   }
-  if (signed && signatureAgent) {
-    // Signed but not in the catalog: still an announced agent.
-    return {
-      slug: `signed:${signatureAgent}`,
-      name: `Signed agent (${signatureAgent})`,
-      operator: signatureAgent,
-      category: "ai-browsing-agent",
-      token: null,
-      signed,
-      signatureAgent,
-    };
-  }
-  return { slug: null, name: null, operator: null, category: m.category, token: null, signed, signatureAgent };
+  // Header presence is an observation, never proof of an AI identity.
+  return { slug: null, name: null, operator: null, category: m.category, token: null, signed, signatureStatus, signatureAgent };
 }

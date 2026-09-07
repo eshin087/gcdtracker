@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { IP_SOURCES } from "@/lib/agents/catalog";
 import { ipRanges } from "@/lib/db/schema";
@@ -9,11 +10,18 @@ interface PrefixList {
 }
 
 export function parsePrefixes(body: PrefixList | null): string[] {
-  if (!body?.prefixes) return [];
+  if (!Array.isArray(body?.prefixes) || body.prefixes.length === 0) return [];
   const out: string[] = [];
   for (const p of body.prefixes) {
-    const v = p.ipv4Prefix ?? p.ipv6Prefix;
-    if (v && /^[0-9a-fA-F.:]+\/\d{1,3}$/.test(v)) out.push(v);
+    if (!p || typeof p !== "object") return [];
+    const value = p.ipv4Prefix ?? p.ipv6Prefix;
+    if (typeof value !== "string") return [];
+    const parts = value.split("/");
+    const family = isIP(parts[0]);
+    const bits = Number(parts[1]);
+    // Reject the entire malformed snapshot before stale ranges can be removed.
+    if (parts.length !== 2 || !family || !/^\d{1,3}$/.test(parts[1]) || bits > (family === 4 ? 32 : 128)) return [];
+    out.push(value);
   }
   return [...new Set(out)];
 }
@@ -48,5 +56,5 @@ export const ipRangesJob: Job = async (ctx) => {
     }
   }
   stats.failures = failures;
-  return { stats };
+  return { stats, outcome: failures ? "failed" : stats.partial ? "partial" : "success" };
 };

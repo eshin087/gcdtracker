@@ -42,9 +42,9 @@ function refererHost(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const u = new URL(value);
-    return truncate(u.host.toLowerCase(), 256);
+    return u.protocol === "https:" || u.protocol === "http:" ? truncate(u.host.toLowerCase(), 256) : null;
   } catch {
-    return truncate(value, 256);
+    return null;
   }
 }
 
