@@ -208,12 +208,12 @@
 .tiles.six { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 640px) { .tiles.six { grid-template-columns: repeat(2, 1fr); } }
 .source-list { border-top: 1px solid var(--rule); margin: 0 0 30px; }
-.source-list .row { display: grid; grid-template-columns: minmax(150px, 190px) 1fr auto; gap: 14px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--rule); text-decoration: none; color: var(--ink); }
+.source-list .row { display: grid; grid-template-columns: minmax(180px, 250px) 1fr auto; gap: 14px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--rule); text-decoration: none; color: var(--ink); }
 .source-list .row:hover .src-title { color: var(--accent-ink); }
-.source-list .src-title { font-family: var(--font-inter), system-ui, sans-serif; font-size: 13.5px; font-weight: 500; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.source-list .src-title { font-family: var(--font-inter), system-ui, sans-serif; font-size: 13.5px; font-weight: 500; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; line-height: 1.3; }
 .source-list .src-what { font-family: var(--font-inter), system-ui, sans-serif; font-size: 12.5px; color: var(--ink-2); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.source-list .src-value { display: grid; text-align: right; min-width: 110px; }
-.source-list .src-value .num { font-family: var(--font-plex), monospace; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.source-list .src-value { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; white-space: nowrap; }
+.source-list .src-value .num { font-family: var(--font-plex), monospace; font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .source-list .src-value .lbl { font-family: var(--font-inter), system-ui, sans-serif; font-size: 11px; color: var(--muted); }
 @media (max-width: 640px) { .source-list .row { grid-template-columns: 1fr auto; } .source-list .src-what { grid-column: 1 / -1; white-space: normal; } }
 
