@@ -46,13 +46,17 @@ export interface TimelineProps {
   annotations?: Annotation[];
   height?: number;
   title?: string;
+  /** x-axis label formatter (defaults to day-month); the last point is always labelled */
+  xLabel?: (day: string) => string;
+  /** bars drawn in the soft colour, e.g. periods with incomplete source coverage */
+  muted?: boolean[];
 }
 
 /**
  * Bars on the left axis, optional line on the right axis, dotted grid,
  * annotations as vertical rules with labels above the plot.
  */
-export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotations = [], height = 260, title }: TimelineProps) {
+export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotations = [], height = 260, title, xLabel = fmtDay, muted }: TimelineProps) {
   const W = 760;
   const H = height;
   const padL = 44;
@@ -102,7 +106,7 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
       {bars.map((v, i) => (
         <rect
           key={days[i]}
-          className="bar"
+          className={muted?.[i] ? "bar soft" : "bar"}
           x={x(i) - barW / 2}
           y={y(v, barMax)}
           width={barW}
@@ -113,9 +117,9 @@ export function TimelineChart({ days, bars, barLabel, line, lineLabel, annotatio
       ))}
       {linePath ? <path className="line" d={linePath} /> : null}
       {days.map((d, i) =>
-        i % labelEvery === 0 ? (
-          <text key={d} x={x(i)} y={H - 8} textAnchor="middle">
-            {fmtDay(d)}
+        i === n - 1 || (i % labelEvery === 0 && n - 1 - i >= Math.ceil(labelEvery / 2)) ? (
+          <text key={d} x={x(i)} y={H - 8} textAnchor={i === n - 1 && n > 1 ? "end" : "middle"}>
+            {xLabel(d)}
           </text>
         ) : null,
       )}

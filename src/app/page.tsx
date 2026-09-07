@@ -9,7 +9,7 @@ import { fmtDate, fmtInt, fmtPct, relTime } from "@/lib/format";
 import { SITE } from "@/lib/site";
 import { getIngestStatus, getOverview, getTimeline, hasDatabase } from "@/lib/stats";
 import { getFlowData, getLatestRecords, getMcpSummary, getOsmSummary, getSightings, getWatchedSummary } from "@/lib/stats-sources";
-import { AGENT_LAUNCHES, getArchiveMonthly, getArchiveSummary, getPackageStats, getRobotsCensus } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, fmtMonth, getArchiveMonthly, getArchiveSummary, getPackageStats, getRobotsCensus, isPartialArchive } from "@/lib/stats-census";
 
 export const revalidate = 60;
 
@@ -93,10 +93,15 @@ export default async function HomePage() {
               lineLabel="Share of all PRs opened (%)"
               annotations={AGENT_LAUNCHES.filter((l) => archiveMonthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
               title="Agent pull requests across all of GitHub, by month"
+              xLabel={fmtMonth}
+              muted={archiveMonthly.map(isPartialArchive)}
             />
             <figcaption>
               Pull requests opened by coding agents across every public repository on GitHub, per month, and their share of all pull requests opened: a census of GH Archive since
-              January 2025, {fmtInt(archive.hours)} hours counted so far.{" "}
+              January 2025, {fmtInt(archive.hours)} hours counted so far.
+              {archiveMonthly.some(isPartialArchive)
+                ? ` Pale bars (${archiveMonthly.filter(isPartialArchive).map((m) => fmtMonth(`${m.period}-01`)).join(", ")}) are months where GH Archive captured only part of GitHub's feed, so the counts are floors while the share holds.`
+                : ""}{" "}
               <Link href="/github">Full census →</Link>
             </figcaption>
           </figure>

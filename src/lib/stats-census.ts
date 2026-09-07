@@ -33,6 +33,8 @@ export interface ArchivePeriod {
   period: string;
   /** hours of data behind the number (24 per complete day) */
   hours: number;
+  /** all events in the period; a coverage check, since GH Archive occasionally records only part of GitHub's feed */
+  events: number;
   prsOpened: number;
   /** null where the archive format carried no merge information */
   prsMerged: number | null;
@@ -53,12 +55,15 @@ function fold(rows: Raw[]): ArchivePeriod[] {
   for (const r of rows) {
     let p = byPeriod.get(r.period);
     if (!p) {
-      p = { period: r.period, hours: 0, prsOpened: 0, prsMerged: null, agentPrs: 0, agentMerged: 0, byAgent: {}, prSignatures: null, commitSignatures: null, commits: null, withBody: 0, withCommits: 0 };
+      p = { period: r.period, hours: 0, events: 0, prsOpened: 0, prsMerged: null, agentPrs: 0, agentMerged: 0, byAgent: {}, prSignatures: null, commitSignatures: null, commits: null, withBody: 0, withCommits: 0 };
       byPeriod.set(r.period, p);
     }
     const v = n(r.value);
     if (r.kind === "total") {
-      if (r.key === "events") p.hours = n(r.hours);
+      if (r.key === "events") {
+        p.hours = n(r.hours);
+        p.events = v;
+      }
       else if (r.key === "prs_opened") p.prsOpened = v;
       else if (r.key === "prs_merged" && v > 0) p.prsMerged = v;
       else if (r.key === "prs_with_body") p.withBody = v;
@@ -80,6 +85,17 @@ function fold(rows: Raw[]): ArchivePeriod[] {
       commits: withCommits > 0 ? p.commits : null,
     }));
 }
+
+/**
+ * GitHub opens several thousand pull requests an hour; when an archived hour holds far
+ * fewer, GH Archive's collector caught only part of the public feed (it happened for
+ * most of June to August 2026). Absolute counts for such periods are floors; the share
+ * of PRs by agents is still meaningful because the shortfall hits agents and humans alike.
+ */
+export const PARTIAL_ARCHIVE_PRS_PER_HOUR = 1_000;
+export const isPartialArchive = (p: ArchivePeriod) => p.hours > 0 && p.prsOpened / p.hours < PARTIAL_ARCHIVE_PRS_PER_HOUR;
+
+export const fmtMonth = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export async function getArchiveDaily(days = 90): Promise<ArchivePeriod[]> {
   const rows = await safe([] as Raw[], async (d) =>

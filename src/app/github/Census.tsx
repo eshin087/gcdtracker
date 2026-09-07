@@ -3,7 +3,7 @@ import { BarList, Empty } from "@/components/ui";
 import { fmtDate, fmtInt, fmtPct } from "@/lib/format";
 import { githubAgentLabel } from "@/lib/github/agents";
 import { GH_ARCHIVE } from "@/lib/ingest/gharchive";
-import { AGENT_LAUNCHES, type ArchivePeriod, type ArchiveSummary, getArchiveAgents, getArchiveDaily, getArchiveMonthly } from "@/lib/stats-census";
+import { AGENT_LAUNCHES, type ArchivePeriod, type ArchiveSummary, fmtMonth, getArchiveAgents, getArchiveDaily, getArchiveMonthly, isPartialArchive } from "@/lib/stats-census";
 
 const TOOL_LABELS: Record<string, string> = {
   claude: "Claude (Code)",
@@ -69,12 +69,15 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
         lineLabel="Share of all PRs opened (%)"
         annotations={AGENT_LAUNCHES.filter((l) => monthly.some((m) => m.period === l.day.slice(0, 7))).map((l) => ({ ...l, day: `${l.day.slice(0, 7)}-01` }))}
         title="Agent pull requests across all of GitHub, by month"
+        xLabel={fmtMonth}
+        muted={monthly.map(isPartialArchive)}
       />
-      {partialMonth && partialMonth.hours < 28 * 24 ? (
-        <p className="dim sans" style={{ fontSize: 12.5, marginTop: 6 }}>
-          {partialMonth.period} covers {fmtInt(partialMonth.hours)} hours so far.
-        </p>
-      ) : null}
+      <p className="dim sans" style={{ fontSize: 12.5, marginTop: 6 }}>
+        {partialMonth && partialMonth.hours < 28 * 24 ? `${partialMonth.period} covers ${fmtInt(partialMonth.hours)} hours so far. ` : ""}
+        {monthly.some(isPartialArchive)
+          ? `Pale bars mark months where GH Archive captured only part of GitHub's public feed (fewer than ${fmtInt(1_000)} pull requests an hour where GitHub normally opens several thousand): their counts are floors, and the share line is the number to read.`
+          : ""}
+      </p>
 
       {completeDaily.length > 1 ? (
         <div style={{ marginTop: 28 }}>
@@ -86,6 +89,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
             lineLabel="All PRs opened"
             title="Last 90 complete days"
             height={220}
+            muted={completeDaily.map(isPartialArchive)}
           />
         </div>
       ) : null}
@@ -138,6 +142,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
               <th className="num">Share</th>
               <th className="num">Agent PRs merged</th>
               <th className="num">Hours</th>
+              <th>Archive</th>
             </tr>
           </thead>
           <tbody>
@@ -149,6 +154,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
                 <td className="num">{m.prsOpened > 0 ? fmtPct(m.agentPrs / m.prsOpened, 2) : "–"}</td>
                 <td className="num">{m.agentMerged > 0 ? fmtInt(m.agentMerged) : <span className="dim">–</span>}</td>
                 <td className="num dim">{fmtInt(m.hours)}</td>
+                <td>{isPartialArchive(m) ? <span className="badge warn">partial</span> : <span className="badge ok">complete</span>}</td>
               </tr>
             ))}
           </tbody>
