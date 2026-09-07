@@ -184,7 +184,7 @@ export default async function ToolingPage() {
       </div>
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
         Hugging Face publishes which coding agents hit its Hub, from the agent token their requests carry. Share of agent
-        requests per day, quoted as published.
+        requests per day, quoted as published{hfLatest[0]?.day ? `; the dataset’s latest published day is ${hfLatest[0].day}` : ""}.
       </p>
       {hfLatest.length === 0 ? <Empty db={db} /> : <BarList rows={hfLatest.map((r) => ({ key: r.agent, label: r.agent, value: r.value }))} format={(v) => `${v.toFixed(1)}%`} />}
     </div>
