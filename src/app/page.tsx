@@ -166,7 +166,7 @@ export default async function HomePage() {
           label: "Before and after",
           panel: (
             <figure className="home-chart">
-              <MultiLine series={wmSeries} format={(v) => `${(v / 1e9).toFixed(v >= 10e9 ? 0 : 1)}B`} title="Wikimedia page views per month by agent type" annotations={AI_MARKERS} labelWidth={150} height={240} />
+              <MultiLine series={wmSeries} format={(v) => (v === 0 ? "0" : `${(v / 1e9).toFixed(v >= 10e9 ? 0 : 1)}B`)} title="Wikimedia page views per month by agent type" annotations={AI_MARKERS} labelWidth={150} height={240} />
               <figcaption>
                 Every request to every Wikimedia project per month, split by the Foundation&apos;s own classifier into humans, declared crawlers and undeclared automation, back to 2015.
                 Bot reads climbed after the markers while human reads did not. <Link href="/before-after">Reading, asking, coding and crawling, before and after →</Link>

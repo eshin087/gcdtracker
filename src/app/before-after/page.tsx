@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description: "Reading, asking, coding and crawling on the public internet, with a baseline from before AI: Wikipedia reads by humans and bots, Stack Overflow questions, GitHub pull requests, and robots.txt blocking since 2019.",
 };
 
-const billions = (v: number) => `${(v / 1e9).toFixed(v >= 10e9 ? 0 : 1)}B`;
+const billions = (v: number) => (v === 0 ? "0" : `${(v / 1e9).toFixed(v >= 10e9 ? 0 : 1)}B`);
 const monthDay = (m: string) => `${m}-01`;
 const at = (pts: SeriesPoint[], period: string) => pts.find((p) => p.period === period)?.value ?? null;
 const change = (now: number | null, then: number | null) => (now !== null && then !== null && then > 0 ? (now - then) / then : null);
