@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default async function NewAgentsPage() {
   const db = hasDatabase();
-  const [{ rows, counts, new30d }, history] = await Promise.all([getSightings(200), getSeries("ai-robots-history")]);
+  const [{ rows, counts, new30d }, history] = await Promise.all([getSightings(400), getSeries("ai-robots-history")]);
   const perMonth = history["new-tokens"] ?? [];
   const cumulative = perMonth.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? 0) + p.value], []);
   const signed = rows.filter((r) => r.kind === "signature-registry");
@@ -32,7 +32,7 @@ export default async function NewAgentsPage() {
         tiles={[
           { value: fmtInt(counts["ai-robots-txt"] ?? 0), label: "crawler tokens catalogued", sub: "ai.robots.txt" },
           { value: fmtInt(counts["signature-registry"] ?? 0), label: "agents that sign requests", sub: "Web Bot Auth registry" },
-          { value: fmtInt(new30d), label: "first listed in the last 30 days", sub: "dated from the ai.robots.txt history" },
+          { value: fmtInt(new30d), label: "crawler tokens first listed in the last 30 days", sub: "dated from the ai.robots.txt git history" },
         ]}
       />
       {perMonth.length > 3 ? (
@@ -73,7 +73,7 @@ export default async function NewAgentsPage() {
                 <tr>
                   <th>Host</th>
                   <th>Key directory</th>
-                  <th>First seen</th>
+                  <th>First seen here</th>
                   <th></th>
                 </tr>
               </thead>
@@ -109,7 +109,7 @@ export default async function NewAgentsPage() {
                   <th>Token</th>
                   <th>Operator</th>
                   <th>Function</th>
-                  <th>First seen</th>
+                  <th>First listed</th>
                 </tr>
               </thead>
               <tbody>

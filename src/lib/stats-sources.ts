@@ -286,7 +286,12 @@ export async function getSightings(limit = 100): Promise<{ rows: SightingRow[]; 
   return safe({ rows: [] as SightingRow[], counts: {} as Record<string, number>, new30d: 0 }, async (d) => {
     const rows = await d.select().from(agentSightings).orderBy(desc(agentSightings.firstSeen)).limit(limit);
     const counts = await d.select({ kind: agentSightings.kind, c: count() }).from(agentSightings).groupBy(agentSightings.kind);
-    const [nw] = await d.select({ c: count() }).from(agentSightings).where(gte(agentSightings.firstSeen, new Date(Date.now() - 30 * 86_400_000)));
+    // Only the crawler list carries real first-listed dates (from its git history); the
+    // signed-agent registry publishes no history, so its rows are dated by our first read.
+    const [nw] = await d
+      .select({ c: count() })
+      .from(agentSightings)
+      .where(and(eq(agentSightings.kind, "ai-robots-txt"), gte(agentSightings.firstSeen, new Date(Date.now() - 30 * 86_400_000))));
     return { rows, counts: Object.fromEntries(counts.map((c) => [c.kind, n(c.c)])), new30d: n(nw?.c) };
   });
 }
