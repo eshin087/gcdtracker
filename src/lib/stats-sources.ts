@@ -347,9 +347,9 @@ async function queryFlowData(days = 30): Promise<FlowData> {
     const between = (col: Parameters<typeof gte>[0]) => and(gte(col, since), lt(col, until));
     const [gh, web, wiki, wikidata, commons, maps, forums, runs] = await d.batch([
       d.select({ agent: githubDaily.agent, tier: githubDaily.tier, value: sql<number>`sum(${githubDaily.prs})::int`,
-        days: sql<number>`count(distinct ${githubDaily.day})::int`, latest: sql<string>`max(${githubDaily.day})` })
-        .from(githubDaily).where(and(gte(githubDaily.day, windowStart), lt(githubDaily.day, windowEnd)))
-        .groupBy(githubDaily.agent, githubDaily.tier).orderBy(desc(sql`sum(${githubDaily.prs})`)).limit(6),
+        days: sql<number>`count(distinct ${githubDaily.day})::int`, dates: sql<string[]>`array_agg(distinct ${githubDaily.day})`, latest: sql<string>`max(${githubDaily.day})` })
+        .from(githubDaily).where(and(gte(githubDaily.day, windowStart), lt(githubDaily.day, windowEnd), inArray(githubDaily.tier, ["bot-account", "branch-prefix"])))
+        .groupBy(githubDaily.agent, githubDaily.tier).orderBy(desc(sql`sum(${githubDaily.prs})`)),
       d.select({ category: visits.category, value: count(), days: sql<number>`count(distinct ${visits.day})::int`,
         latest: sql<Date>`max(${visits.ts})`,
         matched: sql<number>`count(*) filter (where ${visits.verified} = true)::int`,
@@ -379,11 +379,19 @@ async function queryFlowData(days = 30): Promise<FlowData> {
       if (source.total <= 0) return;
       sources.push(source); links.push({ source: source.id, target, value: source.total });
     };
-    for (const row of gh) add({ id: "gh:" + row.agent, label: githubAgentLabel(row.agent).replace(/ \(.*\)$/, ""),
+    for (const row of gh.slice(0, 6)) add({ id: "gh:" + row.agent, label: githubAgentLabel(row.agent).replace(/ \(.*\)$/, ""),
       total: n(row.value), feed: "github", unit: "PR matches", purpose: "Code contributions",
       evidence: row.tier === "bot-account" ? "Documented bot account" : "Branch-name heuristic",
       method: "GitHub Search matches; bot-account and branch-prefix queries may overlap. Counts are not unique contributions or proof of model authorship.",
       href: "/github", observedDays: n(row.days), latestObservation: iso(row.latest) }, "code");
+    const otherCoding = gh.slice(6);
+    if (otherCoding.length) add({
+      id: "gh:other", label: "Other coding agents", total: otherCoding.reduce((sum, r) => sum + n(r.value), 0),
+      feed: "github", unit: "PR matches", purpose: "Code contributions", evidence: "Bot-account / branch-name queries",
+      method: "Remaining tracked GitHub Search matches outside the six largest series. Queries may overlap; this is not a unique PR count.",
+      href: "/github", observedDays: new Set(otherCoding.flatMap(r => r.dates)).size,
+      latestObservation: iso(otherCoding.map(r => r.latest).sort().at(-1)),
+    }, "code");
     for (const row of web) add({ id: "web:" + row.category, label: CATEGORY_LABELS[row.category as Category] ?? row.category,
       total: n(row.value), feed: "visits", unit: "requests", purpose: CATEGORY_LABELS[row.category as Category] ?? row.category,
       evidence: "User-agent classification + separate IP checks",
