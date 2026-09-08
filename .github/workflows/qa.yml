@@ -98,15 +98,21 @@ jobs:
         env:
           QA_SITE_URL: http://127.0.0.1:3100
         run: npm run test:browser
+      - name: Measure seeded homepage
+        env:
+          QA_SITE_URL: http://127.0.0.1:3100
+        run: node tests/browser/measure-home.mjs dashboard
       - name: Preserve QA evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qa-evidence
+          include-hidden-files: true
           path: |
             .qa/playwright-report/
             .qa/test-results/
             .qa/*.log
+            .qa/*-home-metrics.json
             .qa/screenshots/
           if-no-files-found: ignore
           retention-days: 7

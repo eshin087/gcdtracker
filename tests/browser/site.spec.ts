@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
-const routes = ["/", "/traffic", "/visitors", "/visitors/agents", "/visitors/recent", "/visitors/violations", "/wikipedia", "/wikipedia/edits", "/wikipedia/edits/1", "/wikipedia/editors", "/wikipedia/wikimedia", "/github", "/github/day", "/github/agents", "/github/prs", "/github/watched", "/github/signals", "/github/signals/confirmed", "/maps", "/forums", "/forums/posts", "/forums/guestbook", "/tooling", "/new-agents", "/before-after", "/agents", "/agents/gptbot", "/investigations", "/methods", "/data", "/saved"];
+const routes = ["/demo", "/", "/traffic", "/visitors", "/visitors/agents", "/visitors/recent", "/visitors/violations", "/wikipedia", "/wikipedia/edits", "/wikipedia/edits/1", "/wikipedia/editors", "/wikipedia/wikimedia", "/github", "/github/day", "/github/agents", "/github/prs", "/github/watched", "/github/signals", "/github/signals/confirmed", "/maps", "/forums", "/forums/posts", "/forums/guestbook", "/tooling", "/new-agents", "/before-after", "/agents", "/agents/gptbot", "/investigations", "/methods", "/data", "/saved"];
 const malformed = ["/not-a-page", "/wikipedia/edits/all/1/extra", "/wikipedia/edits/all/1e2", "/wikipedia/edits/all/501", "/wikipedia/editors/extra", "/visitors/recent/extra", "/github/signals/invalid", "/forums/posts/extra", "/agents/signed%3Auntrusted.example"];
 
 test("primary and nested routes render without client errors", async ({ page }) => {
@@ -42,11 +42,11 @@ test("Research disclosure supports clicks, keyboard and focus return", async ({ 
 });
 
 test("view controls navigate and expose the active view", async ({ page }) => {
-  await page.goto("/visitors");
-  const views = page.getByRole("navigation", { name: "Visitor views" });
-  await views.getByRole("link", { name: "Recent hits" }).click();
-  await expect(page).toHaveURL(/\/visitors\/recent$/);
-  await expect(views.getByRole("link", { name: "Recent hits" })).toHaveAttribute("aria-current", "page");
+  await page.goto("/github/day");
+  const views = page.getByRole("navigation", { name: "GitHub views" });
+  await views.getByRole("link", { name: "By agent" }).click();
+  await expect(page).toHaveURL(/\/github\/agents$/);
+  await expect(views.getByRole("link", { name: "By agent" })).toHaveAttribute("aria-current", "page");
   await page.goto("/wikipedia/edits");
   await page.getByRole("navigation", { name: "Confidence tier" }).getByRole("link", { name: "Filter-flagged" }).click();
   await expect(page).toHaveURL(/\/wikipedia\/edits\/1$/);
@@ -82,7 +82,7 @@ for (const width of [390, 768, 1024, 1440]) {
   test("responsive layouts at " + width + "px", async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width, height: 900 });
-    for (const route of ["/", "/traffic", "/github", "/wikipedia", "/methods", "/data", "/tooling", "/agents", "/maps", "/new-agents", "/github/watched", "/github/signals", "/investigations"]) {
+    for (const route of ["/demo", "/", "/traffic", "/github", "/wikipedia", "/methods", "/data", "/tooling", "/agents", "/maps", "/new-agents", "/github/watched", "/github/signals", "/investigations"]) {
       await page.goto(route, { waitUntil: "networkidle" });
       const size = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: innerWidth }));
       expect(size.document, route + " document width").toBeLessThanOrEqual(size.viewport + 1);
@@ -100,7 +100,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expect(page.locator("main h1")).toBeVisible();
     await mkdir(".qa/screenshots", { recursive: true });
     await page.screenshot({ path: ".qa/screenshots/home-" + colorScheme + "-390.png", fullPage: true });
-    for (const route of ["/maps", "/new-agents", "/github/watched", "/github/signals", "/investigations"]) {
+    for (const route of ["/demo", "/maps", "/new-agents", "/github/watched", "/github/signals", "/investigations"]) {
       await page.goto(route, { waitUntil: "networkidle" });
       await expect(page.locator("main h1")).toBeVisible();
       const size = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: innerWidth }));
@@ -120,7 +120,10 @@ test("public APIs and exports omit private fixture fields", async ({ request }) 
   }
   const live = await request.get("/api/live");
   expect(live.status()).toBe(200);
-  expect((await live.json()).status).toMatch(/^(live|stale|offline|degraded)$/);
+  const health = await live.json();
+  expect(health.status).toMatch(/^(live|stale|offline|degraded)$/);
+  expect(health).not.toHaveProperty("aiVisits24h");
+  expect(health).not.toHaveProperty("lastAiVisit");
 });
 
 test("research flow pauses all motion and honors reduced-motion preferences", async ({ page, browser, baseURL }) => {

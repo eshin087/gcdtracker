@@ -23,17 +23,7 @@ async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
 /* GH Archive census                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Before/after markers drawn on every long series. */
-export const AI_MARKERS = [
-  { day: "2022-11-30", label: "ChatGPT" },
-  { day: "2023-08-07", label: "GPTBot" },
-];
-
-/** Chart annotations: when the major coding agents shipped. */
-export const AGENT_LAUNCHES = [
-  { day: "2025-02-24", label: "Claude Code preview" },
-  { day: "2025-05-19", label: "Codex & Copilot agent" },
-];
+export { AI_MARKERS, AGENT_LAUNCHES } from "./census-markers";
 
 export interface ArchivePeriod {
   /** YYYY-MM-DD for days, YYYY-MM for months */

@@ -17,7 +17,7 @@ export function publicAgentIdentity(slug: string | null) {
 const PUBLIC_PATHS = new Set([
   ...ALL_LINKS.map((link) => link.href),
   "/robots.txt", "/llms.txt", "/sitemap.xml",
-  "/visitors/day", "/visitors/agents", "/visitors/violations", "/visitors/recent",
+  "/visitors", "/visitors/day", "/visitors/agents", "/visitors/violations", "/visitors/recent",
   "/wikipedia/editors", "/wikipedia/wikimedia", "/wikipedia/edits",
   "/github/census", "/github/day", "/github/agents", "/github/prs", "/github/watched", "/github/signals",
   "/forums/day", "/forums/posts", "/forums/guestbook",

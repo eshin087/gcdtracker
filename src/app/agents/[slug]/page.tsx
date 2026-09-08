@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TimelineChart } from "@/components/charts";
-import { CategoryBadge, Empty, PageHeader, StatTiles, VerifiedBadge } from "@/components/ui";
+import { CategoryBadge, PageHeader } from "@/components/ui";
 import { findAgent, ipSourceFor } from "@/lib/agents/catalog";
 import { CATEGORY_DESCRIPTIONS } from "@/lib/agents/types";
-import { fmtDate, fmtInt, fmtPct, fmtStamp, relTime } from "@/lib/format";
-import { getAgentDetail, getRecentVisits, hasDatabase } from "@/lib/stats";
 
 export const revalidate = 300;
 
@@ -24,10 +21,7 @@ export default async function AgentPage({ params }: { params: Params }) {
   const def = findAgent(slug);
   if (!def) notFound();
 
-  const db = hasDatabase();
-  const [detail, recent] = await Promise.all([getAgentDetail(slug, 60), getRecentVisits(25, { slug })]);
   const source = def?.ipSource ? ipSourceFor(def.ipSource) : undefined;
-  const decided = detail.verified + detail.unverified;
 
   const name = def.name;
   const operator = def.operator;
@@ -82,101 +76,8 @@ export default async function AgentPage({ params }: { params: Params }) {
         </p>
       ) : null}
 
-      <StatTiles
-        tiles={[
-          { value: fmtInt(detail.hits), label: "requests retained", sub: detail.firstSeen ? `first retained ${fmtDate(detail.firstSeen)}` : "not seen yet" },
-          { value: decided > 0 ? fmtPct(detail.verified / decided) : "–", label: "IP-verified share", sub: `${fmtInt(detail.verified)} verified · ${fmtInt(detail.unverified)} outside ranges` },
-          { value: fmtInt(detail.signed), label: "signature headers observed", sub: "Unverified; no cryptographic checks" },
-          { value: fmtInt(detail.violations), label: "disallowed-path requests", sub: "Intent and discovery route unknown" },
-        ]}
-      />
-
-      {detail.hits === 0 ? (
-        <Empty db={db}>This agent has not visited yet. The moment it does, its hits, paths and verification results appear here.</Empty>
-      ) : (
-        <>
-          <figure className="home-chart" style={{ margin: "4px 0 26px" }}>
-            <TimelineChart days={detail.byDay.map((d) => d.day)} bars={detail.byDay.map((d) => d.hits)} barLabel="hits per day" title="Hits per day, last 60 days" height={220} />
-            <figcaption>Hits per day over the last 60 days.</figcaption>
-          </figure>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, marginBottom: 32 }}>
-            <div>
-              <div className="label" style={{ marginBottom: 6 }}>
-                Most requested paths
-              </div>
-              <table className="tbl">
-                <tbody>
-                  {detail.topPaths.map((p) => (
-                    <tr key={p.path}>
-                      <td className="mono">{p.path}</td>
-                      <td className="num">{fmtInt(p.hits)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <div className="label" style={{ marginBottom: 6 }}>
-                Source countries
-              </div>
-              <table className="tbl">
-                <tbody>
-                  {detail.countries.map((c) => (
-                    <tr key={c.country}>
-                      <td className="mono">{c.country}</td>
-                      <td className="num">{fmtInt(c.hits)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="label" style={{ marginBottom: 8 }}>
-            Recent hits · last seen {relTime(detail.lastSeen)}
-          </div>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>When (UTC)</th>
-                  <th>Path</th>
-
-                  <th>Country</th>
-                  <th>Verification</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((r) => (
-                  <tr key={r.id}>
-                    <td className="mono dim">{fmtStamp(r.ts)}</td>
-                    <td className="mono">
-                      {r.path}
-                      {r.robotsViolation ? (
-                        <>
-                          {" "}
-                          <span className="badge warn">trap</span>
-                        </>
-                      ) : null}
-                    </td>
-
-                    <td className="dim">{r.country ?? "–"}</td>
-                    <td>
-                      <VerifiedBadge verified={r.verified} />
-                      {r.signed ? (
-                        <>
-                          {" "}
-                          <span className="badge">signature headers · unverified</span>
-                        </>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <p className="sans dim">This directory documents crawler identity and declared purpose. It does not infer usage, model activity or web-wide volume from visits to gcdTracker.</p>
+      <p className="sans"><Link href="/traffic">Explore published crawler traffic →</Link></p>
     </div>
   );
 }

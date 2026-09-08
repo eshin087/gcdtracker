@@ -1,25 +1,24 @@
 import { SaveButton } from "@/components/SaveButton";
 import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { MiniChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, Segmented, StatTiles } from "@/components/ui";
 import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
-import { SITE } from "@/lib/site";
-import { getForumByDay, getForumPosts, getGuestbook, getOverview, hasDatabase } from "@/lib/stats";
+import { getForumByDay, getForumPosts, getOverview, hasDatabase } from "@/lib/stats";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Forums",
-  description: "Posts on Moltbook, a social network where only AI agents can post, plus notes agents left in this site's guestbook.",
+  description: "Public posts and platform-reported account activity on Moltbook.",
 };
 
-const VIEWS = ["day", "posts", "guestbook"] as const;
+const VIEWS = ["day", "posts"] as const;
 type View = (typeof VIEWS)[number];
 
 export default async function ForumsPage({ params }: { params: Promise<{ view?: string[] }> }) {
   const { view: segments } = await params;
+  if (segments?.length === 1 && segments[0] === "guestbook") redirect("/forums");
   const v = segments?.[0] ?? "day";
   if (!(VIEWS as readonly string[]).includes(v) || (segments?.length ?? 0) > 1) notFound();
   const view = v as View;
@@ -29,15 +28,13 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
   const latest = [...byDay].reverse().find((d) => d.posts > 0);
 
   const tiles = [
-    { value: fmtInt(overview.forumPosts7d), label: "Moltbook posts, 7 days", sub: "every author is an AI agent by construction" },
+    { value: fmtInt(overview.forumPosts7d), label: "Moltbook posts, 7 days", sub: "platform-reported activity; authorship unverified" },
     { value: latest ? fmtInt(latest.agents) : "–", label: "distinct posting accounts", sub: latest ? `on ${fmtDay(latest.day)}` : undefined },
-    { value: fmtInt(overview.guestbookCount), label: "guestbook notes", sub: "public notes with unverified authorship" },
   ];
 
   const seg = [
     { href: "/forums", label: "By day", active: view === "day" },
     { href: "/forums/posts", label: "Recent posts", active: view === "posts" },
-    { href: "/forums/guestbook", label: "Guestbook", active: view === "guestbook" },
   ];
 
   return (
@@ -50,7 +47,6 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
       <Segmented options={seg} label="Forum views" />
       {view === "day" ? <ByDay byDay={byDay} db={db} /> : null}
       {view === "posts" ? <Posts db={db} /> : null}
-      {view === "guestbook" ? <Guestbook db={db} /> : null}
     </div>
   );
 }
@@ -95,43 +91,5 @@ async function Posts({ db }: { db: boolean }) {
         </div>
       ))}
     </div>
-  );
-}
-
-async function Guestbook({ db }: { db: boolean }) {
-  const rows = await getGuestbook(50);
-  return (
-    <>
-      <div className="prose" style={{ fontSize: 15.5, marginBottom: 24 }}>
-        <p>
-          Requests with a recognized AI user agent may leave a note; this self-declaration does not authenticate the author. Signature headers alone are insufficient. Limits are one note per network in a rolling hour and 50 site-wide in 24 hours. Notes are shown as plain text and
-          never linkified. The endpoint is described in <Link href="/llms.txt">llms.txt</Link> and on the{" "}
-          <Link href="/data">data page</Link>.
-        </p>
-        <pre>
-          <code>{`POST ${SITE.url}/api/guestbook
-Content-Type: application/json
-
-{"name": "your agent name", "operator": "who runs you", "purpose": "why you are here", "note": "up to 280 characters"}`}</code>
-        </pre>
-      </div>
-      {rows.length === 0 ? (
-        <Empty db={db}>No guestbook notes are recorded yet.</Empty>
-      ) : (
-        rows.map((r) => (
-          <div className="note" key={r.id}>
-            <div className="who">
-              <strong>{r.name}</strong>
-              {r.operator ? <span>· {r.operator}</span> : null}
-              {r.purpose ? <span>· {r.purpose}</span> : null}
-              <span title={fmtStamp(r.ts)}>{relTime(r.ts)}</span>
-              {r.agentSlug ? <span className="badge accent">{r.agentSlug}</span> : null}
-              {r.signed ? <span className="badge">signature headers · unverified</span> : null}
-            </div>
-            <div className="text">{r.note}</div>
-          </div>
-        ))
-      )}
-    </>
   );
 }

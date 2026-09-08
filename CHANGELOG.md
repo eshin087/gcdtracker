@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Internet activity homepage
+
+- Restored the left section-navigation menu and retained the animated Agents → destinations dashboard.
+- Restored the original multi-year census using line graphs for Wikimedia, GitHub and crawler policies; removed homepage bar charts. Full stored history is retained instead of a two-year display cap.
+- Added a daily GitHub heatmap with year selection and mouse/keyboard inspection. Missing, zero and incomplete observations remain distinct; color scales stay comparable across years.
+- Retired local visitor dashboards and request tracking. Visitors routes redirect to Traffic; the forum guestbook view redirects to Forums. Stored history is untouched by this change.
+- Removed local visitor statistics from agent profiles, the directory, latest records, data listings and health responses. `GET /api/live` no longer returns `aiVisits24h` or `lastAiVisit`.
+- Legacy exports and the hardened guestbook API remain available for compatibility. Preview examples are explicitly synthetic; observed pages never silently use them.
+
 ## Unreleased — QA and data-integrity hardening
 
 ### Public evidence and APIs
