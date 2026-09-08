@@ -56,12 +56,20 @@ export async function search(q: string, extra: Record<string, string> = {}): Pro
     throw new RateLimited(reset || Date.now() + 60_000);
   }
   if (status !== 200 || !body) throw new Error(`github search ${status} ${body?.message ?? ""}`.trim());
+  validateSearchResponse(body);
   return body;
+}
+
+/** HTTP 200 can still be an incomplete search; never persist it as zero. */
+export function validateSearchResponse(body: SearchResponse): void {
+  if (body.incomplete_results !== false || !Number.isSafeInteger(body.total_count) || body.total_count! < 0 || !Array.isArray(body.items)) {
+    throw new Error("github search incomplete or malformed; retaining previous observations");
+  }
 }
 
 async function countDay(ctx: JobContext, agent: GithubAgent, day: string, final: boolean): Promise<number> {
   const body = await search(`is:pr ${agent.query} created:${day}`);
-  const prs = body.total_count ?? 0;
+  const prs = body.total_count!;
   await ctx.db
     .insert(githubDaily)
     .values({ day, agent: agent.key, prs, tier: agent.tier, final, fetchedAt: new Date() })
@@ -71,7 +79,7 @@ async function countDay(ctx: JobContext, agent: GithubAgent, day: string, final:
 
 /** Budget-aware: returns false when the deadline is too close for another paced call. */
 export function canCall(ctx: JobContext): boolean {
-  return timeLeft(ctx) > gapMs() + 12_000;
+  return timeLeft(ctx) > gapMs() + 22_000;
 }
 
 export const githubJob: Job = async (ctx) => {
@@ -91,7 +99,7 @@ export const githubJob: Job = async (ctx) => {
   for (const a of GITHUB_AGENTS) work.push({ agent: a, day: today, final: false });
   // gradual 30-day backfill, oldest missing first
   for (const day of dayRange(daysAgo(30), daysAgo(2))) {
-    for (const a of GITHUB_AGENTS) if (!have.has(`${day}|${a.key}`)) work.push({ agent: a, day, final: true });
+    for (const a of GITHUB_AGENTS) if (!have.get(`${day}|${a.key}`)) work.push({ agent: a, day, final: true });
   }
 
   try {

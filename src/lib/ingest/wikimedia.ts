@@ -28,7 +28,8 @@ const TAG_SWEEP_WIKIS = ["en", "de", "fr", "es", "ja", "it", "ru", "zh", "pt", "
 async function metrics(project: string, editor: string, start: string, end: string): Promise<Map<string, number>> {
   const { status, body } = await fetchJson<{ items?: Array<{ results?: Array<{ timestamp: string; edits: number }> }> }>(`${METRICS}/${project}/${editor}/all-page-types/daily/${start}/${end}`);
   const map = new Map<string, number>();
-  if (status === 200) for (const r of body?.items?.[0]?.results ?? []) map.set(r.timestamp.slice(0, 10), r.edits);
+  if (status !== 200 || !body?.items?.[0]?.results) throw new Error(`wikimedia metrics failed (${status})`);
+  for (const r of body.items[0].results) map.set(r.timestamp.slice(0, 10), r.edits);
   return map;
 }
 
@@ -64,7 +65,8 @@ export const wikimediaJob: Job = async (ctx) => {
     const { status, body } = await fetchJson<{ query?: { usercontribs?: Array<{ userid: number; user: string; revid: number; title: string; timestamp: string; comment?: string; size?: number }> } }>(
       `https://www.wikidata.org/w/api.php?${qs}`,
     );
-    const items = status === 200 ? (body?.query?.usercontribs ?? []) : [];
+    if (status !== 200 || !body?.query?.usercontribs) throw new Error(`wikidata contributions failed (${status})`);
+    const items = body.query.usercontribs;
     if (items.length > 0) {
       await ctx.db
         .insert(wikidataBotEdits)
@@ -74,15 +76,16 @@ export const wikimediaJob: Job = async (ctx) => {
     }
   }
 
-  // 3. Commons: newest uploads in AI-generated categories.
+  // 3. Commons: inclusion in AI-related categories, not original upload time.
   for (const category of ["AI-generated images", "AI-generated videos"]) {
     if (timeLeft(ctx) < 15_000) {
       partial = true;
       break;
     }
-    const qs = new URLSearchParams({ action: "query", list: "categorymembers", cmtitle: `Category:${category}`, cmsort: "timestamp", cmdir: "desc", cmlimit: "200", cmprop: "title|timestamp|ids", format: "json", formatversion: "2" });
+    const qs = new URLSearchParams({ action: "query", list: "categorymembers", cmtitle: `Category:${category}`, cmnamespace: "6", cmsort: "timestamp", cmdir: "desc", cmlimit: "200", cmprop: "title|timestamp|ids", format: "json", formatversion: "2" });
     const { status, body } = await fetchJson<{ query?: { categorymembers?: Array<{ pageid: number; title: string; timestamp: string }> } }>(`https://commons.wikimedia.org/w/api.php?${qs}`);
-    const items = status === 200 ? (body?.query?.categorymembers ?? []) : [];
+    if (status !== 200 || !body?.query?.categorymembers) throw new Error(`commons category fetch failed (${status})`);
+    const items = body.query.categorymembers.filter((m) => m.title.startsWith("File:"));
     if (items.length > 0) {
       await ctx.db
         .insert(commonsAiUploads)

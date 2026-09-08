@@ -11,6 +11,13 @@ on:
         description: "Source to ingest (all, ipranges, wikipedia, wikimedia, moltbook, osm, mcp, botcommits, agentwatch, radar, packages, github, watched, github-signatures, retention)"
         default: "all"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -41,3 +48,5 @@ jobs:
           echo "HTTP ${code}"
           cat /tmp/out.json; echo
           [ "$code" = "200" ]
+          jq -e '.reports | length > 0 and all(.[]; .outcome == "success" or .outcome == "partial" or .outcome == "disabled")' /tmp/out.json >/dev/null
+          jq -r '.reports[] | select(.outcome == "partial") | "::warning::Collector " + .source + " is partial: " + (.stats | tojson)' /tmp/out.json

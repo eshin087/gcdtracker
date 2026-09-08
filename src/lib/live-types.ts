@@ -1,8 +1,8 @@
+import type { SourceHealth } from "./health";
 export interface LiveInfo {
-  /** database reachable */
   db: boolean;
-  lastAiVisit: string | null;
+  status: "live" | "stale" | "offline" | "degraded";
+  sources: SourceHealth[];
   lastIngest: string | null;
-  aiVisits24h: number;
   generatedAt: string;
 }

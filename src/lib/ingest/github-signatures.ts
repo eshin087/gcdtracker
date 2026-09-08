@@ -19,7 +19,7 @@ export const SIGNATURE_QUERIES = [
 ] as const;
 
 export const githubSignaturesJob: Job = async (ctx) => {
-  if (!process.env.GITHUB_TOKEN) return { stats: { skipped: "GITHUB_TOKEN not set" } };
+  if (!process.env.GITHUB_TOKEN) return { outcome: "disabled", stats: { skipped: "GITHUB_TOKEN not set" } };
   const stats: Record<string, unknown> = { queries: 0 };
   let partial = false;
   const days = [daysAgo(1), daysAgo(2), daysAgo(3)];
@@ -45,5 +45,5 @@ export const githubSignaturesJob: Job = async (ctx) => {
       partial = true;
     } else throw err;
   }
-  return { stats, partial };
+  return { stats, partial, outcome: partial ? "partial" : "success" };
 };

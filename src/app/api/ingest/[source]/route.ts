@@ -20,6 +20,7 @@ import { packagesJob } from "@/lib/ingest/packages";
 import { aiRobotsHistoryJob } from "@/lib/ingest/ai-robots-history";
 import { baselineJob } from "@/lib/ingest/baseline";
 import { wikipediaJob } from "@/lib/ingest/wikipedia";
+import { PayloadTooLarge, readPayload, reportsOutcome } from "@/lib/ingest/request";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 240;
@@ -49,6 +50,9 @@ const JOBS: Record<string, Job> = {
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */
 const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "packages", "baseline", "github", "watched", "github-signatures", "retention"];
 
+const STATUS_SOURCES = new Set(["gharchive", "robots-census"]);
+const BODY_SOURCES = new Set(["gharchive", "robots-census", "ai-robots-history"]);
+
 async function handle(req: Request, source: string): Promise<Response> {
   if (!authorized(req)) return NextResponse.json({ ok: false, reason: "unauthorized" }, { status: 401 });
   if (!db) return NextResponse.json({ ok: false, reason: "no-database" }, { status: 503 });
@@ -58,12 +62,11 @@ async function handle(req: Request, source: string): Promise<Response> {
   const deadline = started + (maxDuration - 15) * 1000;
   let payload: string | undefined;
   if (req.method === "POST") {
-    try {
-      const text = await req.text();
-      if (text && text.length < 2_000_000) payload = text;
-    } catch {
-      payload = undefined;
+    try { payload = await readPayload(req); }
+    catch (err) {
+      return NextResponse.json({ ok: false, reason: err instanceof PayloadTooLarge ? "payload-too-large" : "invalid-body" }, { status: err instanceof PayloadTooLarge ? 413 : 400 });
     }
+    if (BODY_SOURCES.has(source) && !payload) return NextResponse.json({ ok: false, reason: "body-required" }, { status: 400 });
   }
   const query = new URL(req.url).searchParams;
   const ctx = { db, deadline, payload, query };
@@ -75,17 +78,23 @@ async function handle(req: Request, source: string): Promise<Response> {
     for (let i = 0; i < ALL_ORDER.length; i++) {
       const name = ALL_ORDER[i];
       const remaining = deadline - Date.now();
-      if (remaining < 20_000) break;
+      if (remaining < 20_000) {
+        for (const skipped of ALL_ORDER.slice(i)) reports.push({ source: skipped, ok: false, outcome: "partial", ms: 0, stats: { notRun: "deadline" }, partial: true });
+        break;
+      }
       const jobsLeft = ALL_ORDER.length - i;
       const slice = Math.max(20_000, Math.min(remaining, (remaining / jobsLeft) * 1.8));
-      reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice, payload }));
+      reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice, payload, query }));
     }
   } else {
-    reports.push(await runJob(source, JOBS[source], ctx));
+    reports.push(await runJob(source, JOBS[source], ctx, { record: !(req.method === "GET" && STATUS_SOURCES.has(source)) }));
   }
 
-  const ok = reports.some((r) => r.ok);
-  return NextResponse.json({ ok, ms: Date.now() - started, reports }, { status: ok ? 200 : 500 });
+  const outcome = reportsOutcome(reports);
+  return NextResponse.json({ ok: outcome === "success", outcome, ms: Date.now() - started, reports }, {
+    status: outcome === "failed" ? 500 : 200,
+    headers: { "cache-control": "no-store" },
+  });
 }
 
 type Params = { params: Promise<{ source: string }> };

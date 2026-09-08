@@ -47,11 +47,14 @@ export const moltbookJob: Job = async (ctx) => {
     const qs: URLSearchParams = new URLSearchParams({ sort: "new", limit: "50", ...(cursor ? { cursor } : {}) });
     const res: { status: number; body: MoltResponse | null } = await fetchJson<MoltResponse>(`${API}?${qs}`);
     const { status, body } = res;
-    if (status !== 200 || !body?.posts) throw new Error(`moltbook ${status}`);
+    if (status !== 200 || body?.success === false || !Array.isArray(body?.posts)) throw new Error(`moltbook ${status}: invalid or failed response`);
     stats.pages = (stats.pages as number) + 1;
     const posts = body.posts.filter((p) => p.id && p.created_at && !p.is_deleted && !p.is_spam);
     stats.fetched = (stats.fetched as number) + posts.length;
-    if (posts.length === 0) break;
+    if (posts.length === 0) {
+      if (body.has_more) partial = true;
+      break;
+    }
 
     const ids = posts.map((p) => p.id);
     const existing = new Set(
@@ -82,8 +85,10 @@ export const moltbookJob: Job = async (ctx) => {
 
     const oldest = posts[posts.length - 1];
     // Stop once we hit posts we already had or posts older than a week.
-    if (existing.size === posts.length || new Date(oldest.created_at).getTime() < minTs || !body.has_more || !body.next_cursor) break;
+    if (existing.size === posts.length || new Date(oldest.created_at).getTime() < minTs || !body.has_more) break;
+    if (!body.next_cursor || body.next_cursor === cursor) throw new Error("moltbook continuation missing or repeated");
     cursor = body.next_cursor;
+    if (page === 9) partial = true;
   }
 
   // Recompute daily counts for touched days plus today (cheap: GROUP BY over the last week).
@@ -106,5 +111,5 @@ export const moltbookJob: Job = async (ctx) => {
       .onConflictDoUpdate({ target: forumDaily.day, set: { posts: sql`excluded.posts`, agents: sql`excluded.agents` } });
   }
   stats.daysUpdated = rows.length;
-  return { stats, partial };
+  return { stats, partial, outcome: partial ? "partial" : "success" };
 };

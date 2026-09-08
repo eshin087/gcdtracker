@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LiveInfo } from "@/lib/live-types";
-import { relTime } from "@/lib/format";
 
-type State = "loading" | "live" | "offline";
+type State = "loading" | "live" | "stale" | "degraded" | "offline";
 
 export function LivePill() {
   const [info, setInfo] = useState<LiveInfo | null>(null);
@@ -21,32 +20,32 @@ export function LivePill() {
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as LiveInfo;
         setInfo(data);
-        setState(data.db ? "live" : "offline");
+        setState(data.status);
       } catch (err) {
         if ((err as Error).name !== "AbortError") setState("offline");
       }
     };
-    void load();
+    const onVisibility = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.visibilityState === "visible") void load();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") void load();
     }, 30_000);
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       clearInterval(id);
       ctl?.abort();
     };
   }, []);
 
-  const text =
-    state === "loading"
-      ? "connecting…"
-      : state === "offline"
-        ? "sensor offline"
-        : info?.lastAiVisit
-          ? `sensor live · last AI visit ${relTime(info.lastAiVisit)}`
-          : "sensor live · no AI visits yet";
+  const text = state === "loading" ? "checking sources…"
+    : state === "offline" ? "sources unavailable"
+    : state === "degraded" ? "collection needs attention"
+    : state === "stale" ? "source data is stale"
+    : info?.sources.length ? "sources connected" : "no source runs yet";
 
   return (
-    <Link href="/visitors" className="pill" title="Live sensor status">
+    <Link href="/data" className="pill" title={text} aria-label={text + "; view collection status"}>
       <span className="dot" data-state={state} aria-hidden="true" />
       <span className="pill-text">{text}</span>
     </Link>

@@ -1,13 +1,16 @@
-function cell(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  const s = v instanceof Date ? v.toISOString() : Array.isArray(v) ? v.join("|") : String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+function cell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const isNumber = typeof value === "number" && Number.isFinite(value);
+  let text = value instanceof Date ? value.toISOString() : Array.isArray(value) ? value.join("|") : String(value);
+  // CSV quoting does not stop formula execution. Guard text, preserving real numbers.
+  if (!isNumber && (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@]/.test(text))) text = "'" + text;
+  return /[",\n\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
 }
 
-/** Rows to CSV using the keys of the first row (or the given columns). */
-export function toCsv(rows: Array<Record<string, unknown>>, columns?: string[]): string {
+/** Supply stable columns so empty exports still include their header. */
+export function toCsv(rows: Array<Record<string, unknown>>, columns?: readonly string[]): string {
   const cols = columns ?? (rows[0] ? Object.keys(rows[0]) : []);
-  const lines = [cols.join(",")];
-  for (const r of rows) lines.push(cols.map((c) => cell(r[c])).join(","));
-  return `${lines.join("\n")}\n`;
+  const lines = [cols.map(cell).join(",")];
+  for (const row of rows) lines.push(cols.map((column) => cell(row[column])).join(","));
+  return lines.join("\n") + "\n";
 }

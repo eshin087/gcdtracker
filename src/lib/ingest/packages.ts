@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
-import { externalSeries } from "@/lib/db/schema";
-import { fetchJson, type Job, lastCursor, sleep, timeLeft } from "./common";
+import { fetchJson, type Job, sleep, timeLeft } from "./common";
+import { commitSeries, readCollectorState, type SeriesRow } from "./series-write";
+import { commitCollectorState } from "./state";
+import { dateBefore, isUtcDay } from "./windows";
 
 export interface TrackedPackage {
   registry: "npm" | "pypi";
@@ -40,65 +41,70 @@ function iso(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-type Row = { source: string; series: string; period: string; value: number; lo: null; hi: null };
-
-async function upsert(ctx: Parameters<Job>[0], rows: Row[]) {
-  for (let i = 0; i < rows.length; i += 300) {
-    await ctx.db
-      .insert(externalSeries)
-      .values(rows.slice(i, i + 300))
-      .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, fetchedAt: new Date() } });
+/** A partial/malformed npm range must not retire its backfill window. */
+export function npmRows(name: string, downloads: Array<{ day: string; downloads: number }>, start: string, end: string): SeriesRow[] {
+  const byDay = new Map<string, number>();
+  for (const row of downloads) {
+    if (!isUtcDay(row.day) || !Number.isSafeInteger(row.downloads) || row.downloads < 0 || row.day < start || row.day > end || byDay.has(row.day)) throw new Error("invalid or duplicate npm daily observation");
+    byDay.set(row.day, row.downloads);
   }
+  const expected = Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000) + 1;
+  if (expected < 1 || byDay.size !== expected) throw new Error("npm range is incomplete; retaining checkpoint");
+  return [...byDay].map(([period, value]) => ({ source: "npm", series: name, period, value }));
+}
+export function pypiRows(name: string, data: Array<{ category: string; date: string; downloads: number }>, cutoff: string): SeriesRow[] {
+  const byDay = new Map<string, number>();
+  for (const row of data) {
+    if (row.category !== "without_mirrors") continue;
+    if (!isUtcDay(row.date) || !Number.isSafeInteger(row.downloads) || row.downloads < 0) throw new Error("invalid PyPI observation");
+    if (row.date >= cutoff) continue;
+    if (byDay.has(row.date) && byDay.get(row.date) !== row.downloads) throw new Error("conflicting PyPI observation");
+    byDay.set(row.date, row.downloads);
+  }
+  if (!byDay.size) throw new Error("PyPI supplied no settled observations; retaining checkpoint");
+  return [...byDay].map(([period, value]) => ({ source: "pypi", series: name, period, value }));
 }
 
-/**
- * Daily download counts of agent CLIs and agent frameworks: a demand-side measure of
- * how many machines are being given an agent. First run backfills; later runs top up.
- */
+type PackageProgress = { nextFrom: string | null; refreshedAt: string | null };
 export const packagesJob: Job = async (ctx) => {
-  const done = await lastCursor(ctx.db, "packages");
-  const backfill = !done;
-  const stats: Record<string, unknown> = { backfill };
-  const today = new Date();
-  const npmFrom = backfill ? NPM_BACKFILL_FROM : iso(new Date(today.getTime() - 14 * 86_400_000));
-  let rows = 0;
+  const today = iso(new Date());
+  const cutoff = dateBefore(today, 1); // omit unsettled current/yesterday counts
+  const wheel = await readCollectorState(ctx.db, "packages:rotation", { nextIndex: 0 });
   const failed: string[] = [];
-
-  for (const pkg of PACKAGES.filter((p) => p.registry === "npm")) {
-    if (timeLeft(ctx) < 10_000) return { stats: { ...stats, rows, failed, partial: true }, partial: true };
-    // Walk the range in 18-month windows.
-    let start = new Date(`${npmFrom}T00:00:00Z`);
-    while (start < today) {
-      const end = new Date(Math.min(today.getTime(), start.getTime() + 540 * 86_400_000));
-      const { status, body } = await fetchJson<{ downloads?: Array<{ day: string; downloads: number }> }>(`${PACKAGE_SOURCES.npm}${iso(start)}:${iso(end)}/${pkg.name}`);
-      if (status !== 200 || !body?.downloads) {
-        failed.push(`${pkg.name} (${status})`);
-        break;
+  let rows = 0, processed = 0, partial = false;
+  for (let offset = 0; offset < PACKAGES.length; offset++) {
+    if (timeLeft(ctx) < 12_000) { partial = true; break; }
+    const index = (wheel.state.nextIndex + offset) % PACKAGES.length;
+    const pkg = PACKAGES[index];
+    const key = "package:" + pkg.registry + ":" + pkg.name;
+    const snap = await readCollectorState<PackageProgress>(ctx.db, key, { nextFrom: pkg.registry === "npm" ? NPM_BACKFILL_FROM : null, refreshedAt: null });
+    if (!snap.state.nextFrom && snap.state.refreshedAt === today) continue;
+    try {
+      let batch: SeriesRow[], nextFrom: string | null = null;
+      if (pkg.registry === "npm") {
+        const start = snap.state.nextFrom ?? dateBefore(cutoff, 14);
+        const end = [dateBefore(start, -539), dateBefore(cutoff, 1)].sort()[0];
+        const { status, body } = await fetchJson<{ downloads?: Array<{ day: string; downloads: number }> }>(
+          PACKAGE_SOURCES.npm + start + ":" + end + "/" + pkg.name, {}, Math.min(20_000, timeLeft(ctx) - 2_000));
+        if (status !== 200 || !Array.isArray(body?.downloads)) throw new Error("HTTP " + status);
+        batch = npmRows(pkg.name, body.downloads, start, end);
+        nextFrom = end < dateBefore(cutoff, 1) ? dateBefore(end, -1) : null;
+      } else {
+        const { status, body } = await fetchJson<{ data?: Array<{ category: string; date: string; downloads: number }> }>(
+          PACKAGE_SOURCES.pypi + pkg.name + "/overall?mirrors=false", {}, Math.min(20_000, timeLeft(ctx) - 2_000));
+        if (status !== 200 || !Array.isArray(body?.data)) throw new Error("HTTP " + status);
+        batch = pypiRows(pkg.name, body.data, cutoff);
       }
-      // npm reports today and yesterday before their counts settle; keep complete days only.
-      const cutoff = iso(new Date(today.getTime() - 86_400_000));
-      const batch: Row[] = body.downloads.filter((d) => d.day < cutoff).map((d) => ({ source: "npm", series: pkg.name, period: d.day, value: d.downloads, lo: null, hi: null }));
-      await upsert(ctx, batch);
-      rows += batch.length;
-      start = new Date(end.getTime() + 86_400_000);
+      if (!(await commitSeries(ctx.db, key, snap, { nextFrom, refreshedAt: nextFrom ? null : today }, batch))) partial = true;
+      else { rows += batch.length; processed++; }
+      if (nextFrom) partial = true;
+    } catch (err) {
+      failed.push(pkg.name + ": " + (err instanceof Error ? err.message : "fetch failed"));
     }
+    // Fairness is independent of success: one slow/broken package cannot starve later packages.
+    const rotation = await readCollectorState(ctx.db, "packages:rotation", { nextIndex: 0 });
+    await commitCollectorState(ctx.db, "packages:rotation", rotation, { nextIndex: (index + 1) % PACKAGES.length });
+    if (pkg.registry === "pypi" && timeLeft(ctx) > 3_000) await sleep(2_500);
   }
-
-  // pypistats serves the last 180 days and rate-limits hard, so pace the calls.
-  for (const pkg of PACKAGES.filter((p) => p.registry === "pypi")) {
-    if (timeLeft(ctx) < 10_000) return { stats: { ...stats, rows, failed, partial: true }, partial: true };
-    const { status, body } = await fetchJson<{ data?: Array<{ category: string; date: string; downloads: number }> }>(`${PACKAGE_SOURCES.pypi}${pkg.name}/overall?mirrors=false`);
-    if (status !== 200 || !body?.data) {
-      failed.push(`${pkg.name} (${status})`);
-      await sleep(3_000);
-      continue;
-    }
-    const keep = backfill ? body.data : body.data.slice(-14);
-    const batch: Row[] = keep.map((d) => ({ source: "pypi", series: pkg.name, period: d.date, value: d.downloads, lo: null, hi: null }));
-    await upsert(ctx, batch);
-    rows += batch.length;
-    await sleep(2_500);
-  }
-
-  return { stats: { ...stats, rows, failed }, cursor: iso(today) };
+  return { stats: { rows, processed, failed }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

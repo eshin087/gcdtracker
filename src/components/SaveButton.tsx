@@ -2,49 +2,21 @@
 
 import { useEffect, useState } from "react";
 
-export interface SavedItem {
-  id: string;
-  kind: string;
-  title: string;
-  url: string | null;
-  sub?: string;
-  savedAt: string;
-}
-
-const KEY = "gcd:saved";
-
-export function readSaved(): SavedItem[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const parsed = raw ? (JSON.parse(raw) as SavedItem[]) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeSaved(items: SavedItem[]): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(items.slice(0, 500)));
-    window.dispatchEvent(new Event("gcd:saved-changed"));
-  } catch {
-    /* storage unavailable */
-  }
-}
+import { canonicalSavedId, readSaved, writeSaved, subscribeSaved, type SavedItem } from "./saved-storage";
+export { readSaved, writeSaved, type SavedItem } from "./saved-storage";
 
 /** Bookmark toggle. Saved items live only in this browser (localStorage). */
 export function SaveButton({ item }: { item: Omit<SavedItem, "savedAt"> }) {
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    const sync = () => setSaved(readSaved().some((s) => s.id === item.id));
+    const sync = () => setSaved(readSaved().some((s) => s.id === canonicalSavedId(item.id)));
     sync();
-    window.addEventListener("gcd:saved-changed", sync);
-    return () => window.removeEventListener("gcd:saved-changed", sync);
+    return subscribeSaved(sync);
   }, [item.id]);
 
   const toggle = () => {
     const cur = readSaved();
-    if (cur.some((s) => s.id === item.id)) writeSaved(cur.filter((s) => s.id !== item.id));
+    if (cur.some((s) => s.id === canonicalSavedId(item.id))) writeSaved(cur.filter((s) => s.id !== canonicalSavedId(item.id)));
     else writeSaved([{ ...item, savedAt: new Date().toISOString() }, ...cur]);
   };
 

@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, type Db } from "@/lib/db";
-import { ghArchiveDaily } from "@/lib/db/schema";
+import { resultRows } from "./ingest/state";
+import { calendarWindow, dateBefore, isUtcDay } from "./ingest/windows";
 import { daysAgo } from "@/lib/format";
 import { PACKAGES, type TrackedPackage } from "@/lib/ingest/packages";
 import { ROBOTS_TOKENS } from "@/lib/robots/tokens";
@@ -14,7 +15,7 @@ async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
     return await fn(db);
   } catch (err) {
     console.error("stats-census query failed", err);
-    return fallback;
+    throw new Error("Data temporarily unavailable", { cause: err });
   }
 }
 
@@ -22,23 +23,17 @@ async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
 /* GH Archive census                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Before/after markers drawn on every long series. */
-export const AI_MARKERS = [
-  { day: "2022-11-30", label: "ChatGPT" },
-  { day: "2023-08-07", label: "GPTBot" },
-];
-
-/** Chart annotations: when the major coding agents shipped. */
-export const AGENT_LAUNCHES = [
-  { day: "2025-02-24", label: "Claude Code preview" },
-  { day: "2025-05-19", label: "Codex & Copilot agent" },
-];
+export { AI_MARKERS, AGENT_LAUNCHES } from "./census-markers";
 
 export interface ArchivePeriod {
   /** YYYY-MM-DD for days, YYYY-MM for months */
   period: string;
   /** hours of data behind the number (24 per complete day) */
   hours: number;
+  /** Hours atomically completed by the version-2 collector. Legacy history is not certified. */
+  validatedHours: number;
+  /** A known thin day also makes its containing month unsuitable for share comparisons. */
+  partialFeed?: boolean;
   /** all events in the period; a coverage check, since GH Archive occasionally records only part of GitHub's feed */
   events: number;
   prsOpened: number;
@@ -54,14 +49,15 @@ export interface ArchivePeriod {
   commits: number | null;
 }
 
-type Raw = { period: string; kind: string; key: string; value: number; hours: number };
+export type ArchiveRaw = { period: string; kind: string; key: string; value: number; hours: number; validatedHours: number; partialFeed?: boolean };
+type Raw = ArchiveRaw;
 
-function fold(rows: Raw[]): ArchivePeriod[] {
+export function foldArchiveRows(rows: Raw[]): ArchivePeriod[] {
   const byPeriod = new Map<string, ArchivePeriod & { withBody: number; withCommits: number }>();
   for (const r of rows) {
     let p = byPeriod.get(r.period);
     if (!p) {
-      p = { period: r.period, hours: 0, events: 0, prsOpened: 0, prsMerged: null, agentPrs: 0, agentMerged: 0, byAgent: {}, prSignatures: null, commitSignatures: null, commits: null, withBody: 0, withCommits: 0 };
+      p = { period: r.period, hours: 0, validatedHours: n(r.validatedHours), partialFeed: r.partialFeed ?? false, events: 0, prsOpened: 0, prsMerged: null, agentPrs: 0, agentMerged: 0, byAgent: {}, prSignatures: null, commitSignatures: null, commits: null, withBody: 0, withCommits: 0 };
       byPeriod.set(r.period, p);
     }
     const v = n(r.value);
@@ -96,37 +92,59 @@ function fold(rows: Raw[]): ArchivePeriod[] {
  * GitHub opens several thousand pull requests an hour; when an archived hour holds far
  * fewer, GH Archive's collector caught only part of the public feed (it happened for
  * most of June to August 2026). Absolute counts for such periods are floors; the share
- * of PRs by agents is still meaningful because the shortfall hits agents and humans alike.
+ * may also be biased: equal coverage of agents and humans has not been established.
  */
 export const PARTIAL_ARCHIVE_PRS_PER_HOUR = 1_000;
-export const isPartialArchive = (p: ArchivePeriod) => p.hours > 0 && p.prsOpened / p.hours < PARTIAL_ARCHIVE_PRS_PER_HOUR;
+export const isPartialArchive = (p: ArchivePeriod) => p.partialFeed === true || (p.hours > 0 && p.prsOpened / p.hours < PARTIAL_ARCHIVE_PRS_PER_HOUR);
+
+/** Ratios compare only closed, fully validated periods without a known feed shortfall. */
+export function isComparableArchivePeriod(p: ArchivePeriod, today = new Date().toISOString().slice(0, 10)): boolean {
+  let expectedHours: number;
+  if (isUtcDay(p.period)) {
+    expectedHours = 24;
+    if (p.period >= today) return false;
+  } else if (/^\d{4}-\d{2}$/.test(p.period)) {
+    if (p.period >= today.slice(0, 7)) return false;
+    const [year, month] = p.period.split("-").map(Number);
+    if (month < 1 || month > 12) return false;
+    expectedHours = new Date(Date.UTC(year, month, 0)).getUTCDate() * 24;
+  } else return false;
+  return p.hours === expectedHours && p.validatedHours === expectedHours && !isPartialArchive(p);
+}
 
 export const fmtMonth = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
-export async function getArchiveDaily(days = 90): Promise<ArchivePeriod[]> {
-  const rows = await safe([] as Raw[], async (d) =>
-    d
-      .select({ period: ghArchiveDaily.day, kind: ghArchiveDaily.kind, key: ghArchiveDaily.key, value: ghArchiveDaily.value, hours: ghArchiveDaily.hours })
-      .from(ghArchiveDaily)
-      .where(gte(ghArchiveDaily.day, daysAgo(days))),
-  );
-  return fold(rows);
+/** Aggregate markers in Postgres; join them in the same snapshot as the data rows. */
+function archiveCoverage(length: 7 | 10, since?: string): SQL {
+  return sql`select left(hour, ${length}) as period, count(*)::int as validated_hours from gh_archive_completed
+    where ingest_version = 2 ${since ? sql`and hour >= ${since}` : sql``} group by 1`;
 }
-
+export function archiveDailyQuery(since: string): SQL {
+  return sql`with coverage as (${archiveCoverage(10, since)})
+    select d.day::text as period, d.kind, d.key, d.value, d.hours, coalesce(c.validated_hours,0)::int as "validatedHours"
+    from gh_archive_daily d left join coverage c on c.period = d.day::text
+    where d.day >= ${since}::date`;
+}
+export async function getArchiveDaily(days = 90): Promise<ArchivePeriod[]> {
+  const rows = await safe([] as Raw[], async (d) => resultRows<Raw>(await d.execute(archiveDailyQuery(daysAgo(days - 1)))));
+  return foldArchiveRows(rows);
+}
+export function archiveMonthlyQuery(): SQL {
+  return sql`with coverage as (${archiveCoverage(7)}), feed as (
+    select to_char(e.day,'YYYY-MM') as period, bool_or(p.value is null or e.hours=0 or p.value < e.hours * ${PARTIAL_ARCHIVE_PRS_PER_HOUR}) as partial
+    from gh_archive_daily e left join gh_archive_daily p on p.day=e.day and p.kind='total' and p.key='prs_opened'
+    where e.kind='total' and e.key='events' group by to_char(e.day,'YYYY-MM')
+  )
+    select to_char(d.day,'YYYY-MM') as period, d.kind, d.key, sum(d.value)::bigint as value,
+      sum(case when d.kind='total' and d.key='events' then d.hours else 0 end)::int as hours,
+      coalesce(max(c.validated_hours),0)::int as "validatedHours", coalesce(bool_or(f.partial),true) as "partialFeed"
+    from gh_archive_daily d left join coverage c on c.period = to_char(d.day,'YYYY-MM')
+    left join feed f on f.period = to_char(d.day,'YYYY-MM')
+    group by to_char(d.day,'YYYY-MM'), d.kind, d.key`;
+}
 export async function getArchiveMonthly(): Promise<ArchivePeriod[]> {
-  const rows = await safe([] as Raw[], async (d) =>
-    d
-      .select({
-        period: sql<string>`to_char(${ghArchiveDaily.day}, 'YYYY-MM')`,
-        kind: ghArchiveDaily.kind,
-        key: ghArchiveDaily.key,
-        value: sql<number>`sum(${ghArchiveDaily.value})::int`,
-        hours: sql<number>`sum(case when ${ghArchiveDaily.kind} = 'total' and ${ghArchiveDaily.key} = 'events' then ${ghArchiveDaily.hours} else 0 end)::int`,
-      })
-      .from(ghArchiveDaily)
-      .groupBy(sql`to_char(${ghArchiveDaily.day}, 'YYYY-MM')`, ghArchiveDaily.kind, ghArchiveDaily.key),
-  );
-  return fold(rows);
+  const rows = await safe([] as Raw[], async (d) => resultRows<Raw>(await d.execute(archiveMonthlyQuery())));
+  return foldArchiveRows(rows);
 }
 
 export interface ArchiveSummary {
@@ -143,16 +161,21 @@ export const EMPTY_ARCHIVE: ArchiveSummary = { latest: null, last7: { prsOpened:
 
 export async function getArchiveSummary(): Promise<ArchiveSummary> {
   const daily = await getArchiveDaily(20);
-  const complete = daily.filter((d) => d.hours === 24);
+  const today = new Date().toISOString().slice(0, 10);
+  const complete = daily.filter((d) => isComparableArchivePeriod(d, today));
   const latest = complete.at(-1) ?? null;
   const sum = (rows: ArchivePeriod[]) => ({ prsOpened: rows.reduce((s, r) => s + r.prsOpened, 0), agentPrs: rows.reduce((s, r) => s + r.agentPrs, 0), days: rows.length });
-  const last7 = sum(complete.slice(-7));
-  const prior7 = sum(complete.slice(-14, -7));
+  const last7 = sum(calendarWindow(complete, (d) => d.period, dateBefore(today, 7), today));
+  const prior7 = sum(calendarWindow(complete, (d) => d.period, dateBefore(today, 14), dateBefore(today, 7)));
   const coverage = await safe({ first: null as string | null, days: 0, hours: 0 }, async (d) => {
-    const [row] = await d
-      .select({ first: sql<string | null>`min(${ghArchiveDaily.day})`, days: sql<number>`count(*)::int`, hours: sql<number>`coalesce(sum(${ghArchiveDaily.hours}), 0)::int` })
-      .from(ghArchiveDaily)
-      .where(and(eq(ghArchiveDaily.kind, "total"), eq(ghArchiveDaily.key, "events")));
+    const [row] = resultRows<{ first: string | null; days: number; hours: number }>(await d.execute(sql`
+      with coverage as (${archiveCoverage(10)})
+      select min(e.day)::text as first,
+        count(*) filter (where e.hours=24 and c.validated_hours=24 and p.value >= ${24 * 1000} and e.day < ${today}::date)::int as days,
+        coalesce(sum(e.hours),0)::int as hours
+      from gh_archive_daily e left join coverage c on c.period=e.day::text
+      left join gh_archive_daily p on p.day=e.day and p.kind='total' and p.key='prs_opened'
+      where e.kind='total' and e.key='events'`));
     return { first: row?.first ?? null, days: n(row?.days), hours: n(row?.hours) };
   });
   return { latest, last7, prior7, firstDay: coverage.first, completeDays: coverage.days, hours: coverage.hours };
@@ -161,6 +184,7 @@ export async function getArchiveSummary(): Promise<ArchiveSummary> {
 export interface ShareDay {
   day: string;
   hours: number;
+  validatedHours: number;
   prsOpened: number;
   agentPrs: number;
   /** 0..1, null when the day has no PRs */
@@ -168,26 +192,26 @@ export interface ShareDay {
   partial: boolean;
 }
 
-/** Agent share of all PRs opened, one row per day, for the calendar. */
+export function archiveShareQuery(): SQL {
+  return sql`with coverage as (${archiveCoverage(10)})
+    select d.day::text as day,
+      coalesce(max(d.hours) filter(where d.kind='total' and d.key='events'),0)::int as hours,
+      coalesce(max(c.validated_hours),0)::int as "validatedHours",
+      coalesce(sum(d.value) filter(where d.kind='agent-prs'),0)::bigint as agent,
+      coalesce(sum(d.value) filter(where d.kind='total' and d.key='prs_opened'),0)::bigint as prs
+    from gh_archive_daily d left join coverage c on c.period=d.day::text
+    where d.kind in ('agent-prs','total') group by d.day order by d.day`;
+}
+export function archiveShareRow(r: { day: string; hours: number; validatedHours: number; agent: number; prs: number }, today = new Date().toISOString().slice(0, 10)): ShareDay {
+  const prs = n(r.prs), hours = n(r.hours), validatedHours = n(r.validatedHours);
+  const partial = hours !== 24 || validatedHours !== 24 || r.day >= today || prs / hours < PARTIAL_ARCHIVE_PRS_PER_HOUR;
+  return { day: r.day, hours, validatedHours, prsOpened: prs, agentPrs: n(r.agent), share: !partial && prs > 0 ? n(r.agent) / prs : null, partial };
+}
+/** Unvalidated/incomplete observations remain visible as gaps, never as comparable shares. */
 export async function getArchiveShareByDay(): Promise<ShareDay[]> {
-  const rows = await safe([] as Array<{ day: string; hours: number; agent: number; prs: number }>, async (d) =>
-    d
-      .select({
-        day: ghArchiveDaily.day,
-        hours: ghArchiveDaily.hours,
-        agent: sql<number>`coalesce(sum(case when ${ghArchiveDaily.kind} = 'agent-prs' then ${ghArchiveDaily.value} end), 0)::int`,
-        prs: sql<number>`coalesce(sum(case when ${ghArchiveDaily.kind} = 'total' and ${ghArchiveDaily.key} = 'prs_opened' then ${ghArchiveDaily.value} end), 0)::int`,
-      })
-      .from(ghArchiveDaily)
-      .where(sql`${ghArchiveDaily.kind} in ('agent-prs', 'total')`)
-      .groupBy(ghArchiveDaily.day, ghArchiveDaily.hours)
-      .orderBy(ghArchiveDaily.day),
-  );
-  return rows.map((r) => {
-    const prs = n(r.prs);
-    const hours = n(r.hours);
-    return { day: r.day, hours, prsOpened: prs, agentPrs: n(r.agent), share: prs > 0 ? n(r.agent) / prs : null, partial: hours > 0 && prs / hours < PARTIAL_ARCHIVE_PRS_PER_HOUR };
-  });
+  const rows = await safe([] as Array<{ day: string; hours: number; validatedHours: number; agent: number; prs: number }>, async (d) =>
+    resultRows<{ day: string; hours: number; validatedHours: number; agent: number; prs: number }>(await d.execute(archiveShareQuery())));
+  return rows.map((r) => archiveShareRow(r));
 }
 
 /** Agent share by weekday over complete, non-partial days in the last `window` days. */
@@ -196,7 +220,7 @@ export function shareByWeekday(days: ShareDay[], window = 182): Array<{ dow: num
   const acc = labels.map((label, dow) => ({ dow, label, prs: 0, agent: 0, days: 0 }));
   const since = daysAgo(window);
   for (const d of days) {
-    if (d.day < since || d.hours !== 24 || d.partial || d.share === null) continue;
+    if (d.day < since || d.day >= daysAgo(0) || d.hours !== 24 || d.validatedHours !== 24 || d.partial || d.share === null) continue;
     const dow = (new Date(`${d.day}T00:00:00Z`).getUTCDay() + 6) % 7;
     acc[dow].prs += d.prsOpened;
     acc[dow].agent += d.agentPrs;
@@ -205,24 +229,25 @@ export function shareByWeekday(days: ShareDay[], window = 182): Array<{ dow: num
   return acc.map((a) => ({ dow: a.dow, label: a.label, share: a.prs > 0 ? a.agent / a.prs : 0, days: a.days }));
 }
 
-/** Agent totals over the last N complete days, for ranking. */
+export function archiveAgentsQuery(since: string, today: string): SQL {
+  return sql`with coverage as (${archiveCoverage(10, since)})
+    select a.kind, a.key, sum(a.value)::bigint as value from gh_archive_daily a
+    join coverage c on c.period=a.day::text and c.validated_hours=24
+    join gh_archive_daily p on p.day=a.day and p.kind='total' and p.key='prs_opened' and p.value >= ${24 * 1000}
+    where a.day >= ${since}::date and a.day < ${today}::date and a.hours=24 and a.kind in ('agent-prs','agent-merged')
+    group by a.kind,a.key order by sum(a.value) desc`;
+}
+/** Ranking uses validated, complete, non-thin days within a fixed calendar window. */
 export async function getArchiveAgents(days = 30): Promise<Array<{ agent: string; prs: number; merged: number }>> {
   const rows = await safe([] as Array<{ kind: string; key: string; value: number }>, async (d) =>
-    d
-      .select({ kind: ghArchiveDaily.kind, key: ghArchiveDaily.key, value: sql<number>`sum(${ghArchiveDaily.value})::int` })
-      .from(ghArchiveDaily)
-      .where(and(gte(ghArchiveDaily.day, daysAgo(days)), sql`${ghArchiveDaily.kind} in ('agent-prs', 'agent-merged')`, eq(ghArchiveDaily.hours, 24)))
-      .groupBy(ghArchiveDaily.kind, ghArchiveDaily.key)
-      .orderBy(desc(sql`sum(${ghArchiveDaily.value})`)),
-  );
+    resultRows<{ kind: string; key: string; value: number }>(await d.execute(archiveAgentsQuery(daysAgo(days), daysAgo(0)))));
   const out = new Map<string, { agent: string; prs: number; merged: number }>();
   for (const r of rows) {
     const o = out.get(r.key) ?? { agent: r.key, prs: 0, merged: 0 };
-    if (r.kind === "agent-prs") o.prs = n(r.value);
-    else o.merged = n(r.value);
+    if (r.kind === "agent-prs") o.prs = n(r.value); else o.merged = n(r.value);
     out.set(r.key, o);
   }
-  return [...out.values()].sort((a, b) => b.prs - a.prs);
+  return [...out.values()].sort((a,b) => b.prs-a.prs);
 }
 
 /* ------------------------------------------------------------------ */
@@ -237,7 +262,7 @@ export interface RobotsCrawl {
 }
 
 export async function getRobotsCensus(): Promise<RobotsCrawl[]> {
-  const series = await getSeries("cc-robots");
+  const series = await getSeries("cc-robots-v2");
   const byDate = new Map<string, RobotsCrawl>();
   const get = (date: string) => {
     let c = byDate.get(date);
@@ -252,7 +277,7 @@ export async function getRobotsCensus(): Promise<RobotsCrawl[]> {
       const c = get(p.period);
       if (name === "_sites") c.sites = p.value;
       else if (name === "_files") c.files = p.value;
-      else {
+      else if (!name.startsWith("_")) {
         const i = name.lastIndexOf(":");
         const token = name.slice(0, i);
         const measure = name.slice(i + 1) as "mentioned" | "blocked";
@@ -339,6 +364,8 @@ export interface PackageStat {
   prior7: number;
   /** most recent day with data */
   latestDay: string | null;
+  coverage7d: number;
+  coveragePrior7d: number;
 }
 
 export async function getPackageStats(): Promise<PackageStat[]> {
@@ -346,6 +373,9 @@ export async function getPackageStats(): Promise<PackageStat[]> {
   return PACKAGES.map((def) => {
     const points = (def.registry === "npm" ? npm : pypi)[def.name] ?? [];
     const sum = (rows: SeriesPoint[]) => rows.reduce((s, r) => s + r.value, 0);
-    return { def, points, last7: sum(points.slice(-7)), prior7: sum(points.slice(-14, -7)), latestDay: points.at(-1)?.period ?? null };
+    const today = new Date().toISOString().slice(0, 10);
+    const recent = calendarWindow(points, (p) => p.period, dateBefore(today, 7), today);
+    const prior = calendarWindow(points, (p) => p.period, dateBefore(today, 14), dateBefore(today, 7));
+    return { def, points, last7: sum(recent), prior7: sum(prior), coverage7d: recent.length, coveragePrior7d: prior.length, latestDay: points.at(-1)?.period ?? null };
   }).sort((a, b) => b.last7 - a.last7);
 }

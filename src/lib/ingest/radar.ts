@@ -1,65 +1,81 @@
 import { sql } from "drizzle-orm";
-import { externalSeries } from "@/lib/db/schema";
-import { fetchJson, type Job } from "./common";
-
+import { fetchJson, type Job, timeLeft } from "./common";
+import { readCollectorState, commitCollectorState } from "./state";
+import { seriesWrites, type SeriesRow } from "./series-write";
+export interface RadarMetadata extends Record<string, unknown> {
+  normalization: string;
+  units: Array<{ name: string; value: string }>;
+  dateRange: Array<{ startTime: string; endTime: string }>;
+  lastUpdated: string | null;
+  fetchedAt: string;
+  version: 2;
+}
+interface RadarResponse {
+  success?: boolean;
+  result?: { summary_0?: Record<string, string>; serie_0?: Record<string, unknown>; meta?: Partial<RadarMetadata> };
+}
 const BASE = "https://api.cloudflare.com/client/v4/radar";
-
-interface Summary {
-  success?: boolean;
-  result?: { summary_0?: Record<string, string>; meta?: { dateRange?: Array<{ startTime: string; endTime: string }> } };
-  errors?: Array<{ message: string }>;
-}
-interface Timeseries {
-  success?: boolean;
-  result?: { serie_0?: Record<string, string[] | string> & { timestamps?: string[] }; meta?: unknown };
-}
-
-/**
- * Cloudflare Radar bot insights (CC BY-NC 4.0). Runs only when CLOUDFLARE_API_TOKEN
- * (Account → Radar → Read) is configured.
- */
-export const radarJob: Job = async (ctx) => {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  if (!token) return { stats: { skipped: "CLOUDFLARE_API_TOKEN not set" } };
-  const headers = { authorization: `Bearer ${token}` };
-  const stats: Record<string, unknown> = {};
-  const today = new Date().toISOString().slice(0, 10);
-  const rows: Array<{ source: string; series: string; period: string; value: number; lo: number | null; hi: number | null }> = [];
-
-  // Share of bot traffic by bot, last 7 days.
-  const s1 = await fetchJson<Summary>(`${BASE}/bots/summary/bot?dateRange=7d&limitPerGroup=15`, { headers });
-  if (s1.status === 200 && s1.body?.result?.summary_0) {
-    for (const [bot, v] of Object.entries(s1.body.result.summary_0)) rows.push({ source: "radar", series: `bot-share:${bot}`, period: today, value: Number(v), lo: null, hi: null });
-    stats.botShare = Object.keys(s1.body.result.summary_0).length;
-  } else stats.botShare = `${s1.status} ${s1.body?.errors?.[0]?.message ?? ""}`.trim();
-
-  // Crawl-to-refer ratio by AI platform.
-  const s2 = await fetchJson<Summary>(`${BASE}/bots/crawlers/summary/CRAWL_REFER_RATIO?dateRange=7d`, { headers });
-  if (s2.status === 200 && s2.body?.result?.summary_0) {
-    for (const [k, v] of Object.entries(s2.body.result.summary_0)) rows.push({ source: "radar", series: `crawl-refer:${k}`, period: today, value: Number(v), lo: null, hi: null });
-    stats.crawlRefer = Object.keys(s2.body.result.summary_0).length;
-  } else stats.crawlRefer = `${s2.status}`;
-
-  // Daily timeseries by bot operator (28 days).
-  const t = await fetchJson<Timeseries>(`${BASE}/bots/timeseries_groups/bot_operator?dateRange=28d&aggInterval=1d&limitPerGroup=8`, { headers });
-  if (t.status === 200 && t.body?.result?.serie_0?.timestamps) {
-    const serie = t.body.result.serie_0;
-    const stamps = serie.timestamps as string[];
-    for (const [op, vals] of Object.entries(serie)) {
-      if (op === "timestamps" || !Array.isArray(vals)) continue;
-      vals.forEach((v, i) => {
-        if (stamps[i]) rows.push({ source: "radar", series: `operator:${op}`, period: stamps[i].slice(0, 10), value: Number(v), lo: null, hi: null });
+export const RADAR_SOURCE = "radar-v2";
+export const RADAR_GROUPS = ["bot-share", "crawl-refer", "operator"] as const;
+export function parseRadar(group: string, body: RadarResponse, now = new Date()): { rows: SeriesRow[]; metadata: RadarMetadata } {
+  const result = body.result, meta = result?.meta;
+  if (body.success !== true || !meta?.normalization || !Array.isArray(meta.dateRange) || !meta.dateRange.length ||
+    !meta.dateRange.every((r) => Number.isFinite(Date.parse(r.startTime)) && Number.isFinite(Date.parse(r.endTime)))) {
+    throw new Error("Radar response missing verified units/window metadata");
+  }
+  const metadata: RadarMetadata = {
+    normalization: meta.normalization, units: Array.isArray(meta.units) ? meta.units : [],
+    dateRange: meta.dateRange, lastUpdated: meta.lastUpdated ?? null, fetchedAt: now.toISOString(), version: 2,
+  };
+  const rows: SeriesRow[] = [];
+  if (group === "operator") {
+    const serie = result?.serie_0, timestamps = serie?.timestamps;
+    if (!Array.isArray(timestamps)) throw new Error("Radar timeseries missing timestamps");
+    for (const [operator, values] of Object.entries(serie!)) {
+      if (operator === "timestamps") continue;
+      if (!Array.isArray(values) || values.length !== timestamps.length) throw new Error("Radar series length mismatch");
+      values.forEach((value, i) => {
+        if (value === null || value === "" || !Number.isFinite(Number(value)) || !Number.isFinite(Date.parse(timestamps[i]))) throw new Error("Radar invalid point");
+        rows.push({ source: RADAR_SOURCE, series: "operator:" + operator, period: String(timestamps[i]).slice(0, 10), value: Number(value) });
       });
     }
-    stats.operators = Object.keys(serie).length - 1;
-  } else stats.operators = `${t.status}`;
-
-  for (let i = 0; i < rows.length; i += 200) {
-    await ctx.db
-      .insert(externalSeries)
-      .values(rows.slice(i, i + 200))
-      .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, fetchedAt: new Date() } });
+  } else {
+    if (!result?.summary_0 || typeof result.summary_0 !== "object") throw new Error("Radar summary missing");
+    for (const [name, value] of Object.entries(result.summary_0)) {
+      if (value === null || value === "" || !Number.isFinite(Number(value))) throw new Error("Radar invalid summary");
+      rows.push({ source: RADAR_SOURCE, series: group + ":" + name, period: metadata.dateRange[0].endTime.slice(0, 10), value: Number(value) });
+    }
   }
-  stats.rows = rows.length;
-  return { stats };
+  return { rows, metadata };
+}
+/** Whole snapshots retain a common normalization basis. Never splice rolling normalized windows. */
+export const radarJob: Job = async (ctx) => {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) return { outcome: "disabled", stats: { skipped: "Radar token not configured" } };
+  const endpoints = [
+    ["bot-share", "/bots/summary/bot?dateRange=7d&limitPerGroup=15"],
+    ["crawl-refer", "/bots/crawlers/summary/CRAWL_REFER_RATIO?dateRange=7d"],
+    ["operator", "/bots/timeseries_groups/bot_operator?dateRange=28d&aggInterval=1d&limitPerGroup=8"],
+  ] as const;
+  const failed: string[] = [];
+  let rows = 0, partial = false;
+  for (const [group, endpoint] of endpoints) {
+    if (timeLeft(ctx) < 5_000) { partial = true; break; }
+    try {
+      const key = "radar:" + group;
+      const snapshot = await readCollectorState<Record<string, unknown>>(ctx.db, key, {});
+      // Daily source snapshots need no half-hourly refetch.
+      if (typeof snapshot.state.fetchedAt === "string" && Date.now() - Date.parse(snapshot.state.fetchedAt) < 86_400_000) continue;
+      const res = await fetchJson<RadarResponse>(BASE + endpoint, { headers: { authorization: "Bearer " + token } }, Math.min(20_000, timeLeft(ctx) - 2_000));
+      if (res.status !== 200 || !res.body) throw new Error("HTTP " + res.status);
+      const parsed = parseRadar(group, res.body);
+      const committed = await commitCollectorState(ctx.db, key, snapshot, parsed.metadata, (guard) => [
+        sql`delete from external_series where source = ${RADAR_SOURCE} and series like ${group + ":%"} and ${guard}`,
+        ...seriesWrites(parsed.rows, guard),
+      ]);
+      if (committed) rows += parsed.rows.length;
+      else partial = true;
+    } catch (err) { failed.push(group + ": " + (err instanceof Error ? err.message : "fetch failed")); }
+  }
+  return { stats: { rows, failed }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

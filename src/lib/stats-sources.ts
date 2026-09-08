@@ -1,8 +1,12 @@
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
-import { AI_CATEGORIES } from "@/lib/agents/types";
+import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { FLOW_TARGETS, type FlowData, type FlowSource, type FlowFeed, type FlowLink } from "./flow";
+export { FLOW_TARGETS } from "./flow";
+export type { FlowNode, FlowData, FlowLink } from "./flow";
+import { sourceHealth } from "./health";
 import { db, type Db } from "@/lib/db";
 import {
   agentSightings,
+  collectorState,
   commonsAiUploads,
   externalSeries,
   forumPosts,
@@ -11,7 +15,6 @@ import {
   mcpServers,
   osmChangesets,
   osmDaily,
-  visits,
   watchedPrs,
   watchedRepos,
   watchedSignals,
@@ -21,9 +24,11 @@ import {
   wikiTagWatch,
 } from "@/lib/db/schema";
 import { dayOf, dayRange, daysAgo } from "@/lib/format";
+import { cacheSummary } from "./query-cache";
+import type { RadarMetadata } from "./ingest/radar";
+import { publicRadarMetadata } from "./public-radar";
 import { githubAgentLabel } from "@/lib/github/agents";
 
-const AI = [...AI_CATEGORIES] as string[];
 const n = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 const iso = (d: Date | string | null | undefined): string | null => {
   if (d === null || d === undefined) return null;
@@ -38,7 +43,7 @@ async function safe<T>(fallback: T, fn: (d: Db) => Promise<T>): Promise<T> {
     return await fn(db);
   } catch (err) {
     console.error("stats-sources query failed", err);
-    return fallback;
+    throw new Error("Data temporarily unavailable", { cause: err });
   }
 }
 
@@ -64,13 +69,14 @@ export const EMPTY_WATCHED: WatchedSummary = {
 
 export async function getWatchedSummary(): Promise<WatchedSummary> {
   return safe(EMPTY_WATCHED, async (d) => {
-    const week = new Date(Date.now() - 7 * 86_400_000);
+    const week = new Date(daysAgo(7) + "T00:00:00Z");
+    const today = new Date(dayOf() + "T00:00:00Z");
     const month = new Date(Date.now() - 30 * 86_400_000);
     const quarter = new Date(Date.now() - 90 * 86_400_000);
     const [t] = await d
       .select({
         total: count(),
-        week: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${week})`,
+        week: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${week} and ${watchedPrs.createdAt} < ${today})`,
         month: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month})`,
         documented: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month} and ${watchedPrs.attribution} = 'documented_agent')`,
         self: sql`count(*) filter (where ${watchedPrs.createdAt} >= ${month} and ${watchedPrs.attribution} = 'self_disclosed')`,
@@ -185,16 +191,16 @@ export async function getWikidataBotEdits(limit = 30): Promise<{ rows: WikidataE
 
 export async function getCommonsUploads(limit = 30): Promise<{ rows: CommonsRow[]; last30d: number; byDay: Array<{ day: string; c: number }> }> {
   return safe({ rows: [] as CommonsRow[], last30d: 0, byDay: [] as Array<{ day: string; c: number }> }, async (d) => {
-    const rows = await d.select().from(commonsAiUploads).orderBy(desc(commonsAiUploads.ts)).limit(limit);
+    const rows = await d.select().from(commonsAiUploads).where(sql`${commonsAiUploads.title} like ${"File:%"}`).orderBy(desc(commonsAiUploads.ts)).limit(limit);
     const since = daysAgo(59);
     const per = await d
       .select({ day: dayCol(commonsAiUploads.ts), c: count() })
       .from(commonsAiUploads)
-      .where(gte(commonsAiUploads.ts, new Date(`${since}T00:00:00Z`)))
+      .where(and(gte(commonsAiUploads.ts, new Date(`${since}T00:00:00Z`)), sql`${commonsAiUploads.title} like ${"File:%"}`))
       .groupBy(dayCol(commonsAiUploads.ts));
     const map = new Map(per.map((p) => [String(p.day).slice(0, 10), n(p.c)]));
     const byDay = dayRange(since, dayOf()).map((day) => ({ day, c: map.get(day) ?? 0 }));
-    const [c] = await d.select({ c: count() }).from(commonsAiUploads).where(gte(commonsAiUploads.ts, new Date(Date.now() - 30 * 86_400_000)));
+    const [c] = await d.select({ c: count() }).from(commonsAiUploads).where(and(gte(commonsAiUploads.ts, new Date(Date.now() - 30 * 86_400_000)), sql`${commonsAiUploads.title} like ${"File:%"}`));
     return { rows, last30d: n(c?.c), byDay };
   });
 }
@@ -210,6 +216,7 @@ export async function getTagWatch(): Promise<TagWatchRow[]> {
 
 export interface OsmDay {
   day: string;
+  observed: boolean;
   sampled: number;
   ai: number;
 }
@@ -218,21 +225,21 @@ export type OsmRow = typeof osmChangesets.$inferSelect;
 export async function getOsmByDay(days = 60): Promise<OsmDay[]> {
   const since = daysAgo(days - 1);
   const rows = await safe([] as Array<{ day: string; sampled: number; aiAssisted: number }>, async (d) =>
-    d.select({ day: osmDaily.day, sampled: osmDaily.sampled, aiAssisted: osmDaily.aiAssisted }).from(osmDaily).where(gte(osmDaily.day, since)),
+    d.select({ day: osmDaily.day, sampled: osmDaily.sampled, aiAssisted: osmDaily.aiAssisted }).from(osmDaily).where(and(gte(osmDaily.day, since), eq(osmDaily.collectionVersion, 2))),
   );
   const map = new Map(rows.map((r) => [r.day, r]));
-  return dayRange(since, dayOf()).map((day) => ({ day, sampled: n(map.get(day)?.sampled), ai: n(map.get(day)?.aiAssisted) }));
+  return dayRange(since, dayOf()).map((day) => ({ day, observed: map.has(day), sampled: n(map.get(day)?.sampled), ai: n(map.get(day)?.aiAssisted) }));
 }
 
 export async function getOsmSummary(): Promise<{ ai7d: number; sampled7d: number; byEditor: Array<{ editor: string; c: number }>; byKind: Array<{ kind: string; c: number }>; recent: OsmRow[] }> {
   const empty = { ai7d: 0, sampled7d: 0, byEditor: [] as Array<{ editor: string; c: number }>, byKind: [] as Array<{ kind: string; c: number }>, recent: [] as OsmRow[] };
   return safe(empty, async (d) => {
-    const week = daysAgo(6);
-    const [t] = await d.select({ ai: sql`coalesce(sum(${osmDaily.aiAssisted}),0)`, sampled: sql`coalesce(sum(${osmDaily.sampled}),0)` }).from(osmDaily).where(gte(osmDaily.day, week));
+    const week = daysAgo(7);
+    const [t] = await d.select({ ai: sql`coalesce(sum(${osmDaily.aiAssisted}),0)`, sampled: sql`coalesce(sum(${osmDaily.sampled}),0)` }).from(osmDaily).where(and(gte(osmDaily.day, week), lt(osmDaily.day, dayOf()), eq(osmDaily.collectionVersion, 2)));
     const since = new Date(Date.now() - 30 * 86_400_000);
-    const byEditor = await d.select({ editor: osmChangesets.editor, c: count() }).from(osmChangesets).where(gte(osmChangesets.ts, since)).groupBy(osmChangesets.editor).orderBy(desc(count())).limit(12);
-    const byKind = await d.select({ kind: osmChangesets.aiKind, c: count() }).from(osmChangesets).where(gte(osmChangesets.ts, since)).groupBy(osmChangesets.aiKind).orderBy(desc(count()));
-    const recent = await d.select().from(osmChangesets).orderBy(desc(osmChangesets.ts)).limit(40);
+    const byEditor = await d.select({ editor: osmChangesets.editor, c: count() }).from(osmChangesets).where(and(gte(osmChangesets.ts, since), eq(osmChangesets.collectionVersion, 2))).groupBy(osmChangesets.editor).orderBy(desc(count())).limit(12);
+    const byKind = await d.select({ kind: osmChangesets.aiKind, c: count() }).from(osmChangesets).where(and(gte(osmChangesets.ts, since), eq(osmChangesets.collectionVersion, 2))).groupBy(osmChangesets.aiKind).orderBy(desc(count()));
+    const recent = await d.select().from(osmChangesets).where(eq(osmChangesets.collectionVersion, 2)).orderBy(desc(osmChangesets.ts)).limit(40);
     return { ai7d: n(t?.ai), sampled7d: n(t?.sampled), byEditor: byEditor.map((r) => ({ editor: r.editor ?? "unknown", c: n(r.c) })), byKind: byKind.map((r) => ({ kind: r.kind, c: n(r.c) })), recent };
   });
 }
@@ -243,19 +250,22 @@ export async function getOsmSummary(): Promise<{ ai7d: number; sampled7d: number
 
 export type McpRow = typeof mcpServers.$inferSelect;
 
-export async function getMcpSummary(days = 60): Promise<{ total: number; new7d: number; byDay: Array<{ day: string; c: number }>; recent: McpRow[] }> {
-  const empty = { total: 0, new7d: 0, byDay: [] as Array<{ day: string; c: number }>, recent: [] as McpRow[] };
+export async function getMcpSummary(days = 60): Promise<{ ready: boolean; total: number; new7d: number; byDay: Array<{ day: string; c: number }>; recent: McpRow[] }> {
+  const empty = { ready: false, total: 0, new7d: 0, byDay: [] as Array<{ day: string; c: number }>, recent: [] as McpRow[] };
   return safe(empty, async (d) => {
     const since = daysAgo(days - 1);
-    const [t] = await d.select({ total: count(), week: sql`count(*) filter (where ${mcpServers.publishedAt} >= ${new Date(Date.now() - 7 * 86_400_000)})` }).from(mcpServers);
+    const [state] = await d.select({ state: collectorState.state }).from(collectorState).where(eq(collectorState.key, "mcp"));
+    if (!state?.state.initialComplete) return empty;
+    const active = and(eq(mcpServers.syncVersion, 2), eq(mcpServers.status, "active"));
+    const [t] = await d.select({ total: count(), week: sql`count(*) filter (where ${mcpServers.publishedAt} >= ${new Date(daysAgo(7) + "T00:00:00Z")} and ${mcpServers.publishedAt} < ${new Date(dayOf() + "T00:00:00Z")})` }).from(mcpServers).where(active);
     const per = await d
       .select({ day: dayCol(mcpServers.publishedAt), c: count() })
       .from(mcpServers)
-      .where(gte(mcpServers.publishedAt, new Date(`${since}T00:00:00Z`)))
+      .where(and(active, gte(mcpServers.publishedAt, new Date(`${since}T00:00:00Z`))))
       .groupBy(dayCol(mcpServers.publishedAt));
     const map = new Map(per.map((p) => [String(p.day).slice(0, 10), n(p.c)]));
-    const recent = await d.select().from(mcpServers).orderBy(desc(mcpServers.publishedAt)).limit(30);
-    return { total: n(t?.total), new7d: n(t?.week), byDay: dayRange(since, dayOf()).map((day) => ({ day, c: map.get(day) ?? 0 })), recent };
+    const recent = await d.select().from(mcpServers).where(active).orderBy(desc(mcpServers.publishedAt)).limit(30);
+    return { ready: true, total: n(t?.total), new7d: n(t?.week), byDay: dayRange(since, dayOf()).map((day) => ({ day, c: map.get(day) ?? 0 })), recent };
   });
 }
 
@@ -267,7 +277,7 @@ export interface SeriesPoint {
 }
 
 /** All series for a source, keyed by series name, sorted by period. */
-export async function getSeries(source: string): Promise<Record<string, SeriesPoint[]>> {
+async function querySeries(source: string): Promise<Record<string, SeriesPoint[]>> {
   const rows = await safe([] as Array<{ series: string; period: string; value: number; lo: number | null; hi: number | null }>, async (d) =>
     d.select({ series: externalSeries.series, period: externalSeries.period, value: externalSeries.value, lo: externalSeries.lo, hi: externalSeries.hi }).from(externalSeries).where(eq(externalSeries.source, source)).orderBy(externalSeries.period),
   );
@@ -279,6 +289,28 @@ export async function getSeries(source: string): Promise<Record<string, SeriesPo
 /* ------------------------------------------------------------------ */
 /* new agents                                                         */
 /* ------------------------------------------------------------------ */
+
+export const getSeries = cacheSummary(querySeries, "external-series");
+
+async function queryRadarSnapshot(): Promise<{ series: Record<string, SeriesPoint[]>; metadata: Record<string, RadarMetadata> }> {
+  // One statement gives values and normalization metadata the same MVCC snapshot.
+  const rows = await safe([], async (d) => d.select({
+    series: externalSeries.series, period: externalSeries.period, value: externalSeries.value,
+    lo: externalSeries.lo, hi: externalSeries.hi, state: collectorState.state,
+  }).from(externalSeries).innerJoin(collectorState,
+    sql`${collectorState.key} = 'radar:' || split_part(${externalSeries.series}, ':', 1)`)
+    .where(eq(externalSeries.source, "radar-v2")).orderBy(externalSeries.period));
+  const series: Record<string, SeriesPoint[]> = {};
+  const metadata: Record<string, RadarMetadata> = {};
+  for (const row of rows) {
+    const meta = publicRadarMetadata(row.state);
+    if (!meta) continue;
+    metadata[row.series.split(":")[0]] = meta;
+    (series[row.series] ??= []).push({ period: row.period, value: Number(row.value), lo: row.lo, hi: row.hi });
+  }
+  return { series, metadata };
+}
+export const getRadarSnapshot = cacheSummary(queryRadarSnapshot, "radar-snapshot");
 
 export type SightingRow = typeof agentSightings.$inferSelect;
 
@@ -300,93 +332,65 @@ export async function getSightings(limit = 100): Promise<{ rows: SightingRow[]; 
 /* flow animation + latest records                                    */
 /* ------------------------------------------------------------------ */
 
-export interface FlowNode {
-  id: string;
-  label: string;
-  total: number;
-  group?: string;
-}
-export interface FlowLink {
-  source: string;
-  target: string;
-  value: number;
-}
-export interface FlowData {
-  sources: FlowNode[];
-  targets: FlowNode[];
-  links: FlowLink[];
-  days: number;
-}
-
-export const FLOW_TARGETS: FlowNode[] = [
-  { id: "code", label: "Code repositories", total: 0 },
-  { id: "wikis", label: "Encyclopedias & wikis", total: 0 },
-  { id: "maps", label: "Maps", total: 0 },
-  { id: "forums", label: "Forums", total: 0 },
-  { id: "site", label: "This website", total: 0 },
-];
-
-/** 30-day counts of who acts where, for the home-page animation. */
-export async function getFlowData(days = 30): Promise<FlowData> {
-  const empty: FlowData = { sources: [], targets: FLOW_TARGETS.map((t) => ({ ...t })), links: [], days };
+/** Fixed UTC windows and aggregate-only public evidence for the dashboard. */
+async function queryFlowData(days = 30): Promise<FlowData> {
+  const windowEnd = dayOf();
+  const windowStart = daysAgo(days);
+  const empty: FlowData = { sources: [], targets: FLOW_TARGETS, links: [], feeds: [], days, windowStart, windowEnd, mode: "offline" };
   return safe(empty, async (d) => {
-    const since = new Date(Date.now() - days * 86_400_000);
-    const sinceDay = daysAgo(days - 1);
-    const links: FlowLink[] = [];
-    const sources = new Map<string, FlowNode>();
-    const add = (id: string, label: string, target: string, value: number, group?: string) => {
-      if (value <= 0) return;
-      const s = sources.get(id) ?? { id, label, total: 0, group };
-      s.total += value;
-      sources.set(id, s);
-      links.push({ source: id, target, value });
-    };
-
-    // Coding agents → code repositories (bot-account search counts).
-    const gh = await d
-      .select({ agent: githubDaily.agent, prs: sql`sum(${githubDaily.prs})` })
-      .from(githubDaily)
-      .where(and(gte(githubDaily.day, sinceDay), inArray(githubDaily.tier, ["bot-account", "branch-prefix"])))
-      .groupBy(githubDaily.agent)
-      .orderBy(desc(sql`sum(${githubDaily.prs})`));
-    let other = 0;
-    gh.forEach((r, i) => {
-      if (i < 6) add(`gh:${r.agent}`, githubAgentLabel(r.agent).replace(/ \(.*\)$/, ""), "code", n(r.prs), "coding");
-      else other += n(r.prs);
+    const since = new Date(windowStart + "T00:00:00Z");
+    const until = new Date(windowEnd + "T00:00:00Z");
+    const between = (col: Parameters<typeof gte>[0]) => and(gte(col, since), lt(col, until));
+    const [gh, wiki, wikidata, commons, maps, forums, runs] = await d.batch([
+      d.select({ agent: githubDaily.agent, tier: githubDaily.tier, value: sql<number>`sum(${githubDaily.prs})::int`,
+        days: sql<number>`count(distinct ${githubDaily.day})::int`, dates: sql<string[]>`array_agg(distinct ${githubDaily.day})`, latest: sql<string>`max(${githubDaily.day})` })
+        .from(githubDaily).where(and(gte(githubDaily.day, windowStart), lt(githubDaily.day, windowEnd), inArray(githubDaily.tier, ["bot-account", "branch-prefix"])))
+        .groupBy(githubDaily.agent, githubDaily.tier).orderBy(desc(sql`sum(${githubDaily.prs})`)),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikiEdits.ts)})::int`, latest: sql<Date>`max(${wikiEdits.ts})` }).from(wikiEdits).where(between(wikiEdits.ts)),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikidataBotEdits.ts)})::int`, latest: sql<Date>`max(${wikidataBotEdits.ts})` }).from(wikidataBotEdits).where(between(wikidataBotEdits.ts)),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(commonsAiUploads.ts)})::int`, latest: sql<Date>`max(${commonsAiUploads.ts})` }).from(commonsAiUploads).where(and(between(commonsAiUploads.ts), sql`${commonsAiUploads.title} like ${"File:%"}`)),
+      d.select({ value: sql<number>`coalesce(sum(${osmDaily.aiAssisted}),0)::int`, days: count(), latest: sql<string>`max(${osmDaily.day})` }).from(osmDaily).where(and(gte(osmDaily.day, windowStart), lt(osmDaily.day, windowEnd), eq(osmDaily.collectionVersion, 2))),
+      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(forumPosts.ts)})::int`, latest: sql<Date>`max(${forumPosts.ts})` }).from(forumPosts).where(between(forumPosts.ts)),
+      d.selectDistinctOn([ingestRuns.source], { source: ingestRuns.source, finishedAt: ingestRuns.finishedAt, ok: ingestRuns.ok, stats: ingestRuns.stats })
+        .from(ingestRuns).orderBy(ingestRuns.source, desc(ingestRuns.startedAt)),
+    ]);
+    const feedDefs = [{ key: "github", label: "GitHub Search" }, { key: "wikipedia", label: "Wikipedia" },
+      { key: "wikimedia", label: "Wikimedia" }, { key: "osm", label: "OSM sample v2" }, { key: "moltbook", label: "Moltbook" }];
+    const feeds: FlowFeed[] = feedDefs.map(({ key, label }) => {
+      const run = runs.find(r => r.source === key && r.finishedAt);
+      if (!run?.finishedAt) return { key, label, outcome: "unknown", lastRun: null, stale: false };
+      const health = sourceHealth({ ...run, finishedAt: run.finishedAt });
+      return { key, label, outcome: health.outcome, lastRun: health.lastRun, stale: health.stale };
     });
-    add("gh:other", "Other coding agents", "code", other, "coding");
-
-    // Crawlers and fetchers → this website.
-    const v = await d
-      .select({ category: visits.category, c: count() })
-      .from(visits)
-      .where(and(gte(visits.ts, since), inArray(visits.category, AI)))
-      .groupBy(visits.category);
-    const cat = Object.fromEntries(v.map((r) => [r.category, n(r.c)]));
-    add("web:crawlers", "Training & search crawlers", "site", (cat["ai-training-crawler"] ?? 0) + (cat["ai-search-index"] ?? 0), "web");
-    add("web:fetchers", "User-triggered fetchers", "site", cat["ai-user-fetch"] ?? 0, "web");
-    add("web:agents", "Browsing & coding agents", "site", (cat["ai-browsing-agent"] ?? 0) + (cat["ai-coding-agent"] ?? 0) + (cat["ai-tooling"] ?? 0), "web");
-
-    // Wikis.
-    const [w] = await d.select({ c: count() }).from(wikiEdits).where(gte(wikiEdits.ts, since));
-    add("wiki:flagged", "Flagged Wikipedia editors", "wikis", n(w?.c), "wiki");
-    const [wd] = await d.select({ c: count() }).from(wikidataBotEdits).where(gte(wikidataBotEdits.ts, since));
-    add("wiki:wikidata", "Wikidata bots", "wikis", n(wd?.c), "wiki");
-    const [cm] = await d.select({ c: count() }).from(commonsAiUploads).where(gte(commonsAiUploads.ts, since));
-    add("wiki:commons", "AI image uploaders", "wikis", n(cm?.c), "wiki");
-
-    // Maps.
-    const [o] = await d.select({ c: sql`coalesce(sum(${osmDaily.aiAssisted}),0)` }).from(osmDaily).where(gte(osmDaily.day, sinceDay));
-    add("maps:ai", "AI-assisted map editors", "maps", n(o?.c), "maps");
-
-    // Forums.
-    const [f] = await d.select({ c: count() }).from(forumPosts).where(gte(forumPosts.ts, since));
-    add("forum:agents", "Forum agents", "forums", n(f?.c), "forum");
-
-    const targets = FLOW_TARGETS.map((t) => ({ ...t, total: links.filter((l) => l.target === t.id).reduce((a, l) => a + l.value, 0) }));
-    return { sources: [...sources.values()], targets, links, days };
+    const sources: FlowSource[] = [], links: FlowLink[] = [];
+    const add = (source: FlowSource, target: string) => {
+      if (source.total <= 0) return;
+      sources.push(source); links.push({ source: source.id, target, value: source.total });
+    };
+    for (const row of gh.slice(0, 6)) add({ id: "gh:" + row.agent, label: githubAgentLabel(row.agent).replace(/ \(.*\)$/, ""),
+      total: n(row.value), feed: "github", unit: "PR matches", purpose: "Code contributions",
+      evidence: row.tier === "bot-account" ? "Documented bot account" : "Branch-name heuristic",
+      method: "GitHub Search matches; bot-account and branch-prefix queries may overlap. Counts are not unique contributions or proof of model authorship.",
+      href: "/github", observedDays: n(row.days), latestObservation: iso(row.latest) }, "code");
+    const otherCoding = gh.slice(6);
+    if (otherCoding.length) add({
+      id: "gh:other", label: "Other coding agents", total: otherCoding.reduce((sum, r) => sum + n(r.value), 0),
+      feed: "github", unit: "PR matches", purpose: "Code contributions", evidence: "Bot-account / branch-name queries",
+      method: "Remaining tracked GitHub Search matches outside the six largest series. Queries may overlap; this is not a unique PR count.",
+      href: "/github", observedDays: new Set(otherCoding.flatMap(r => r.dates)).size,
+      latestObservation: iso(otherCoding.map(r => r.latest).sort().at(-1)),
+    }, "code");
+    const append = (row: {value:number; days:number; latest:Date|string|null}|undefined, source: Omit<FlowSource,"total"|"observedDays"|"latestObservation">, target:string) =>
+      add({ ...source, total:n(row?.value), observedDays:n(row?.days), latestObservation:iso(row?.latest) },target);
+    append(wiki[0], { id:"wiki:flagged", label:"Flagged Wikipedia edits", feed:"wikipedia", unit:"edits", purpose:"Encyclopedia editing", evidence:"Platform filters / heuristics", method:"Filter-tagged and heuristic matches; possible AI involvement, not proven authorship.", href:"/wikipedia" }, "wikis");
+    append(wikidata[0], { id:"wiki:wikidata", label:"Wikidata bots", feed:"wikimedia", unit:"edits", purpose:"Structured-data editing", evidence:"Bot-account activity", method:"Tracked automation includes conventional scripts. Bot status does not establish AI use.", href:"/wikipedia/wikimedia" }, "wikis");
+    append(commons[0], { id:"wiki:commons", label:"Commons AI-category files", feed:"wikimedia", unit:"files", purpose:"Media categorization", evidence:"Tracked category additions", method:"Files added to tracked AI categories; not upload counts. Non-file entries are excluded.", href:"/wikipedia/wikimedia" }, "wikis");
+    append(maps[0], { id:"maps:ai", label:"AI-assisted map tools", feed:"osm", unit:"changesets", purpose:"Map editing", evidence:"Self-declared editor tags", method:"Collection v2: capped overlapping creation-time samples with persisted deduplication. Historical v1 counts are excluded.", href:"/maps" }, "maps");
+    append(forums[0], { id:"forum:agents", label:"Moltbook reported agents", feed:"moltbook", unit:"posts", purpose:"Forum discussion", evidence:"Platform-reported activity", method:"The platform describes these accounts as agents; this is not independent verification of authorship.", href:"/forums" }, "forums");
+    return { ...empty, mode: "observed", sources, links, feeds };
   });
 }
+export const getFlowData = cacheSummary(queryFlowData, "internet-flow-v1");
 
 export interface LatestRecord {
   id: string;
@@ -400,22 +404,20 @@ export interface LatestRecord {
 
 export async function getLatestRecords(limit = 12): Promise<LatestRecord[]> {
   return safe([] as LatestRecord[], async (d) => {
-    const per = Math.max(3, Math.ceil(limit / 2));
-    const [v, w, p, f, o, c] = await Promise.all([
-      d.select().from(visits).where(inArray(visits.category, AI)).orderBy(desc(visits.ts)).limit(per),
+    const per = Math.max(1, Math.min(100, limit));
+    const [w, p, f, o, c] = await Promise.all([
       d.select().from(wikiEdits).orderBy(desc(wikiEdits.ts)).limit(per),
       d.select().from(watchedPrs).orderBy(desc(watchedPrs.createdAt)).limit(per),
       d.select().from(forumPosts).orderBy(desc(forumPosts.ts)).limit(per),
-      d.select().from(osmChangesets).orderBy(desc(osmChangesets.ts)).limit(per),
-      d.select().from(commonsAiUploads).orderBy(desc(commonsAiUploads.ts)).limit(per),
+      d.select().from(osmChangesets).where(eq(osmChangesets.collectionVersion, 2)).orderBy(desc(osmChangesets.ts)).limit(per),
+      d.select().from(commonsAiUploads).where(sql`${commonsAiUploads.title} like ${"File:%"}`).orderBy(desc(commonsAiUploads.ts)).limit(per),
     ]);
     const out: LatestRecord[] = [
-      ...v.map((r) => ({ id: `visit-${r.id}`, kind: "visit" as const, actor: r.agentName ?? r.agentSlug ?? "AI agent", action: "visited", target: `this site ${r.path}`, url: r.agentSlug ? `/agents/${encodeURIComponent(r.agentSlug)}` : null, ts: r.ts.toISOString() })),
       ...w.map((r) => ({ id: `wiki-${r.rcid}`, kind: "wiki" as const, actor: r.user, action: r.tier === 1 ? "made a filter-flagged edit to" : "made a possible AI edit to", target: r.title, url: r.url, ts: r.ts.toISOString() })),
       ...p.map((r) => ({ id: `pr-${r.id}`, kind: "pr" as const, actor: r.agentId ? githubAgentLabel(r.agentId) : (r.actorLogin ?? "someone"), action: r.attribution === "documented_agent" ? "opened a pull request in" : "disclosed AI help in", target: `${r.repository} · ${r.title}`, url: r.url, ts: r.createdAt.toISOString() })),
       ...f.map((r) => ({ id: `forum-${r.id}`, kind: "forum" as const, actor: r.agent, action: "posted", target: r.title, url: r.url, ts: r.ts.toISOString() })),
-      ...o.map((r) => ({ id: `map-${r.id}`, kind: "map" as const, actor: r.user ?? r.editor ?? "map editor", action: `edited the map with ${r.editor ?? "an AI tool"}`, target: r.comment ?? `changeset ${r.id}`, url: r.url, ts: r.ts.toISOString() })),
-      ...c.map((r) => ({ id: `commons-${r.pageid}`, kind: "commons" as const, actor: "Commons uploader", action: "added an AI-generated file", target: r.title, url: `https://commons.wikimedia.org/wiki/${encodeURIComponent(r.title)}`, ts: r.ts.toISOString() })),
+      ...o.map((r) => ({ id: `osm-${r.id}`, kind: "map" as const, actor: r.user ?? r.editor ?? "map editor", action: `edited the map with ${r.editor ?? "an AI tool"}`, target: r.comment ?? `changeset ${r.id}`, url: r.url, ts: r.ts.toISOString() })),
+      ...c.map((r) => ({ id: `commons-${r.pageid}`, kind: "commons" as const, actor: "Commons category", action: "included a file in an AI-related category", target: r.title, url: `https://commons.wikimedia.org/wiki/${encodeURIComponent(r.title)}`, ts: r.ts.toISOString() })),
     ];
     return out.sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, limit);
   });

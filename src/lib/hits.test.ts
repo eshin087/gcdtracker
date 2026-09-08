@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildHit, shouldStoreRaw } from "./hits";
 
 const GPTBOT = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.4; +https://openai.com/gptbot)";
@@ -8,6 +8,9 @@ const CHROME =
 function headers(map: Record<string, string>) {
   return (n: string) => map[n.toLowerCase()] ?? null;
 }
+
+beforeEach(() => vi.stubEnv("IP_HASH_SECRET", "hit-tests"));
+afterEach(() => vi.unstubAllEnvs());
 
 describe("buildHit", () => {
   it("describes an AI crawler visit without keeping the IP", () => {
@@ -67,5 +70,18 @@ describe("buildHit", () => {
     expect(trap.trapToken).toBe("f7k2-hidden-footer-link");
     const priv = buildHit({ method: "GET", pathname: "/private/secret", headers: ua })!;
     expect(priv.trapToken).toBe("private");
+  });
+});
+
+describe("private request data", () => {
+  it.each(["malformed/path?secret=private", "data:text/plain,secret", "file:///private"])("drops invalid or non-web referrer %s", (referer) => {
+    expect(buildHit({ method: "GET", pathname: "/", headers: headers({ "user-agent": GPTBOT, referer }) })?.referer).toBeNull();
+  });
+  it("keeps header-only claims out of AI counters while retaining an unverified observation", () => {
+    const hit = buildHit({ method: "GET", pathname: "/", headers: headers({ "user-agent": CHROME, "signature-agent": "https://fake.example", "signature-input": "x", signature: "x" }) })!;
+    expect(hit.classification.category).toBe("human");
+    expect(hit.classification.slug).toBeNull();
+    expect(hit.classification.signatureStatus).toBe("unverified");
+    expect(shouldStoreRaw(hit)).toBe(true);
   });
 });

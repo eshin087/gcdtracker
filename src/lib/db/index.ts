@@ -1,8 +1,16 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
-const url = process.env.DATABASE_URL;
+// Preview deployments never inherit a production connection by accident.
+const url = process.env.VERCEL_ENV === "preview" ? process.env.PREVIEW_DATABASE_URL : process.env.DATABASE_URL;
+// Local-only HTTP bridge exercises the production Neon driver against isolated PostgreSQL.
+if (process.env.GCD_QA_MODE === "1" && process.env.VERCEL_ENV !== "production" && url && process.env.QA_NEON_HTTP_ENDPOINT) {
+  const databaseHost = new URL(url).hostname;
+  const endpoint = new URL(process.env.QA_NEON_HTTP_ENDPOINT);
+  if (!["localhost", "127.0.0.1"].includes(databaseHost) || !["localhost", "127.0.0.1"].includes(endpoint.hostname)) throw new Error("QA database must be loopback");
+  neonConfig.fetchEndpoint = endpoint.toString();
+}
 
 /**
  * Neon over HTTP: one round trip per statement, no connection to hold.

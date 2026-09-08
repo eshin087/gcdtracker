@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { MiniChart, TimelineChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
-import { fmtInt, relTime } from "@/lib/format";
+import { dayOf, fmtInt, relTime } from "@/lib/format";
 import { BOTCOMMITS } from "@/lib/ingest/botcommits";
 import { hasDatabase } from "@/lib/stats";
 import { getMcpSummary, getSeries } from "@/lib/stats-sources";
@@ -33,7 +33,6 @@ export default async function ToolingPage() {
   const agentPkgs = packages.filter((p) => p.def.role === "agent");
   const frameworkPkgs = packages.filter((p) => p.def.role === "framework");
   const agentWeek = agentPkgs.reduce((s, p) => s + p.last7, 0);
-  const topAgent = agentPkgs[0]?.last7 ? agentPkgs[0] : null;
   // Weekly totals of agent CLI downloads for the long-run chart (npm goes back to 2024).
   const weekly = new Map<string, number>();
   for (const p of agentPkgs.filter((p) => p.def.registry === "npm")) {
@@ -43,35 +42,40 @@ export default async function ToolingPage() {
       weekly.set(monday, (weekly.get(monday) ?? 0) + pt.value);
     }
   }
-  const weeks = [...weekly].sort((a, b) => a[0].localeCompare(b[0])).slice(0, -1);
+  const today = new Date(`${dayOf()}T00:00:00Z`);
+  const currentMonday = new Date(today.getTime() - ((today.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
+  const weeks = [...weekly].filter(([week]) => week < currentMonday).sort((a, b) => a[0].localeCompare(b[0]));
 
   const claude = bot.claude ?? [];
   const total = bot.total ?? [];
-  const lastFull = total.length >= 2 ? total[total.length - 2] : null;
+  const lastFull = total.filter((point) => point.period < dayOf().slice(0, 7)).at(-1) ?? null;
+  const commitMonths = [...new Set([...total, ...claude].map((point) => point.period))].sort();
+  const totalByMonth = new Map(total.map((point) => [point.period, point.value]));
+  const claudeByMonth = new Map(claude.map((point) => [point.period, point.value]));
   const toolsLatest = Object.entries(bot)
     .filter(([k]) => k !== "total")
-    .map(([k, pts]) => ({ key: k, value: pts.length >= 2 ? pts[pts.length - 2].value : (pts[pts.length - 1]?.value ?? 0) }))
+    .flatMap(([key, points]) => { const point = points.find((p) => p.period === lastFull?.period); return point ? [{ key, value: point.value }] : []; })
     .sort((a, b) => b.value - a.value);
 
-  // Hugging Face: latest day per agent (share of requests).
-  const hfLatest = Object.entries(hf)
-    .filter(([k]) => k.endsWith(":requests"))
-    .map(([k, pts]) => ({ agent: k.replace(":requests", ""), value: pts[pts.length - 1]?.value ?? 0, day: pts[pts.length - 1]?.period ?? "" }))
-    .filter((r) => r.agent !== "unknown")
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10);
+  // Compare only observations from the same latest published day.
+  const hfRows = Object.entries(hf).filter(([key]) => key.endsWith(":requests"));
+  const hfDay = hfRows.flatMap(([, points]) => points.map((point) => point.period)).sort().at(-1);
+  const hfLatest = hfRows.flatMap(([key, points]) => {
+    const point = points.find((p) => p.period === hfDay);
+    return point && key !== "unknown:requests" ? [{ agent: key.replace(":requests", ""), value: point.value, day: point.period }] : [];
+  }).sort((a, b) => b.value - a.value).slice(0, 10);
   const hubRate = hub["new-models-per-hour"]?.slice(-1)[0]?.value ?? null;
 
   return (
     <div className="shell explorer">
       <PageHeader
         title="Tooling"
-        sub="Agent activity has a supply side: how many machines are being handed an agent, the tools agents are built from, and the infrastructure they hit. Four public measures, each quoted with its source."
+        sub="Package downloads, tool registry publications and requests reported by other platforms describe parts of the agent ecosystem. Each measure has a different population and cannot establish how many agents are active."
       />
       <StatTiles
         tiles={[
-          { value: agentWeek > 0 ? fmtInt(agentWeek) : "–", label: "agent CLI installs, last 7 days", sub: topAgent ? `${topAgent.def.label} leads with ${fmtInt(topAgent.last7)} · npm + PyPI` : "npm + PyPI downloads" },
-          { value: fmtInt(mcp.new7d), label: "MCP servers published, 7 days", sub: `${fmtInt(mcp.total)} tracked from the official registry` },
+          { value: agentWeek > 0 ? fmtInt(agentWeek) : "–", label: "recorded agent CLI downloads, 7 UTC days", sub: `${agentPkgs.filter((p) => p.coverage7d === 7).length}/${agentPkgs.length} packages cover all 7 days; missing days are not zeros` },
+          { value: mcp.ready ? fmtInt(mcp.new7d) : "–", label: "Active MCP entries published, 7 UTC days", sub: mcp.ready ? `${fmtInt(mcp.total)} active entries tracked` : "Initial registry reconciliation incomplete" },
           { value: lastFull ? fmtInt(lastFull.value) : "–", label: "AI-attributed commits on GitHub, last full month", sub: lastFull ? `${lastFull.period} · botcommits.dev` : "botcommits.dev" },
           { value: hfLatest[0] ? `${hfLatest[0].value.toFixed(0)}%` : "–", label: hfLatest[0] ? `of agent requests to Hugging Face from ${hfLatest[0].agent}` : "Hugging Face agent usage", sub: hfLatest[0]?.day ? `on ${hfLatest[0].day}` : undefined },
           { value: hubRate !== null ? fmtInt(hubRate) : "–", label: "new Hub models per hour", sub: "from the newest 100 model repos" },
@@ -79,14 +83,13 @@ export default async function ToolingPage() {
       />
 
       <div className="section-head">
-        <h2>Agent installs</h2>
+        <h2>Agent package downloads</h2>
         <a className="more" href="https://api.npmjs.org/downloads/">
           npm + pypistats.org ↗
         </a>
       </div>
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
-        Coding agents are shipped as packages, and both registries publish daily download counts. Downloads count every install and
-        CI run, not people, but they are the widest public measure of how many machines are being handed an agent. npm history
+        Coding agents are shipped as packages, and both registries publish daily download counts. Downloads include CI activity, retries and reinstalls; they do not count unique installations, machines or people. npm history
         runs from January 2024; PyPI serves the last 180 days.
       </p>
       {packages.every((p) => p.points.length === 0) ? (
@@ -101,17 +104,17 @@ export default async function ToolingPage() {
               <div className="label" style={{ marginBottom: 8 }}>
                 Agents · downloads, last 7 days
               </div>
-              <BarList rows={agentPkgs.map((p) => ({ key: p.def.name, label: `${p.def.label} · ${p.def.registry}`, value: p.last7, secondary: p.prior7, title: `${p.def.name} · prior week ${fmtInt(p.prior7)}` }))} />
+              <BarList rows={agentPkgs.map((p) => ({ key: p.def.name, label: `${p.def.label} · ${p.coverage7d}/7 days`, value: p.last7, secondary: p.prior7, title: `${p.def.name} · current coverage ${p.coverage7d}/7 days · prior ${p.coveragePrior7d}/7 days, ${fmtInt(p.prior7)} recorded downloads` }))} />
             </div>
             <div>
               <div className="label" style={{ marginBottom: 8 }}>
                 Frameworks agents are built from · last 7 days
               </div>
-              <BarList rows={frameworkPkgs.map((p) => ({ key: p.def.name, label: `${p.def.label} · ${p.def.registry}`, value: p.last7, secondary: p.prior7, title: `${p.def.name} · prior week ${fmtInt(p.prior7)}` }))} variant="neutral" />
+              <BarList rows={frameworkPkgs.map((p) => ({ key: p.def.name, label: `${p.def.label} · ${p.coverage7d}/7 days`, value: p.last7, secondary: p.prior7, title: `${p.def.name} · current coverage ${p.coverage7d}/7 days · prior ${p.coveragePrior7d}/7 days, ${fmtInt(p.prior7)} recorded downloads` }))} variant="neutral" />
             </div>
           </div>
           <p className="dim sans" style={{ fontSize: 12.5, marginTop: 8 }}>
-            Grey bar: the week before. Sources: <a href={PACKAGE_SOURCES.npm}>api.npmjs.org</a> and <a href="https://pypistats.org">pypistats.org</a> (mirrors excluded).
+            Grey bar: recorded downloads in the prior 7 UTC days. Partial coverage is shown beside each package; missing days are not treated as measured zero. Sources: <a href={PACKAGE_SOURCES.npm}>api.npmjs.org</a> and <a href="https://pypistats.org">pypistats.org</a> (mirrors excluded).
           </p>
         </>
       )}
@@ -123,14 +126,15 @@ export default async function ToolingPage() {
         </a>
       </div>
       <p className="page-sub" style={{ maxWidth: "72ch" }}>
-        The Model Context Protocol registry is where tool servers for agents are published. New servers per day is a direct
-        measure of how fast agents are being given new capabilities. Synced incrementally with every ingest run.
+        The Model Context Protocol registry is where tool servers for agents are published. New publications measure registry activity, not deployments or usage by agents. Synced incrementally with every ingest run.
       </p>
-      {mcp.total === 0 ? (
-        <Empty db={db} />
+      {!mcp.ready && db ? (
+        <div className="empty"><strong>Registry reconciliation incomplete.</strong><br />Totals are withheld until initial coverage is ready.</div>
+      ) : mcp.total === 0 ? (
+        <Empty db={db}>No active entries recorded.</Empty>
       ) : (
         <>
-          <MiniChart days={mcp.byDay.map((d) => d.day)} values={mcp.byDay.map((d) => d.c)} label="Servers published per day" />
+          <MiniChart days={mcp.byDay.map((d) => d.day)} values={mcp.byDay.map((d) => d.c)} label="Active registry entries by publication day" />
           <div className="tbl-wrap" style={{ marginTop: 16 }}>
             <table className="tbl">
               <thead>
@@ -168,7 +172,7 @@ export default async function ToolingPage() {
         <Empty db={db} />
       ) : (
         <>
-          <TimelineChart days={claude.map((p) => `${p.period}-01`)} bars={total.map((p) => p.value)} barLabel="All tracked tools, commits per month" line={claude.map((p) => p.value)} lineLabel="Claude Code" title="AI-attributed commits per month" />
+          <TimelineChart sharedScale days={commitMonths.map((month) => `${month}-01`)} bars={commitMonths.map((month) => totalByMonth.get(month) ?? null)} barLabel="All tracked tools, commits per month" line={commitMonths.map((month) => claudeByMonth.get(month) ?? null)} lineLabel="Claude Code" title="AI-attributed commits per month" />
           <p className="label" style={{ margin: "20px 0 8px" }}>
             By tool · last full month
           </p>

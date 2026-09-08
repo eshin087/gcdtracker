@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 /* ------------------------------------------------------------------ */
 /* MultiLine: several series on a true date axis with end labels       */
 /* ------------------------------------------------------------------ */
@@ -5,7 +7,7 @@
 export interface LineSeries {
   key: string;
   label: string;
-  points: Array<{ x: string; y: number }>;
+  points: Array<{ x: string; y: number | null }>;
   /** accent = the leader, ink = graded grey, control = dashed reference */
   style?: "accent" | "ink" | "control";
 }
@@ -33,6 +35,7 @@ export function MultiLine({
   yMax,
   annotations = [],
   labelWidth = 128,
+  showPoints = true,
 }: {
   series: LineSeries[];
   format?: (v: number) => string;
@@ -42,12 +45,14 @@ export function MultiLine({
   annotations?: LineAnnotation[];
   /** room on the right for end labels */
   labelWidth?: number;
+  /** Long homepage histories use paths plus end labels without a DOM node per point. */
+  showPoints?: boolean;
 }) {
   const W = 760;
   const H = height;
   const padL = 44;
   const padR = labelWidth;
-  const padT = annotations.length ? 30 : 14;
+  const padT = annotations.length ? 30 + 14*Math.min(3,annotations.length-1) : 14;
   const padB = 26;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
@@ -57,7 +62,7 @@ export function MultiLine({
   const x0 = Math.min(...xs);
   const x1 = Math.max(...xs);
   const span = Math.max(1, x1 - x0);
-  const max = yMax ?? niceMax(Math.max(...all.map((p) => p.y), 0));
+  const max = yMax ?? niceMax(Math.max(...all.flatMap(p => p.y !== null && Number.isFinite(p.y) ? [p.y] : []), 0));
   const X = (d: string) => padL + ((Date.parse(`${d}T00:00:00Z`) - x0) / span) * plotW;
   const Y = (v: number) => padT + plotH - (Math.min(v, max) / max) * plotH;
   const ticks = [0, 0.25, 0.5, 0.75, 1];
@@ -68,10 +73,9 @@ export function MultiLine({
 
   // End labels: sort by final y and push apart so none overlap.
   const ends = series
-    .filter((s) => s.points.length > 0)
-    .map((s) => {
-      const last = s.points[s.points.length - 1];
-      return { s, x: X(last.x), y: Y(last.y), value: last.y };
+    .flatMap((s) => {
+      const last = s.points.findLast(p => p.y !== null && Number.isFinite(p.y));
+      return last && last.y !== null ? [{ s, x: X(last.x), y: Y(last.y), value: last.y, date:last.x }] : [];
     })
     .sort((a, b) => a.y - b.y);
   for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 12) ends[i].y = ends[i - 1].y + 12;
@@ -81,11 +85,22 @@ export function MultiLine({
     if (i < ends.length - 1 && ends[i + 1].y - ends[i].y < 12) ends[i].y = ends[i + 1].y - 12;
   }
 
+  const annotationEnds: number[] = [];
+  const visibleAnnotations = annotations
+    .filter(a => Date.parse(a.day+"T00:00:00Z") >= x0 && Date.parse(a.day+"T00:00:00Z") <= x1)
+    .sort((a,b) => a.day.localeCompare(b.day))
+    .map(a => {
+      const x = Math.min(X(a.day)+4,W-a.label.length*6.2-6);
+      let row = annotationEnds.findIndex(end => x > end+8);
+      if (row < 0) row = annotationEnds.length;
+      annotationEnds[row] = x+a.label.length*6.2;
+      return {...a,x,row};
+    });
   const inkCount = series.filter((s) => (s.style ?? "ink") === "ink").length;
   let inkIndex = 0;
 
   return (
-    <svg className="chart multiline" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+    <div className="chart-scroll" tabIndex={0} role="region" aria-label={title + "; scroll horizontally on small screens"}><svg className="chart multiline" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
       <title>{title}</title>
       {ticks.map((t) => (
         <g key={t}>
@@ -110,12 +125,10 @@ export function MultiLine({
         {fmtYear(x0)}
       </text>
       <line className="axis" x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} />
-      {annotations
-        .filter((a) => Date.parse(`${a.day}T00:00:00Z`) >= x0 && Date.parse(`${a.day}T00:00:00Z`) <= x1)
-        .map((a) => (
+      {visibleAnnotations.map((a) => (
           <g className="annot" key={`${a.day}-${a.label}`}>
             <line x1={X(a.day)} x2={X(a.day)} y1={padT - 6} y2={padT + plotH} />
-            <text x={X(a.day) + 4} y={padT - 10} textAnchor="start">
+            <text x={a.x} y={padT - 10 - a.row*14} textAnchor="start">
               {a.label}
             </text>
           </g>
@@ -123,11 +136,12 @@ export function MultiLine({
       {series.map((s) => {
         const style = s.style ?? "ink";
         const opacity = style === "ink" ? 0.95 - (inkIndex++ / Math.max(1, inkCount)) * 0.55 : 1;
-        const d = s.points.map((p, i) => `${i === 0 ? "M" : "L"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(" ");
+        const d = s.points.map((p, i) => p.y === null || !Number.isFinite(p.y) ? "" :
+          `${i === 0 || s.points[i-1].y === null || !Number.isFinite(s.points[i-1].y) ? "M" : "L"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(" ");
         return (
           <g key={s.key} className={`series ${style}`} style={{ opacity }}>
             <path d={d} />
-            {s.points.map((p) => (
+            {(showPoints ? s.points : s.points.filter(p => p.y !== null).length === 1 ? s.points : []).map(p => p.y === null || !Number.isFinite(p.y) ? null : (
               <circle key={p.x} cx={X(p.x)} cy={Y(p.y)} r={2}>
                 <title>{`${s.label} · ${p.x}: ${format(p.y)}`}</title>
               </circle>
@@ -138,9 +152,10 @@ export function MultiLine({
       {ends.map((e) => (
         <text key={e.s.key} className={`end-label ${e.s.style ?? "ink"}`} x={W - padR + 8} y={e.y + 3} textAnchor="start">
           {e.s.label} {format(e.value)}
+          <title>{`${e.s.label} · latest observation ${e.date}: ${format(e.value)}`}</title>
         </text>
       ))}
-    </svg>
+    </svg></div>
   );
 }
 
@@ -158,7 +173,11 @@ export interface HeatDay {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: string }) {
+export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMax }: {
+  days: HeatDay[]; label: string; selectedDay?: string;
+  onSelectDay?: (day: string) => void; scaleMax?: number;
+}) {
+  const hatchId = "heat-hatch-"+useId().replaceAll(":","");
   if (days.length === 0) return null;
   const cell = 7;
   const gap = 1;
@@ -172,7 +191,7 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
   const start = new Date(first.getTime() - ((first.getUTCDay() + 6) % 7) * 86_400_000);
   const totalDays = Math.round((last.getTime() - start.getTime()) / 86_400_000) + 1;
   const weeks = Math.ceil(totalDays / 7);
-  const max = Math.max(...days.map((d) => d.value ?? 0), 0.0001);
+  const max = Math.max(scaleMax ?? Math.max(...days.map(d => d.partial ? 0 : d.value ?? 0)), 0.0001);
   const W = padL + weeks * step + 4;
   const H = padT + 7 * step + 2;
   const cells: Array<{ x: number; y: number; d: HeatDay }> = [];
@@ -193,15 +212,15 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
         lastLabelEnd = x + text.length * 5.6 + 8;
       }
     }
-    const d = byDay.get(key);
+    const d = byDay.get(key) ?? (date >= first ? {day:key,value:null,title:key+" · no observation"} : null);
     if (d) cells.push({ x: padL + week * step, y: padT + dow * step, d });
   }
   return (
-    <div style={{ overflowX: "auto" }}>
-      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} style={{ minWidth: Math.min(W, 640) }}>
+    <div className="chart-scroll" tabIndex={0} role="region" aria-label={label+"; scroll horizontally on small screens"}>
+      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} role={onSelectDay ? "group" : "img"} aria-label={label} style={{ minWidth: Math.min(W, 640) }}>
         <title>{label}</title>
         <defs>
-          <pattern id="hatch" patternUnits="userSpaceOnUse" width={4} height={4} patternTransform="rotate(45)">
+          <pattern id={hatchId} patternUnits="userSpaceOnUse" width={4} height={4} patternTransform="rotate(45)">
             <line x1={0} y1={0} x2={0} y2={4} className="hatch" />
           </pattern>
         </defs>
@@ -217,10 +236,24 @@ export function CalendarHeatmap({ days, label }: { days: HeatDay[]; label: strin
         ))}
         {cells.map(({ x, y, d }) => (
           <g key={d.day}>
-            <rect className="cell" x={x} y={y} width={cell} height={cell} rx={2} style={{ fillOpacity: d.value === null ? 0 : 0.12 + 0.88 * (d.value / max) }}>
+            <rect className={`cell ${d.partial ? "partial" : d.value === null ? "missing" : "observed"}`}
+              data-day={d.day} x={x} y={y} width={cell} height={cell} rx={1}
+              style={d.value !== null && !d.partial ? {fillOpacity:0.12+0.88*Math.min(1,Math.max(0,d.value/max))} : undefined}
+              role={onSelectDay ? "button" : undefined} tabIndex={onSelectDay && d.day === selectedDay ? 0 : onSelectDay ? -1 : undefined}
+              aria-label={onSelectDay ? d.title : undefined} aria-pressed={onSelectDay ? d.day === selectedDay : undefined}
+              onClick={onSelectDay ? () => onSelectDay(d.day) : undefined}
+              onKeyDown={onSelectDay ? e => {
+                if (e.key === "Enter" || e.key === " ") {e.preventDefault();onSelectDay(d.day);return;}
+                const offset = {ArrowLeft:-7,ArrowRight:7,ArrowUp:-1,ArrowDown:1}[e.key];
+                if (offset === undefined) return;
+                e.preventDefault();
+                const next = new Date(Date.parse(d.day+"T00:00:00Z")+offset*86_400_000).toISOString().slice(0,10);
+                const target = e.currentTarget.ownerSVGElement?.querySelector<SVGRectElement>(`[data-day="${next}"]`);
+                if (target) {onSelectDay(next);target.focus();}
+              } : undefined}>
               <title>{d.title}</title>
             </rect>
-            {d.partial ? <rect x={x} y={y} width={cell} height={cell} rx={2} fill="url(#hatch)" pointerEvents="none" /> : null}
+            {d.partial ? <rect x={x} y={y} width={cell} height={cell} rx={1} fill={`url(#${hatchId})`} pointerEvents="none" /> : null}
           </g>
         ))}
       </svg>

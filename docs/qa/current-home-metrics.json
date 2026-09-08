@@ -1,0 +1,18 @@
+{
+  "label": "current",
+  "url": "http://127.0.0.1:3100",
+  "viewport": "1440x1000",
+  "measuredAt": "2026-09-07T21:07:32.861Z",
+  "decodedHtmlBytes": 55897,
+  "cache": "STALE",
+  "domElements": 366,
+  "documentWidth": 1440,
+  "viewportWidth": 1440,
+  "encodedHtmlBytes": 10757,
+  "transferredHtmlBytes": 11057,
+  "timeToFirstByteMs": 19,
+  "domContentLoadedMs": 36,
+  "fontPreloads": 2,
+  "resources": 30,
+  "errors": []
+}

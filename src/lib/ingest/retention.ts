@@ -1,16 +1,38 @@
-import { lt } from "drizzle-orm";
-import { forumPosts, githubEvents, ingestRuns, visits, wikiEdits } from "@/lib/db/schema";
-import type { Job } from "./common";
+import { sql } from "drizzle-orm";
+import { daysAgo } from "@/lib/format";
+import { type Job, timeLeft } from "./common";
+import { resultRows } from "./state";
 
-const days = (n: number) => new Date(Date.now() - n * 86_400_000);
-
-/** Keeps the free Neon tier comfortably under its storage cap. */
+/** Bounded batches avoid returning every deleted ID or one unbounded delete transaction. */
 export const retentionJob: Job = async (ctx) => {
   const stats: Record<string, unknown> = {};
-  stats.visits = (await ctx.db.delete(visits).where(lt(visits.ts, days(180))).returning({ id: visits.id })).length;
-  stats.wikiEdits = (await ctx.db.delete(wikiEdits).where(lt(wikiEdits.ts, days(180))).returning({ id: wikiEdits.rcid })).length;
-  stats.githubEvents = (await ctx.db.delete(githubEvents).where(lt(githubEvents.createdAt, days(90))).returning({ id: githubEvents.id })).length;
-  stats.forumPosts = (await ctx.db.delete(forumPosts).where(lt(forumPosts.ts, days(180))).returning({ id: forumPosts.id })).length;
-  stats.ingestRuns = (await ctx.db.delete(ingestRuns).where(lt(ingestRuns.startedAt, days(30))).returning({ id: ingestRuns.id })).length;
-  return { stats };
+  const jobs: Array<{ table: string; column: string; cutoff: string }> = [
+    { table: "visits", column: "ts", cutoff: daysAgo(180) },
+    { table: "wiki_edits", column: "ts", cutoff: daysAgo(180) },
+    { table: "github_events", column: "created_at", cutoff: daysAgo(90) },
+    { table: "forum_posts", column: "ts", cutoff: daysAgo(180) },
+    { table: "ingest_runs", column: "started_at", cutoff: daysAgo(30) },
+    { table: "osm_sample_seen", column: "day", cutoff: daysAgo(7) },
+  ];
+  let batches = 0;
+  for (const job of jobs) {
+    let removed = 0;
+    for (;;) {
+      if (timeLeft(ctx) < 5000 || batches >= 50) return { stats: { ...stats, batches }, outcome: "partial" };
+      const cutoff = job.column === "day" ? sql`${job.cutoff}::date` : sql`${job.cutoff + "T00:00:00Z"}::timestamptz`;
+      const query = sql`with removed as (
+        delete from ${sql.identifier(job.table)} where ctid in (
+          select ctid from ${sql.identifier(job.table)} where ${sql.identifier(job.column)} < ${cutoff}
+          order by ${sql.identifier(job.column)} limit 1000
+        ) returning 1
+      ) select count(*)::int as count from removed`;
+      const result = await ctx.db.execute(query);
+      const count = Number(resultRows<{ count: number }>(result)[0]?.count ?? 0);
+      batches++;
+      removed += count;
+      stats[job.table] = removed;
+      if (count < 1000) break;
+    }
+  }
+  return { stats: { ...stats, batches }, outcome: "success" };
 };

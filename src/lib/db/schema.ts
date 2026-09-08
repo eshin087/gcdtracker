@@ -203,6 +203,14 @@ export const ingestRuns = pgTable(
   (t) => [index("ingest_runs_source_started_idx").on(t.source, t.startedAt.desc())],
 );
 
+/** Durable progress independent of the short-lived run log. */
+export const collectorState = pgTable("collector_state", {
+  key: text("key").primaryKey(),
+  state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+  revision: bigint("revision", { mode: "number" }).notNull().default(0),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
 /* ---------- watched repositories (native collector) ---------- */
 
 export const watchedRepos = pgTable("watched_repos", {
@@ -306,6 +314,7 @@ export const osmChangesets = pgTable(
   "osm_changesets",
   {
     id: bigint("id", { mode: "number" }).primaryKey(),
+    collectionVersion: smallint("collection_version").notNull().default(1),
     ts: ts("ts").notNull(),
     user: text("user"),
     editor: text("editor"),
@@ -319,11 +328,22 @@ export const osmChangesets = pgTable(
 );
 
 export const osmDaily = pgTable("osm_daily", {
-  day: day("day").primaryKey(),
+  day: day("day").notNull(),
+  collectionVersion: smallint("collection_version").notNull().default(1),
   sampled: integer("sampled").notNull().default(0),
   aiAssisted: integer("ai_assisted").notNull().default(0),
   byEditor: jsonb("by_editor").$type<Record<string, number>>(),
-});
+}, (t) => [primaryKey({ columns: [t.day, t.collectionVersion] })]);
+
+/** Seven-day deduplication ledger for the bounded, 48-hour OSM sample. */
+export const osmSampleSeen = pgTable("osm_sample_seen", {
+  id: bigint("id", { mode: "number" }).primaryKey(),
+  createdAt: ts("created_at").notNull(),
+  closedAt: ts("closed_at").notNull(),
+  day: day("day").notNull(),
+  aiKind: text("ai_kind"),
+  editor: text("editor"),
+}, (t) => [index("osm_sample_seen_day_idx").on(t.day)]);
 
 /* ---------- agent tooling ---------- */
 
@@ -331,6 +351,8 @@ export const mcpServers = pgTable(
   "mcp_servers",
   {
     name: text("name").primaryKey(),
+    status: text("status").notNull().default("unknown"),
+    syncVersion: smallint("sync_version").notNull().default(1),
     title: text("title"),
     description: text("description"),
     url: text("url"),
@@ -404,3 +426,10 @@ export const ghArchiveDaily = pgTable(
   },
   (t) => [primaryKey({ columns: [t.day, t.kind, t.key] }), index("gh_archive_daily_kind_day_idx").on(t.kind, t.day.desc())],
 );
+
+/** Written atomically with a validated, complete hourly replacement. */
+export const ghArchiveCompleted = pgTable("gh_archive_completed", {
+  hour: text("hour").primaryKey(),
+  ingestVersion: smallint("ingest_version").notNull(),
+  completedAt: ts("completed_at").notNull().defaultNow(),
+});

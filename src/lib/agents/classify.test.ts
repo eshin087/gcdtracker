@@ -115,7 +115,7 @@ describe("classify with headers", () => {
     expect(c.signatureAgent).toBe("chatgpt.com");
   });
 
-  it("promotes an unknown but signed UA to a signed browsing agent", () => {
+  it("does not promote an unknown UA based on unverified signature headers", () => {
     const headers = (n: string) =>
       ({
         "signature-agent": '"https://agent.example.org"',
@@ -123,14 +123,18 @@ describe("classify with headers", () => {
         signature: "sig1=:abc:",
       })[n] ?? null;
     const c = classify(UA.chrome, headers);
-    expect(c.slug).toBe("signed:agent.example.org");
-    expect(c.category).toBe("ai-browsing-agent");
+    expect(c.slug).toBeNull();
+    expect(c.name).toBeNull();
+    expect(c.category).toBe("human");
+    expect(c.signed).toBe(true);
+    expect(c.signatureStatus).toBe("unverified");
   });
 
   it("requires all three headers before calling a request signed", () => {
     const headers = (n: string) => (n === "signature-agent" ? '"https://chatgpt.com"' : null);
     const c = classify(UA.chrome, headers);
     expect(c.signed).toBe(false);
+    expect(c.signatureStatus).toBe("absent");
     expect(c.category).toBe("human");
   });
 
@@ -138,6 +142,10 @@ describe("classify with headers", () => {
     expect(signatureAgentHost('"https://chatgpt.com"')).toBe("chatgpt.com");
     expect(signatureAgentHost("https://example.com/path")).toBe("example.com");
     expect(signatureAgentHost(null)).toBeNull();
+    expect(signatureAgentHost("not a URL")).toBeNull();
+    expect(signatureAgentHost("http://example.com")).toBeNull();
+    expect(signatureAgentHost("https://user:password@example.com")).toBeNull();
+    expect(signatureAgentHost("javascript:alert(1)")).toBeNull();
   });
 });
 

@@ -42,9 +42,15 @@ next-env.d.ts
 
 # local
 .claude/
-/drizzle/
+/drizzle/*
+!/drizzle/*.sql
 
 .vercel
 .env*
 .agents/
 skills-lock.json
+
+# Isolated QA outputs
+.qa/
+playwright-report/
+test-results/
