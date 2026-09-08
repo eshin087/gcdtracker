@@ -11,8 +11,7 @@ import type { HomeReportsData } from "@/lib/home-reports";
 
 const SECTIONS: RailItem[] = [
   {id:"overview",title:"Overview"},{id:"flow",title:"Agents → destinations"},
-  {id:"web-traffic",title:"Web traffic"},{id:"github-census",title:"Public GitHub"},
-  {id:"crawler-policies",title:"Crawler policies"},{id:"latest",title:"Latest records"},
+  {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"latest",title:"Latest records"},
 ];
 export function InternetOverview({ flow, records, reports, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; demo?:boolean }) {
   return <div className="shell with-rail home-report">

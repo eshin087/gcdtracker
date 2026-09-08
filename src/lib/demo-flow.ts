@@ -36,22 +36,29 @@ export const DEMO_RECORDS: LatestRecord[] = [
 
 
 // Fixed illustrative source reports; never used as a fallback for observed data.
+const demoStart = Date.UTC(2025,0,1), demoEnd = Date.UTC(2026,8,7);
 export const DEMO_REPORTS: import("./home-reports").HomeReportsData = {
+  windowEnd:"2026-09-07",
   githubWeek: {agentPrs: 36420, prsOpened: 620000, days: 7},
-  github: Array.from({length:12}, (_,i) => ({
-    period: new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),
-    agentPrs: 88000+i*12700, share: i===8 ? null : 2.8+i*.28, partial:i===8, hours:i===8 ? 590 : 720,
+  github: Array.from({length:44}, (_,i) => ({
+    period: new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),
+    agentPrs: i<24 ? 0 : Math.round(3000*Math.pow(i-22,1.55)),
+    share: i===38 ? null : i<24 ? 0 : (i-23)*.36, partial:i===38, hours:i===38 ? 590 : 720,
   })),
-  robots: Array.from({length:12}, (_,i) => ({
-    date: new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,10),
-    sites: 380000+i*4000,gpt:14+i*1.4,claude:11+i*1.6,
+  robots: Array.from({length:44}, (_,i) => ({
+    date: new Date(Date.UTC(2023,i,1)).toISOString().slice(0,10),
+    sites: 260000+i*4000,gpt:i<8 ? 0 : Math.min(36,1+(i-8)*.9),claude:i<14 ? 0 : Math.min(34,1+(i-14)*1.05),
   })),
-  wikimedia: Array.from({length:12}, (_,i) => ({
-    month:new Date(Date.UTC(2025,8+i,1)).toISOString().slice(0,7),
-    spider:2400000000+i*150000000,automated:i===7 ? null : 1300000000+i*180000000,
+  wikimedia: Array.from({length:140}, (_,i) => ({
+    month:new Date(Date.UTC(2015,i,1)).toISOString().slice(0,7),
+    human:17e9-i*24000000+Math.sin(i/6)*900000000,
+    spider:1.6e9+i*14000000+Math.sin(i/4)*180000000+Math.max(0,i-90)*52000000,
+    automated:i<60 || i===112 ? null : .8e9+(i-60)*34000000+Math.max(0,i-90)*74000000,
   })),
-  radar:{
-    bots:[{name:"Googlebot",value:38.2},{name:"GPTBot",value:16.8},{name:"ClaudeBot",value:14.5},{name:"Bingbot",value:11.1},{name:"PerplexityBot",value:8.6},{name:"Other bots",value:10.8}],
-    meta:{version:2,normalization:"PERCENTAGE",units:[],dateRange:[{startTime:"2026-08-31T00:00:00Z",endTime:"2026-09-07T00:00:00Z"}],fetchedAt:"2026-09-07T00:30:00Z",lastUpdated:"2026-09-07T00:00:00Z"},
-  },
+  daily:Array.from({length:(demoEnd-demoStart)/86400000},(_,i) => {
+    const day = new Date(demoStart+i*86400000).toISOString().slice(0,10);
+    const partial = i%31===9 || (i>410 && i<425);
+    const share = i%53===0 ? 0 : Math.max(0,.012+i*.0002+Math.sin(i/16)*.025+(i%7>4 ? .03 : 0));
+    return {day,share:partial ? null : share,partial,hours:partial ? 12 : 24,agentPrs:Math.round(45000*share),prsOpened:45000};
+  }).filter((_,i) => i%47!==0),
 };
