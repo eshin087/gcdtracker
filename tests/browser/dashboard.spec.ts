@@ -117,7 +117,7 @@ test("heatmap inspects dates with keyboard and separates missing, partial and ze
   await zero.click();
   await expect(heatmap.locator(".heatmap-value")).toHaveText("0.0%");
   await heatmap.getByLabel("Heatmap year").selectOption("2025");
-  await expect(heatmap.getByRole("img")).toHaveAttribute("aria-label",/2025/);
+  await expect(heatmap.getByRole("group")).toHaveAttribute("aria-label",/2025/);
   await expect(heatmap.locator(".cell")).toHaveCount(365);
   await heatmap.getByLabel("Heatmap year").selectOption("2026");
   await expect(heatmap.locator(".cell")).toHaveCount(249);

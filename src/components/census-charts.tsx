@@ -217,7 +217,7 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
   }
   return (
     <div className="chart-scroll" tabIndex={0} role="region" aria-label={label+"; scroll horizontally on small screens"}>
-      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} style={{ minWidth: Math.min(W, 640) }}>
+      <svg className="chart heatmap" viewBox={`0 0 ${W} ${H}`} role={onSelectDay ? "group" : "img"} aria-label={label} style={{ minWidth: Math.min(W, 640) }}>
         <title>{label}</title>
         <defs>
           <pattern id={hatchId} patternUnits="userSpaceOnUse" width={4} height={4} patternTransform="rotate(45)">
