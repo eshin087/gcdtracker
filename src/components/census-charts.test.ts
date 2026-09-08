@@ -33,3 +33,12 @@ describe("restored history charts", () => {
     expect(new Set(ids).size).toBe(2);
   });
 });
+
+it("shows partial recorded counts only when explicitly requested", () => {
+  const html = renderToStaticMarkup(createElement(CalendarHeatmap,{label:"Counts",showPartialValues:true,days:[
+    {day:"2026-09-01",value:42,partial:true,title:"42 recorded PRs; unvalidated"},
+  ]}));
+  expect(html).toContain('class="cell partial"');
+  expect(html).toContain('fill-opacity:1');
+  expect(html).toContain('fill="url(#');
+});

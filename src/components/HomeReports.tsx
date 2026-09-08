@@ -1,13 +1,18 @@
 import { FigureHead, StatTiles } from "./ui";
 import { CensusHistory, ActivityHeatmap } from "./HomeCensus";
-import { fmtDate, fmtInt, fmtPct } from "@/lib/format";
+import { fmtDate, fmtInt } from "@/lib/format";
 import type { HomeReportsData } from "@/lib/home-reports";
 
 export function HomeReportHeadlines({ data }: { data: HomeReportsData }) {
   const crawl = data.robots.at(-1);
+  const since = new Date(Date.parse(data.windowEnd+"T00:00:00Z")-7*86_400_000).toISOString().slice(0,10);
+  const observed = data.daily.filter(d => d.day >= since && d.day < data.windowEnd);
+  const agentPrs = observed.reduce((sum,d) => sum+d.agentPrs,0);
+  const prs = observed.reduce((sum,d) => sum+d.prsOpened,0);
+  const coverage = `${observed.length}/7 UTC days observed - ${data.githubWeek.days}/7 comparable - includes legacy/partial counts`;
   return <StatTiles tiles={[
-    {value:data.githubWeek.days ? fmtInt(data.githubWeek.agentPrs) : "–",label:"Agent-attributed public PRs, 7-day window",sub:`${data.githubWeek.days}/7 comparable UTC days · GH Archive`},
-    {value:data.githubWeek.prsOpened > 0 ? fmtPct(data.githubWeek.agentPrs/data.githubWeek.prsOpened) : "–",label:"Agent share of observed public PRs",sub:"Same comparable days and detector cohort"},
+    {value:observed.length ? fmtInt(agentPrs) : "Unavailable",label:"Recorded agent-attributed PRs, 7-day window",sub:coverage},
+    {value:observed.length ? fmtInt(prs) : "Unavailable",label:"Total observed public PRs, 7-day window",sub:"GH Archive - recorded counts, not a complete GitHub total"},
     {value:crawl ? fmtInt(crawl.sites) : "–",label:"Hosts in the latest policy sample",sub:crawl ? "Common Crawl · "+fmtDate(crawl.date) : "Corrected v2 sample unavailable"},
   ]}/>;
 }

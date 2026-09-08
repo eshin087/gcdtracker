@@ -85,16 +85,18 @@ export function ActivityHeatmap({ days, windowEnd }: { days:HomeReportsData["dai
   const lastComplete = new Date(Date.parse(windowEnd+"T00:00:00Z")-86_400_000).toISOString().slice(0,10);
   const initial = days.at(-1)?.day ?? lastComplete;
   const [selected,setSelected] = useState(initial);
+  const [measure,setMeasure] = useState<"count"|"share">("count");
+  const counts = measure === "count";
   if (!days.length) return <p className="empty">Daily source observations are unavailable. No empty cell is treated as zero activity.</p>;
   const year = selected.slice(0,4), firstYear = Number(days[0].day.slice(0,4)), lastYear = Number(lastComplete.slice(0,4));
   const years = Array.from({length:Math.max(1,lastYear-firstYear+1)}, (_,i) => String(firstYear+i));
   const end = year === lastComplete.slice(0,4) ? lastComplete : year+"-12-31";
   const byDay = new Map(days.map(d => [d.day,d]));
-  const max = Math.max(0,...days.filter(d => !d.partial).map(d => d.share ?? 0));
+  const max = Math.max(0,...days.map(d => counts ? d.agentPrs : !d.partial ? d.share ?? 0 : 0));
   const cells:HeatDay[] = dayRange(year+"-01-01",end).map(day => {
     const row = byDay.get(day);
-    const value = row && !row.partial ? row.share : null;
-    return {day,value,partial:row?.partial ?? false,title:day+" · "+(value===null ? row ? "share unavailable; incomplete or unvalidated coverage" : "no observation" : fmtPct(value)+" agent share")};
+    const value = row ? counts ? row.agentPrs : !row.partial ? row.share : null : null;
+    return {day,value,partial:row?.partial ?? false,title:day+" · "+(value===null ? row ? "share unavailable; incomplete or unvalidated coverage" : "no observation" : counts ? fmtInt(value)+" recorded agent PRs"+(row?.partial ? "; incomplete or unvalidated coverage" : "") : fmtPct(value)+" agent share")};
   });
   const detail = byDay.get(selected), valid = detail && !detail.partial && detail.share !== null;
   const observed = cells.filter(d => d.value !== null).length;
@@ -103,22 +105,26 @@ export function ActivityHeatmap({ days, windowEnd }: { days:HomeReportsData["dai
       <label>Year <select aria-label="Heatmap year" value={year} onChange={e => {
         const target = e.target.value===lastComplete.slice(0,4) ? lastComplete : e.target.value+"-12-31";setSelected(target);
       }}>{years.map(y => <option key={y}>{y}</option>)}</select></label>
-      <p className="meta">{observed}/{cells.length} comparable UTC days · same color scale across years</p>
+      <div className="seg compact-seg" aria-label="Heatmap measurement">
+        <button type="button" aria-pressed={counts} onClick={() => setMeasure("count")}>Recorded PRs</button>
+        <button type="button" aria-pressed={!counts} onClick={() => setMeasure("share")}>Validated share (%)</button>
+      </div>
+      <p className="meta">{observed}/{cells.length} {counts ? "UTC days with observations" : "comparable UTC days"} - same color scale across years</p>
     </div>
-    <CalendarHeatmap days={cells} label={"Agent share of observed public GitHub PRs in "+year} selectedDay={selected} onSelectDay={setSelected} scaleMax={max}/>
+    <CalendarHeatmap days={cells} label={(counts ? "Recorded agent-attributed public GitHub PRs in " : "Agent share of observed public GitHub PRs in ")+year} selectedDay={selected} onSelectDay={setSelected} scaleMax={max} showPartialValues={counts}/>
     <div className="heatmap-legend" aria-label="Heatmap color scale">
-      <span><i className="heat-key zero"/>0%</span>
+      <span><i className="heat-key zero"/>{counts ? "0 PRs" : "0%"}</span>
       <span className="heat-ramp" aria-hidden="true"/>
-      <span>{max ? fmtPct(max) : "No comparable data"}</span>
+      <span>{max ? counts ? fmtInt(max)+" PRs" : fmtPct(max) : counts ? "0 recorded PRs" : "No comparable data"}</span>
       <span><i className="heat-key missing"/>No observation</span>
       <span><i className="heat-key partial"/>Incomplete / unvalidated</span>
     </div>
     <div className="heatmap-detail" aria-live="polite">
       <strong>{fmtDate(selected)}</strong>
-      {valid ? <><span className="heatmap-value">{fmtPct(detail.share!)}</span><span>agent share · {fmtInt(detail.agentPrs)} of {fmtInt(detail.prsOpened)} observed PRs</span></>
+      {counts && detail ? <><span className="heatmap-value">{fmtInt(detail.agentPrs)}</span><span>recorded agent-attributed PRs - {fmtInt(detail.prsOpened)} total observed PRs</span></> : valid ? <><span className="heatmap-value">{fmtPct(detail.share!)}</span><span>agent share · {fmtInt(detail.agentPrs)} of {fmtInt(detail.prsOpened)} observed PRs</span></>
         : <span>{detail ? "Share unavailable: incomplete or unvalidated source coverage." : "No source observation for this date."}</span>}
       {detail ? <span className="meta">{detail.hours}/24 archive hours · {valid ? "comparable day" : "not comparable"}</span> : null}
     </div>
-    <p className="report-source">Select a cell for its evidence; arrow keys move by day or week. This measures coding activity in GH Archive, not web requests. The current UTC day is excluded. Empty and hatched cells never count as zero.</p>
+    <p className="report-source">Select a cell for its evidence; arrow keys move by day or week. This measures coding activity in GH Archive, not web requests. Recorded counts include legacy and incomplete periods and can undercount activity. Hatching marks incomplete or unvalidated coverage; percentages require validated days. The current UTC day is excluded. Missing observations never count as zero.</p>
   </div>;
 }
