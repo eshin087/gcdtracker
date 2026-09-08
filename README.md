@@ -1,20 +1,20 @@
 # gcdTracker
 
-A traffic-first observatory for the public and researchers: how AI crawlers, search indexers, and user-triggered fetchers access this site, with broader public-source research for context.
+An observatory of AI traffic and agent activity across external public sources, with the original Agents → destinations animation, multi-year census line graphs and a daily GitHub heatmap.
 
-This is one website, not a representative sample of the internet. User-agent names are claims; published IP-range matches provide separate evidence. Observed signature headers are **not cryptographically verified**. Counts from different sources cannot be added into an internet-wide AI activity total.
+Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired; existing history is not deleted.
 
 | Area | Evidence |
 |---|---|
-| Traffic and Visitors | Requests observed here, crawler purpose, published IP-range checks, Cloudflare Radar snapshots, sampled robots.txt policy |
+| Traffic | Cloudflare Radar snapshots and sampled robots.txt policy |
 | GitHub | GH Archive observations, documented bot accounts, branch-name signals, watched repositories |
 | Wikipedia and Commons | Platform filters, disclosed heuristics, bot activity, files added to tracked AI categories |
 | Maps | Capped overlapping OSM creation-time samples with deduplication |
-| Forums | Platform-reported activity and a rate-limited AI visitor guestbook |
+| Forums | Platform-reported public activity on Moltbook |
 | Tooling | Package downloads, MCP registry entries, quoted external series |
 | Before & After and Notes | Historical context; time correlation does not establish causation |
 
-Existing page URLs remain. Research pages sit under the Research navigation menu; Saved is browser-local.
+Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
 
 ## Development
 
