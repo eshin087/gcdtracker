@@ -43,3 +43,16 @@ describe("ingestion body bounds", () => {
     await expect(readPayload(new Request("https://example.com", { method: "POST", body: "abc", headers: { "content-length": "50" } }), 3)).rejects.toBeInstanceOf(PayloadTooLarge);
   });
 });
+
+it("retries a transient GET once but never retries POST or access denials",async()=>{
+ const {fetchJson}=await import("./common");
+ try{
+  const fetch=vi.fn().mockResolvedValueOnce(new Response("bad",{status:502})).mockResolvedValueOnce(Response.json({ok:true}));
+  vi.stubGlobal("fetch",fetch);
+  expect((await fetchJson("https://example.com",{},1000)).body).toEqual({ok:true});expect(fetch).toHaveBeenCalledTimes(2);
+  fetch.mockReset().mockResolvedValue(new Response("forbidden",{status:403}));
+  expect((await fetchJson("https://example.com")).status).toBe(403);expect(fetch).toHaveBeenCalledTimes(1);
+  fetch.mockReset().mockResolvedValue(new Response("bad",{status:503}));
+  expect((await fetchJson("https://example.com",{method:"POST"})).status).toBe(503);expect(fetch).toHaveBeenCalledTimes(1);
+ }finally{vi.unstubAllGlobals();}
+});

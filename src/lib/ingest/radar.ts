@@ -9,10 +9,11 @@ export interface RadarMetadata extends Record<string, unknown> {
   lastUpdated: string | null;
   fetchedAt: string;
   version: 2;
+  unavailable?: Array<{ series: string; reason: "missing" | "non-finite" }>;
 }
 interface RadarResponse {
   success?: boolean;
-  result?: { summary_0?: Record<string, string>; serie_0?: Record<string, unknown>; meta?: Partial<RadarMetadata> };
+  result?: { summary_0?: Record<string, unknown>; serie_0?: Record<string, unknown>; meta?: Partial<RadarMetadata> };
 }
 const BASE = "https://api.cloudflare.com/client/v4/radar";
 export const RADAR_SOURCE = "radar-v2";
@@ -40,13 +41,27 @@ export function parseRadar(group: string, body: RadarResponse, now = new Date())
       });
     }
   } else {
-    if (!result?.summary_0 || typeof result.summary_0 !== "object") throw new Error("Radar summary missing");
+    if (!result?.summary_0 || typeof result.summary_0 !== "object" || Array.isArray(result.summary_0)) throw new Error("Radar summary missing");
     for (const [name, value] of Object.entries(result.summary_0)) {
-      if (value === null || value === "" || !Number.isFinite(Number(value))) throw new Error("Radar invalid summary");
-      rows.push({ source: RADAR_SOURCE, series: group + ":" + name, period: metadata.dateRange[0].endTime.slice(0, 10), value: Number(value) });
+      const series = group + ":" + name;
+      const parsed = radarSummaryValue(value,group === "crawl-refer" && metadata.normalization === "RATIO");
+      if (typeof parsed === "string") {
+        (metadata.unavailable ??= []).push({series,reason:parsed});
+      } else rows.push({ source: RADAR_SOURCE, series, period: metadata.dateRange[0].endTime.slice(0, 10), value: parsed });
     }
   }
   return { rows, metadata };
+}
+/** Ratios may have no finite denominator. Preserve that state instead of making it zero. */
+export function radarSummaryValue(value:unknown,ratio:boolean):number | "missing" | "non-finite" {
+  if (ratio && (value === null || value === "" || typeof value === "string" && /^(null|nan|n\/a)$/i.test(value.trim()))) return "missing";
+  if (ratio && typeof value === "string" && /^(?:\+?inf(?:inity)?|\u221e)$/i.test(value.trim())) return "non-finite";
+  if (typeof value !== "number" && typeof value !== "string" || typeof value === "string" && !value.trim()) throw new Error("Radar invalid summary value");
+  const parts = ratio && typeof value === "string" ? value.match(/^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/) : null;
+  const number = parts ? Number(parts[1])/Number(parts[2]) : Number(value);
+  if (parts && Number(parts[2])===0) return Number(parts[1])===0 ? "missing" : "non-finite";
+  if (!Number.isFinite(number) || number<0) throw new Error("Radar invalid summary value");
+  return number;
 }
 /** Whole snapshots retain a common normalization basis. Never splice rolling normalized windows. */
 export const radarJob: Job = async (ctx) => {
@@ -59,13 +74,17 @@ export const radarJob: Job = async (ctx) => {
   ] as const;
   const failed: string[] = [];
   let rows = 0, partial = false;
+  const unavailable: string[] = [];
   for (const [group, endpoint] of endpoints) {
     if (timeLeft(ctx) < 5_000) { partial = true; break; }
     try {
       const key = "radar:" + group;
       const snapshot = await readCollectorState<Record<string, unknown>>(ctx.db, key, {});
       // Daily source snapshots need no half-hourly refetch.
-      if (typeof snapshot.state.fetchedAt === "string" && Date.now() - Date.parse(snapshot.state.fetchedAt) < 86_400_000) continue;
+      if (typeof snapshot.state.fetchedAt === "string" && Date.now() - Date.parse(snapshot.state.fetchedAt) < 86_400_000) {
+        if (Array.isArray(snapshot.state.unavailable) && snapshot.state.unavailable.length) {partial=true;unavailable.push(group);}
+        continue;
+      }
       const res = await fetchJson<RadarResponse>(BASE + endpoint, { headers: { authorization: "Bearer " + token } }, Math.min(20_000, timeLeft(ctx) - 2_000));
       if (res.status !== 200 || !res.body) throw new Error("HTTP " + res.status);
       const parsed = parseRadar(group, res.body);
@@ -73,9 +92,12 @@ export const radarJob: Job = async (ctx) => {
         sql`delete from external_series where source = ${RADAR_SOURCE} and series like ${group + ":%"} and ${guard}`,
         ...seriesWrites(parsed.rows, guard),
       ]);
-      if (committed) rows += parsed.rows.length;
+      if (committed) {
+        rows += parsed.rows.length;
+        if (parsed.metadata.unavailable?.length) {partial=true;unavailable.push(group);}
+      }
       else partial = true;
     } catch (err) { failed.push(group + ": " + (err instanceof Error ? err.message : "fetch failed")); }
   }
-  return { stats: { rows, failed }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
+  return { stats: { rows, failed, unavailable }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

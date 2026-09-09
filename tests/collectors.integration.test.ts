@@ -229,3 +229,28 @@ describe("baseline source resumption", () => {
     }
   });
 });
+
+it("commits signature catalog entries and progress together against PostgreSQL",async()=>{
+ const {collectSignatureRegistry,REGISTRY_KEY}=await import("../src/lib/ingest/signature-registry");
+ const previous=process.env.CLOUDFLARE_API_TOKEN;
+ const actualFetch=globalThis.fetch;
+ process.env.CLOUDFLARE_API_TOKEN="qa-only";
+ try{
+  await bridge.query("delete from collector_state where key=$1",[REGISTRY_KEY]);
+  vi.stubGlobal("fetch",vi.fn((input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=String(input);
+   if(!url.startsWith("https://api.cloudflare.com/client/v4/radar/bots"))return actualFetch(input,init);
+   return Promise.resolve(Response.json(url.includes("?")?{success:true,result:{bots:[{slug:"qa-bot"}]}}:{success:true,result:{bot:{slug:"qa-bot",signatureAgentUrl:"https://qa-signature.example/keys",operator:"QA"}}}));
+  }));
+  const result=await collectSignatureRegistry({db:bridge.db,deadline:Date.now()+60_000});
+  expect(result.partial).toBe(false);
+  expect((await bridge.query("select token,operator from agent_sightings where token='qa-signature.example'")).rows).toEqual([{token:"qa-signature.example",operator:"QA"}]);
+  const state=(await bridge.query("select state from collector_state where key=$1",[REGISTRY_KEY])).rows[0].state;
+  expect(state.checked).toBe(1);expect(state.pending).toEqual([]);expect(state.completedAt).toBeTruthy();
+ }finally{
+  vi.unstubAllGlobals();
+  if(previous===undefined)delete process.env.CLOUDFLARE_API_TOKEN;else process.env.CLOUDFLARE_API_TOKEN=previous;
+  await bridge.query("delete from collector_state where key=$1",[REGISTRY_KEY]);
+  await bridge.query("delete from agent_sightings where token='qa-signature.example'");
+ }
+});

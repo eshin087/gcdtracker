@@ -20,3 +20,9 @@ describe("public Radar metadata", () => {
     expect(publicRadarMetadata(value)).toBeNull();
   });
 });
+
+it("allowlists unavailable measurements without exposing additional state",()=>{
+ const metadata=publicRadarMetadata({...state,unavailable:[{series:"crawl-refer:Example",reason:"non-finite",secret:"private"},{series:"bad",reason:"private"}]});
+ expect(metadata?.unavailable).toEqual([{series:"crawl-refer:Example",reason:"non-finite"}]);
+ expect(JSON.stringify(metadata)).not.toContain("private");
+});
