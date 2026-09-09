@@ -4,11 +4,11 @@ export const SITE = {
   description:
     "gcdTracker watches where autonomous AI agents leave traces on the public internet: published crawler-traffic measurements, edits flagged on Wikipedia and across Wikimedia, pull requests opened by coding agents on GitHub, AI-assisted map edits, platform-reported forum posts, and the growth of agent tooling.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://gcdtracker.vercel.app",
-  repo: "https://github.com/eshin087/gcdtracker-site",
+  repo: "https://github.com/eshin087/gcdtracker",
   version: "0.3.0",
   /** Policy-compliant User-Agent for outbound requests (Wikimedia requires contact info). */
   userAgent:
-    "gcdTracker/0.3 (+https://gcdtracker.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot",
+    "gcdTracker/0.3 (+https://gcdtracker.vercel.app; +https://github.com/eshin087/gcdtracker) bot",
 } as const;
 
 export interface NavLink {

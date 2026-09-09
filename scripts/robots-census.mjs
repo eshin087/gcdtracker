@@ -33,7 +33,7 @@ const SINCE = args.get("since") ?? "2023-01-01";
 const MAX_CRAWLS = Number(args.get("max-crawls") ?? 1);
 const PARSER_VERSION = 2;
 const DEADLINE = Date.now() + 20 * 60_000;
-const UA = "gcdTracker-robots-census/0.4 (+https://github.com/eshin087/gcdtracker-site)";
+const UA = "gcdTracker-robots-census/0.4 (+https://github.com/eshin087/gcdtracker)";
 const CC = "https://data.commoncrawl.org/";
 
 const TOKENS_LC = new Map(ROBOTS_TOKENS.map((t) => [t.toLowerCase(), t]));

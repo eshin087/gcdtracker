@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-Without a database the site renders an explicit offline state. For a guaranteed offline build, unset or empty `DATABASE_URL` and `PREVIEW_DATABASE_URL`, including values in local environment files. Configured database failures render unavailable/error states.
+Without a configured database, the site renders an explicit offline state. Use environment-specific credentials and keep production values out of local fixtures, previews, logs, and commits.
 
 See [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [migration and bounded repairs](docs/operations.md), and [public interface changes](CHANGELOG.md).
 
@@ -41,25 +41,25 @@ See [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [migration an
 |---|---|
 | `DATABASE_URL` | Production/local Neon connection. |
 | `PREVIEW_DATABASE_URL` | Isolated preview connection. Vercel previews ignore `DATABASE_URL` and remain offline without this value. |
-| `CRON_SECRET` | Ingestion bearer token; optional fallback secret for IP hashing. |
-| `IP_HASH_SECRET` | Preferred dedicated IP hashing secret. If neither secret exists, hash-dependent admission fails closed. |
+| `CRON_SECRET` | Secret used to authorize scheduled ingestion. |
+| `IP_HASH_SECRET` | Dedicated secret for privacy-preserving network identifiers. |
 | `GITHUB_TOKEN` | Public GitHub read/search access and API limits. |
 | `CLOUDFLARE_API_TOKEN` | Optional Radar read access. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL. |
 
-GitHub Actions uses the repository secret `CRON_SECRET` and variable `SITE_URL`. Do not put production connections into QA or preview configuration. No paid infrastructure is required by this change.
+GitHub Actions uses repository-level secrets and variables. Never commit environment values or put production connections into QA or preview configuration.
 
 ## Collection
 
 The ordinary collector workflow runs every 30 minutes. GH Archive runs every three hours; the robots sample is bounded to one crawl per weekly invocation. The history worker runs monthly. Run logs expire, while durable checkpoints do not. Outcomes are `success`, `partial`, `failed`, and `disabled`; incomplete resumable backfills remain visibly partial.
 
-The protected `/api/ingest/[source]` routes keep their URLs. `all` returns HTTP 500 when an enabled source fails. GH Archive and robots collectors accept validated worker payloads. See operations documentation before a repair; there is no automatic multi-year reprocessing job.
+Collectors expose explicit outcomes and retain durable checkpoints. See the operations documentation before a repair; there is no automatic multi-year reprocessing job.
 
 Pages cache shared summaries for five minutes; the live endpoint refreshes every 30 seconds. Actual database/Actions usage depends on traffic, source latency and backfill size.
 
 ## Evidence and privacy
 
-Public visitor HTML, JSON and CSV use field allowlists. They exclude IP prefixes/hashes, raw user agents, referrers, signature hosts and trap tokens. Private storage retains limited evidence for abuse prevention and analysis; visits expire after 180 days. Raw IP addresses are not persisted. Guestbook network prefixes remain private for quota enforcement; hiding a note does not remove it from quotas. Saved bookmarks remain in the browser.
+Public HTML, JSON, and CSV use explicit field allowlists. Sensitive network and request details are excluded. Raw IP addresses are not persisted, and saved bookmarks remain in the reader's browser.
 
 A claimed crawler name, branch prefix, edit filter or platform assertion does not prove model authorship. Policy directives do not prove a visitor fetched or understood robots.txt. Radar normalized values retain their scale, units, window and provenance in the JSON export.
 
@@ -75,3 +75,7 @@ Multi-site measurement and controlled experiments are deferred. A future multi-s
 ## Licences
 
 Code: MIT. Project data exports: CC BY 4.0, subject to underlying source rights. Quoted sources retain their publishers' licences; Radar data has its own licence. Fonts: SIL OFL. Public third-party metadata links to its source; inclusion implies no endorsement or finding of misconduct.
+
+## Security
+
+Do not report suspected vulnerabilities in a public issue. Use [GitHub private vulnerability reporting](https://github.com/eshin087/gcdtracker/security/advisories/new) or contact the repository owner privately. Never include credentials, private request evidence, or production data in a report.

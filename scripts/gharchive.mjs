@@ -69,7 +69,7 @@ function bump(map, key, by = 1) {
 async function processHour(hour) {
   const { file } = normalizeHour(hour);
   const url = `https://data.gharchive.org/${file}.json.gz`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(180_000), headers: { "user-agent": "gcdTracker-gharchive/0.4 (+https://github.com/eshin087/gcdtracker-site)" } });
+  const res = await fetch(url, { signal: AbortSignal.timeout(180_000), headers: { "user-agent": "gcdTracker-gharchive/0.4 (+https://github.com/eshin087/gcdtracker)" } });
   if (res.status === 404) return null; // not published yet
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
 

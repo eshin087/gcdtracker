@@ -93,7 +93,7 @@ QA and collection are different: a green QA run proves the tested code behavior,
 
 ## The current email incident and prepared repair
 
-The latest inspected email concerns [ingest run 34298100827](https://github.com/eshin087/gcdtracker-site/actions/runs/34298100827), finished September 9 at 01:13 UTC (September 8 at 18:13 Pacific). The job received HTTP 500. The source report shows two failures:
+The latest inspected email concerns [ingest run 34298100827](https://github.com/eshin087/gcdtracker/actions/runs/34298100827), finished September 9 at 01:13 UTC (September 8 at 18:13 Pacific). The job received HTTP 500. The source report shows two failures:
 
 - `agentwatch`: the signature-registry text download returned HTTP 403. The scheduler also fetched zero registry lines. Retrying the same blocked download did not refresh the catalog.
 - `radar`: the crawl/referral parser rejected a summary value. Its old conversion required every value to be finite; one unavailable/non-finite value rejected the complete group. The logs do not include the rejected raw value, so its exact current encoding still requires authenticated verification.
@@ -134,6 +134,6 @@ Priorities are reliable collection and visible coverage, then comparable crawler
 
 ## References
 
-- [Repository](https://github.com/eshin087/gcdtracker-site), [operating procedures](operations.md), [QA guide](qa.md), [audit](qa-audit.md).
+- [Repository](https://github.com/eshin087/gcdtracker), [operating procedures](operations.md), [QA guide](qa.md), [audit](qa-audit.md).
 - Cloudflare documents the [bot catalog](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/list/) and [bot details including signatureAgentUrl](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/get/).
 - Cloudflare's [crawler summary API](https://developers.cloudflare.com/api/resources/radar/subresources/bots/subresources/web_crawlers/methods/summary/) and [normalization definitions](https://developers.cloudflare.com/radar/concepts/normalization/) explain why units and observation windows must remain attached to the values.
