@@ -418,7 +418,7 @@
   .explorer > div[style*="grid-template-columns"], .article > div[style*="grid-template-columns"] { grid-template-columns: minmax(0, 1fr) !important; }
   .prose table { display: block; width: 100%; overflow-x: auto; }
   .bar-row .k { white-space: normal; overflow-wrap: anywhere; }
-  .bar-row { grid-template-columns: minmax(78px, 1fr) minmax(30px, 1.5fr) 56px; gap: 8px; }
+  .bar-row { grid-template-columns: minmax(70px, 1fr) minmax(30px, 1.5fr) 78px; gap: 8px; }
   .flow-ticker { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .flow-dot { display: none; } }

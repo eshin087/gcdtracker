@@ -20,7 +20,7 @@ import {
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 const day = (name: string) => date(name, { mode: "string" });
 
-/** Raw hits by AI agents, honeypot visitors and robots/llms.txt readers. */
+/** Historical request observations retained for compatibility and privacy-safe exports. */
 export const visits = pgTable(
   "visits",
   {
@@ -53,7 +53,7 @@ export const visits = pgTable(
   ],
 );
 
-/** One counter per (day, category) for every request the proxy sees. */
+/** Historical daily request counters retained for compatibility. */
 export const trafficDaily = pgTable(
   "traffic_daily",
   {
