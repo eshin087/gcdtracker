@@ -53,18 +53,6 @@ Local validation: 191 unit tests, 24 PostgreSQL integration tests and all 13 Chr
 
 No production quota tests, write requests, historical replay or database migrations were run. The local fixtures are synthetic; screenshot counts do not describe production.
 
-## Screenshots
-
-![Original homepage with synthetic fixture](qa/baseline-home-1440.png)
-
-![Repaired homepage with the same synthetic fixture](qa/current-home-1440.png)
-
-![Repaired mobile homepage, light theme](qa/home-light-390.png)
-
-![Repaired mobile homepage, dark theme](qa/home-dark-390.png)
-
-![Research flow with units and motion controls, dark mobile layout](qa/investigations-dark-390.png)
-
 ## Remaining limitations
 
 - Apply the additive migration before data-backed release. See [operations and rollback](operations.md); the old OSM writer is incompatible with the new daily key.

@@ -45,8 +45,6 @@ next-env.d.ts
 /drizzle/*
 !/drizzle/*.sql
 
-.vercel
-.env*
 .agents/
 skills-lock.json
 
@@ -54,3 +52,4 @@ skills-lock.json
 .qa/
 playwright-report/
 test-results/
+/.neon/

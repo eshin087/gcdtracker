@@ -52,6 +52,3 @@ export function isGroup(e: NavEntry): e is NavGroup {
 
 /** Every page link, flattened (for sitemap and llms.txt). */
 export const ALL_LINKS: NavLink[] = NAV.flatMap((e) => (isGroup(e) ? e.items : [e]));
-
-/** @deprecated use ALL_LINKS */
-export const TABS = ALL_LINKS;
