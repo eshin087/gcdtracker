@@ -7,6 +7,8 @@ import { ipRangesJob, parsePrefixes } from "./ipranges";
 import { moltbookJob } from "./moltbook";
 import { wikipediaJob } from "./wikipedia";
 
+const registry = vi.hoisted(() => vi.fn());
+vi.mock("./signature-registry",()=>({collectSignatureRegistry:registry}));
 const mocked = vi.hoisted(() => ({ fetchJson: vi.fn(), lastCursor: vi.fn(async () => null) }));
 vi.mock("./common", async (importOriginal) => ({ ...await importOriginal<typeof import("./common")>(), ...mocked }));
 
@@ -32,6 +34,7 @@ function goodAgentWatch(url: string) {
   throw new Error("unexpected fetch: " + url);
 }
 beforeEach(() => {
+  registry.mockReset().mockResolvedValue({partial:false,stats:{registry:"Radar bot API"}});
   mocked.fetchJson.mockReset();
   mocked.lastCursor.mockClear();
   vi.stubGlobal("fetch", vi.fn(async () => new Response("https://example.com/.well-known/http-message-signatures-directory")));
@@ -69,13 +72,13 @@ describe("AgentWatch source outcomes", () => {
     expect(result.stats.hfTotal).toBeUndefined();
     expect(f.writes.filter((w) => w.table === externalSeries)).toHaveLength(1); // unrelated Hub interval only
   });
-  it("keeps vendored registry usable without claiming a successful live refresh", async () => {
+  it("reports an authenticated registry failure without claiming a successful refresh", async () => {
     mocked.fetchJson.mockImplementation(async (url: string) => goodAgentWatch(url));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+    registry.mockRejectedValue(new Error("Radar bot API HTTP 403"));
     const result = await agentWatchJob(fixture().ctx);
     expect(result.outcome).toBe("failed");
     expect(result.stats.failed).toContain("registry");
-    expect(result.stats.registry).toMatch(/^vendored /);
+    expect(result.stats.registry).toContain("403");
   });
   it("rejects malformed observations before replacing the usage window", async () => {
     const f = fixture();

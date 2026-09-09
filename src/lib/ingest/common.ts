@@ -50,14 +50,19 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}, timeoutM
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, headers: { ...OUTBOUND_HEADERS, ...(init.headers as Record<string, string> | undefined) }, signal: ctl.signal, cache: "no-store" });
-    let body: T | null = null;
-    try {
-      body = (await res.json()) as T;
-    } catch {
-      body = null;
+    const retryable = (init.method ?? "GET").toUpperCase() === "GET";
+    for (let attempt=0;;attempt++) {
+      const res = await fetch(url, { ...init, headers: { ...OUTBOUND_HEADERS, ...(init.headers as Record<string, string> | undefined) }, signal: ctl.signal, cache: "no-store" });
+      // One retry within the original deadline; never retry writes or an access denial.
+      if (retryable && attempt===0 && [502,503,504].includes(res.status)) {
+        await res.body?.cancel();
+        await sleep(Math.min(250,Math.max(0,timeoutMs/10)));
+        continue;
+      }
+      let body: T | null = null;
+      try { body = (await res.json()) as T; } catch { body = null; }
+      return { status: res.status, body, headers: res.headers };
     }
-    return { status: res.status, body, headers: res.headers };
   } finally {
     clearTimeout(t);
   }

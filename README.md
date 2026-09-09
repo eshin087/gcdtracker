@@ -16,6 +16,8 @@ Each source covers a different part of the internet; counts cannot be added into
 
 Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
 
+See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system and workflow notifications.
+
 ## Development
 
 Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle/Neon HTTP, Vercel, GitHub Actions.

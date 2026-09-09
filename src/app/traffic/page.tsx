@@ -38,7 +38,7 @@ export default async function TrafficPage() {
     .map(([k, pts]) => ({ platform: k.replace("crawl-refer:", ""), value: pts[pts.length - 1]?.value ?? 0 }))
     .sort((a, b) => b.value - a.value);
   const operators = Object.entries(radar).filter(([k]) => k.startsWith("operator:") && radarMeta.operator);
-  const hasRadar = botShare.length > 0 || crawlRefer.length > 0 || operators.length > 0;
+  const hasRadar = botShare.length > 0 || crawlRefer.length > 0 || operators.length > 0 || !!radarMeta["crawl-refer"]?.unavailable?.length;
   const radarDates = Object.values(radarMeta).map((m) => m.fetchedAt).sort();
   const latestRadar = radarDates.at(-1);
   const radarStale = isRadarStale(latestRadar);
@@ -80,12 +80,15 @@ export default async function TrafficPage() {
               <BarList rows={botShare.slice(0, 12).map((b) => ({ key: b.bot, label: b.bot, value: b.value }))} format={(v) => radarValue(v, radarMeta["bot-share"])} />
             </div>
           ) : null}
-          {crawlRefer.length > 0 ? (
+          {crawlRefer.length > 0 || radarMeta["crawl-refer"]?.unavailable?.length ? (
             <div>
               <div className="label" style={{ marginBottom: 8 }}>
                 Crawl/referral metric · {radarUnit(radarMeta["crawl-refer"])}
               </div>
               <RadarContext meta={radarMeta["crawl-refer"]} />
+              {radarMeta["crawl-refer"]?.unavailable?.map(item => <p className="meta" key={item.series}>
+                {item.series.replace("crawl-refer:","")}: {item.reason === "non-finite" ? "No finite crawl/referral ratio reported" : "Ratio unavailable in this source window"}.
+              </p>)}
               <BarList rows={crawlRefer.map((c) => ({ key: c.platform, label: c.platform, value: c.value }))} format={(v) => radarValue(v, radarMeta["crawl-refer"])} variant="neutral" />
             </div>
           ) : null}

@@ -23,30 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fetch files the site cannot reach from its host
-        run: |
-          # Cloudflare's signed-agent registry refuses requests from some hosting providers; fetch it here and hand it over.
-          curl -sS --max-time 30 -A "gcdTracker-actions/0.3 (+https://github.com/${GITHUB_REPOSITORY}) bot" -H "Accept: text/plain, */*" \
-            -o registry.txt "https://assets.radar.cloudflare.com/bots/signature-agent-registry.txt" || echo -n "" > registry.txt
-          echo "registry lines: $(wc -l < registry.txt)"
-      - name: Trigger ingest
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Collect and report source outcomes
         env:
           SITE_URL: ${{ vars.SITE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           SOURCE: ${{ github.event.inputs.source || 'all' }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SITE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
-            echo "SITE_URL variable or CRON_SECRET secret missing"; exit 1
-          fi
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 -X POST \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            -H "Content-Type: text/plain" \
-            -H "User-Agent: gcdTracker-actions/0.3 (+https://github.com/${GITHUB_REPOSITORY})" \
-            --data-binary @registry.txt \
-            "${SITE_URL}/api/ingest/${SOURCE}")
-          echo "HTTP ${code}"
-          cat /tmp/out.json; echo
-          [ "$code" = "200" ]
-          jq -e '.reports | length > 0 and all(.[]; .outcome == "success" or .outcome == "partial" or .outcome == "disabled")' /tmp/out.json >/dev/null
-          jq -r '.reports[] | select(.outcome == "partial") | "::warning::Collector " + .source + " is partial: " + (.stats | tojson)' /tmp/out.json
+        run: node scripts/run-ingest.mjs

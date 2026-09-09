@@ -1,25 +1,16 @@
 import { sql } from "drizzle-orm";
 import aiRobots from "../../../data/ai-robots.json";
-import vendoredRegistry from "../../../data/signature-registry.json";
+import { collectSignatureRegistry } from "./signature-registry";
 import { agentSightings, externalSeries } from "@/lib/db/schema";
 import { fetchJson, type Job, timeLeft } from "./common";
 
 export const AGENT_WATCH = {
   robots: "https://raw.githubusercontent.com/ai-robots-txt/ai.robots.txt/main/robots.json",
-  registry: "https://assets.radar.cloudflare.com/bots/signature-agent-registry.txt",
   hfDaily: "https://datasets-server.huggingface.co/rows?dataset=huggingface%2Fagent-usage&config=daily&split=train",
   hfModels: "https://huggingface.co/api/models?sort=createdAt&direction=-1&limit=100",
 } as const;
 
 type RobotsEntry = { operator?: string; function?: string; description?: string };
-
-function registryRows(text: string) {
-  return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith("http")).map((value) => {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password) throw new Error("invalid registry directory URL");
-    return { kind: "signature-registry", token: url.host, operator: null, fn: "signed agent (Web Bot Auth)", url: url.href };
-  });
-}
 
 /** Watches published identities and quotes Hugging Face's own usage statistics. */
 export const agentWatchJob: Job = async (ctx) => {
@@ -48,31 +39,10 @@ export const agentWatchJob: Job = async (ctx) => {
     stats.robotsNewVsVendored = rows.filter((r) => !known.has(r.token.toLowerCase())).length;
   });
 
-  // A vendored fallback is useful, but it does not establish upstream freshness.
-  await source("registry", 15_000, async () => {
-    let rows: ReturnType<typeof registryRows>;
-    try {
-      let text = ctx.payload?.includes("http-message-signatures-directory") ? ctx.payload : null;
-      stats.registry = text ? "payload" : "upstream";
-      if (!text) {
-        const res = await fetch(AGENT_WATCH.registry, {
-          headers: { "user-agent": "gcdTracker/0.3 (+https://gcdtracker.vercel.app; +https://github.com/eshin087/gcdtracker-site) bot", accept: "text/plain, */*" },
-          cache: "no-store",
-          signal: AbortSignal.timeout(Math.min(20_000, Math.max(1, timeLeft(ctx) - 1_000))),
-        });
-        if (!res.ok) throw new Error(`registry ${res.status}`);
-        text = await res.text();
-      }
-      rows = registryRows(text);
-      if (rows.length === 0) throw new Error("registry has no directory URLs");
-    } catch (error) {
-      failed.push("registry");
-      stats.registryError = (error instanceof Error ? error.message : String(error)).slice(0, 160);
-      rows = registryRows((vendoredRegistry as { urls: string[] }).urls.join("\n"));
-      stats.registry = `vendored ${(vendoredRegistry as { fetchedAt: string }).fetchedAt.slice(0, 10)}`;
-    }
-    if (rows.length > 0) await ctx.db.insert(agentSightings).values(rows).onConflictDoNothing();
-    stats.signedAgents = rows.length;
+  await source("registry", 5_000, async () => {
+    const result = await collectSignatureRegistry(ctx);
+    Object.assign(stats,result.stats);
+    partial ||= result.partial;
   });
 
   await source("hfDaily", 15_000, async () => {

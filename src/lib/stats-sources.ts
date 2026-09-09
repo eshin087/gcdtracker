@@ -296,16 +296,17 @@ async function queryRadarSnapshot(): Promise<{ series: Record<string, SeriesPoin
   // One statement gives values and normalization metadata the same MVCC snapshot.
   const rows = await safe([], async (d) => d.select({
     series: externalSeries.series, period: externalSeries.period, value: externalSeries.value,
-    lo: externalSeries.lo, hi: externalSeries.hi, state: collectorState.state,
-  }).from(externalSeries).innerJoin(collectorState,
-    sql`${collectorState.key} = 'radar:' || split_part(${externalSeries.series}, ':', 1)`)
-    .where(eq(externalSeries.source, "radar-v2")).orderBy(externalSeries.period));
+    lo: externalSeries.lo, hi: externalSeries.hi, state: collectorState.state, stateKey: collectorState.key,
+  }).from(collectorState).leftJoin(externalSeries,
+    sql`${collectorState.key} = 'radar:' || split_part(${externalSeries.series}, ':', 1) and ${externalSeries.source} = 'radar-v2'`)
+    .where(sql`${collectorState.key} in ('radar:operator','radar:bot-share','radar:crawl-refer')`).orderBy(externalSeries.period));
   const series: Record<string, SeriesPoint[]> = {};
   const metadata: Record<string, RadarMetadata> = {};
   for (const row of rows) {
     const meta = publicRadarMetadata(row.state);
     if (!meta) continue;
-    metadata[row.series.split(":")[0]] = meta;
+    metadata[row.stateKey.slice("radar:".length)] = meta;
+    if (row.series === null || row.period === null || row.value === null) continue;
     (series[row.series] ??= []).push({ period: row.period, value: Number(row.value), lo: row.lo, hi: row.hi });
   }
   return { series, metadata };

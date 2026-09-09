@@ -5,7 +5,7 @@ import { dayOf, daysAgo } from "../src/lib/format";
 
 const state = vi.hoisted(() => ({ db: null as Db | null }));
 vi.mock("../src/lib/db", () => ({ get db() { return state.db; } }));
-import { getFlowData, getLatestRecords } from "../src/lib/stats-sources";
+import { getFlowData, getLatestRecords, getRadarSnapshot } from "../src/lib/stats-sources";
 
 let bridge: Awaited<ReturnType<typeof createNeonBridge>>;
 beforeAll(async () => {
@@ -57,4 +57,16 @@ describe("dashboard aggregates against isolated PostgreSQL", () => {
     expect(coding.reduce((sum,s) => sum + s.total, 0)).toBe(2806);
     expect(coding.find(s => s.id === "gh:other")).toMatchObject({total:106,observedDays:2});
   });
+});
+
+it("keeps Radar unavailable metadata visible when a snapshot has no finite rows",async()=>{
+ const meta={version:2,normalization:"RATIO",units:[],dateRange:[{startTime:"2026-09-01T00:00:00Z",endTime:"2026-09-08T00:00:00Z"}],fetchedAt:"2026-09-08T00:00:00Z",lastUpdated:null,unavailable:[{series:"crawl-refer:Example",reason:"non-finite"}],privateToken:"PRIVATE_QA_SENTINEL"};
+ try{
+  await bridge.query("delete from external_series where source='radar-v2'");
+  await bridge.query("insert into collector_state(key,state) values('radar:crawl-refer',$1::jsonb) on conflict(key) do update set state=excluded.state",[JSON.stringify(meta)]);
+  const result=await getRadarSnapshot();
+  expect(result.metadata["crawl-refer"]?.unavailable).toEqual(meta.unavailable);
+  expect(Object.keys(result.series)).toHaveLength(0);
+  expect(JSON.stringify(result)).not.toContain("PRIVATE_QA_SENTINEL");
+ }finally{await bridge.query("delete from collector_state where key='radar:crawl-refer'");}
 });
