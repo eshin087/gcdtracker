@@ -24,7 +24,7 @@
 
 - Guestbook writes require a catalogued AI user-agent category, a valid client network and a configured private hash secret. Their one-note-per-network-per-hour and 50-note-per-day rolling limits are enforced in one transaction.
 - Missing database/client identity/secret and database-write failures fail closed. Quota responses include `Retry-After`; JSON bodies are bounded before parsing.
-- Equivalent IP spellings share the same identity. No predictable fallback hash salt is used. `IP_HASH_SECRET` is optional; the existing `CRON_SECRET` remains the compatible secret source when the dedicated secret is absent.
+- Equivalent IP spellings share the same identity. No predictable fallback hash salt is used; deployment details remain private.
 - CSV string cells are protected against spreadsheet formula execution. Baseline framing, content-type, referrer and browser-permission headers are set.
 - Additive collector migrations preserve legacy observations, and new methodology versions remain identifiable. Unit tests, real PostgreSQL concurrency/migration tests, seeded browser QA and a pull-request CI workflow provide repeatable checks.
 

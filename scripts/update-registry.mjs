@@ -8,7 +8,7 @@ const SOURCE = "https://assets.radar.cloudflare.com/bots/signature-agent-registr
 
 const text = execFileSync(
   "curl",
-  ["-sS", "--fail", "--max-time", "30", "-A", "gcdTracker/0.3 (+https://github.com/eshin087/gcdtracker-site) bot", "-H", "Accept: text/plain, */*", SOURCE],
+  ["-sS", "--fail", "--max-time", "30", "-A", "gcdTracker/0.3 (+https://github.com/eshin087/gcdtracker) bot", "-H", "Accept: text/plain, */*", SOURCE],
   { encoding: "utf8" },
 );
 const urls = text
