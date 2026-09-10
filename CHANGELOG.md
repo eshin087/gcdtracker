@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-09 — GitHub source hosting only
+
+- GitHub Actions is disabled and all workflow definitions, runner-only scripts, Actions secrets, variables, caches, and artifacts are removed.
+- Vercel remains the only automatic scheduler and invokes routine collection once daily. Worker-backed GH Archive, Common Crawl robots census, and ai.robots.txt history remain available as historical snapshots but no longer update automatically.
+- Quality checks remain runnable locally and are not uploaded by the repository.
+
 ## Unreleased — Internet activity homepage
 
 - Restored the left section-navigation menu and retained the animated Agents → destinations dashboard.

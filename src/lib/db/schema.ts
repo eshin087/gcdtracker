@@ -397,7 +397,7 @@ export const agentSightings = pgTable(
 
 /**
  * GH Archive census: every public GitHub event, counted per hour by the Actions
- * worker (scripts/gharchive.mjs). kind ∈ total | agent-prs | agent-merged |
+ * historical worker payloads. kind ∈ total | agent-prs | agent-merged |
  * pr-signature | commit-signature; key is the metric name, agent key or tool key.
  */
 export const ghArchiveHourly = pgTable(

@@ -41,7 +41,7 @@ const JOBS: Record<string, Job> = {
   packages: packagesJob,
   baseline: baselineJob,
   retention: retentionJob,
-  // Fed by GitHub Actions workers that post pre-aggregated results (never part of `all`).
+  // Historical worker-payload endpoints. They are not scheduled by this repository or included in `all`.
   gharchive: ghArchiveJob,
   "robots-census": robotsCensusJob,
   "ai-robots-history": aiRobotsHistoryJob,

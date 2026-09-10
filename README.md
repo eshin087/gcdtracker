@@ -16,11 +16,11 @@ Each source covers a different part of the internet; counts cannot be added into
 
 Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
 
-See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system and workflow notifications.
+See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system.
 
 ## Development
 
-Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle/Neon HTTP, Vercel, GitHub Actions.
+Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle/Neon HTTP, and Vercel. GitHub is used only for source hosting.
 
 ```sh
 npm ci
@@ -47,15 +47,15 @@ See [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [migration an
 | `CLOUDFLARE_API_TOKEN` | Optional Radar read access. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL. |
 
-GitHub Actions uses repository-level secrets and variables. Never commit environment values or put production connections into QA or preview configuration.
+Deployment credentials belong in Vercel environment settings. Never commit environment values or put production connections into QA or preview configuration.
 
 ## Collection
 
-The ordinary collector workflow runs every 30 minutes. GH Archive runs every three hours; the robots sample is bounded to one crawl per weekly invocation. The history worker runs monthly. Run logs expire, while durable checkpoints do not. Outcomes are `success`, `partial`, `failed`, and `disabled`; incomplete resumable backfills remain visibly partial.
+GitHub Actions is disabled and this repository contains no workflow definitions. Vercel invokes the routine collector once daily. GH Archive, Common Crawl robots census, and ai.robots.txt history are retained as historical datasets but no longer update automatically.
 
 Collectors expose explicit outcomes and retain durable checkpoints. See the operations documentation before a repair; there is no automatic multi-year reprocessing job.
 
-Pages cache shared summaries for five minutes; the live endpoint refreshes every 30 seconds. Actual database/Actions usage depends on traffic, source latency and backfill size.
+Pages cache shared summaries for five minutes; the live endpoint refreshes every 30 seconds. Database and Vercel usage depend on traffic and source latency.
 
 ## Evidence and privacy
 
