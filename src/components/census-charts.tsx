@@ -173,9 +173,9 @@ export interface HeatDay {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMax }: {
+export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMax, showPartialValues = false }: {
   days: HeatDay[]; label: string; selectedDay?: string;
-  onSelectDay?: (day: string) => void; scaleMax?: number;
+  onSelectDay?: (day: string) => void; scaleMax?: number; showPartialValues?: boolean;
 }) {
   const hatchId = "heat-hatch-"+useId().replaceAll(":","");
   if (days.length === 0) return null;
@@ -191,7 +191,7 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
   const start = new Date(first.getTime() - ((first.getUTCDay() + 6) % 7) * 86_400_000);
   const totalDays = Math.round((last.getTime() - start.getTime()) / 86_400_000) + 1;
   const weeks = Math.ceil(totalDays / 7);
-  const max = Math.max(scaleMax ?? Math.max(...days.map(d => d.partial ? 0 : d.value ?? 0)), 0.0001);
+  const max = Math.max(scaleMax ?? Math.max(...days.map(d => d.partial && !showPartialValues ? 0 : d.value ?? 0)), 0.0001);
   const W = padL + weeks * step + 4;
   const H = padT + 7 * step + 2;
   const cells: Array<{ x: number; y: number; d: HeatDay }> = [];
@@ -238,7 +238,7 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
           <g key={d.day}>
             <rect className={`cell ${d.partial ? "partial" : d.value === null ? "missing" : "observed"}`}
               data-day={d.day} x={x} y={y} width={cell} height={cell} rx={1}
-              style={d.value !== null && !d.partial ? {fillOpacity:0.12+0.88*Math.min(1,Math.max(0,d.value/max))} : undefined}
+              style={d.value !== null && (!d.partial || showPartialValues) ? {fill:"var(--accent)",fillOpacity:0.12+0.88*Math.min(1,Math.max(0,d.value/max))} : undefined}
               role={onSelectDay ? "button" : undefined} tabIndex={onSelectDay && d.day === selectedDay ? 0 : onSelectDay ? -1 : undefined}
               aria-label={onSelectDay ? d.title : undefined} aria-pressed={onSelectDay ? d.day === selectedDay : undefined}
               onClick={onSelectDay ? () => onSelectDay(d.day) : undefined}

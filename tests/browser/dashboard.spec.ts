@@ -109,7 +109,13 @@ test("heatmap inspects dates with keyboard and separates missing, partial and ze
   await page.keyboard.press("ArrowLeft");
   await expect(heatmap.locator(".cell:focus")).not.toHaveAttribute("data-day",date!);
   await expect(heatmap.locator(".cell:focus")).toHaveAttribute("aria-pressed","true");
-  await heatmap.locator(".cell.partial").first().click();
+  await expect(heatmap.getByRole("button",{name:"Recorded PRs",exact:true})).toHaveAttribute("aria-pressed","true");
+  const partial = heatmap.locator(".cell.partial").first();
+  await partial.click();
+  await expect(heatmap.locator(".heatmap-detail")).toContainText("recorded agent-attributed PRs");
+  await expect(partial).toHaveAttribute("style",/fill-opacity/);
+  await heatmap.getByRole("button",{name:"Validated share (%)",exact:true}).click();
+  await partial.click();
   await expect(heatmap.locator(".heatmap-detail")).toContainText("Share unavailable");
   await heatmap.locator(".cell.missing").first().click();
   await expect(heatmap.locator(".heatmap-detail")).toContainText("No source observation");
