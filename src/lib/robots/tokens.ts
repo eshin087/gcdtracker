@@ -1,4 +1,4 @@
-// Dependency-free so the Actions worker (scripts/robots-census.mjs) can import it directly.
+// Shared by the historical census reader and deterministic local QA fixtures.
 /** Crawler tokens counted in every robots.txt sample; `*` is the catch-all group. */
 export const ROBOTS_TOKENS = [
   "GPTBot",

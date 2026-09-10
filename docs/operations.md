@@ -6,7 +6,7 @@ This PR does not migrate, merge, or deploy production. The application requires 
 
 1. Create an isolated Neon branch or disposable PostgreSQL database, restore a representative schema/data sample, and run `drizzle/0001_collector_integrity.sql`. The local regression harness proves legacy preservation and safe reapplication.
 2. Record a production backup/restore point. Pause scheduled collectors while applying the reviewed migration in a maintenance window. It changes the OSM daily primary key and briefly locks that table.
-3. Apply the SQL with the database's supported SQL client. No migration executes during app startup, build, or CI.
+3. Apply the SQL with the database's supported SQL client. No migration executes during app startup or build.
 4. Deploy only after a separate release decision. Configure an isolated `PREVIEW_DATABASE_URL` for preview data; otherwise preview is offline.
 5. Resume collection and inspect `/api/live` and `/data`. Expect MCP initial sync, package/history catchup, and corrected robots/OSM coverage to start incomplete.
 
@@ -28,29 +28,12 @@ The preferred response to an application regression is a forward fix with collec
 
 Robots v2 measures explicit full-block directives for named tokens, after merging matching groups. Wildcard directives are reported separately. It is not a complete RFC 9309 policy evaluator: `Allow` exceptions, path matching and network behavior require separate evidence.
 
-## Bounded repairs
+## Historical worker datasets
 
-Use a staging URL and staging secret for dry runs and validation. Set credentials through environment variables; never paste secrets into checked-in command files.
+GitHub Actions and their archive-processing scripts are not included. GH Archive, Common Crawl robots census, and ai.robots.txt history remain historical snapshots unless their collection is deliberately moved to a non-GitHub scheduler. Routine MCP, OSM, package, baseline, watched-repository, and other API collectors continue through the daily Vercel trigger and retain their independent checkpoints.
 
-```sh
-# One hour first: inspect the payload without posting.
-node scripts/gharchive.mjs --dry --from 2026-09-06-12 --to 2026-09-06-12 --max-minutes 5
-
-# After review: at most one day, one shard, with an explicit runtime bound.
-# SITE_URL and CRON_SECRET must point to the intended deployment.
-node scripts/gharchive.mjs --from 2026-09-06-0 --to 2026-09-06-23 --shard 0/1 --max-minutes 20
-
-# One explicitly chosen robots crawl and four sample files.
-node scripts/robots-census.mjs --dry --crawl CC-MAIN-2026-33 --files 4 --max-crawls 1 --max-minutes 20
-```
-
-Use an actual available crawl ID from Common Crawl's index. A small four-file sample is useful for staging; keep sample sizes consistent for published comparisons. Production replacement is explicit and should record the sample design.
-
-Normal MCP, OSM, package, baseline and watched jobs resume their own checkpoints. OSM only replays a bounded overlapping 48-hour creation sample; historical inflation cannot be reconstructed from the aggregate counters alone. Do not reset its ledger or invent retrospective corrected counts. GH Archive replaces submitted hours transactionally and removes obsolete keys; scheduler catchup is bounded to the recent window.
-
-Do not run an unbounded multi-year backfill to fill cosmetic chart gaps. Publish the missing coverage and schedule any historical repair separately with a measured compute budget.
+Do not run an unbounded multi-year backfill to fill cosmetic chart gaps. Publish missing coverage and budget any future historical repair on the platform chosen to run it.
 
 ## Source contracts
-
 - [MCP official API](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/api/official-registry-api.md): opaque cursor, updated-since filter, latest version and deletion status.
 - [Cloudflare Radar normalization](https://developers.cloudflare.com/radar/concepts/normalization/): normalized series depend on their observation window; scales must not be stitched.

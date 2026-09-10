@@ -10,12 +10,12 @@ interface Payload {
 
 /**
  * Receives first-listed dates for every ai.robots.txt token from the Actions worker
- * (scripts/ai-robots-history.mjs). Dates each sighting by when the community list first
+ * Historical payloads date each sighting by when the community list first
  * carried the token rather than when this site first read the list, and stores new
  * identities per month as a series.
  */
 export const aiRobotsHistoryJob: Job = async (ctx) => {
-  if (!ctx.payload) throw new Error("expects a JSON body from scripts/ai-robots-history.mjs");
+  if (!ctx.payload) throw new Error("expects a historical worker JSON payload");
   let body: Payload;
   try {
     body = JSON.parse(ctx.payload) as Payload;

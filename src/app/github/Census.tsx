@@ -43,7 +43,7 @@ export async function Census({ summary, db }: { summary: ArchiveSummary; db: boo
   if (monthly.length === 0) {
     return (
       <Empty db={db}>
-        The GH Archive census is filled by a GitHub Actions worker. Hours appear here as it runs; the backfill from 2022 takes a few hours on first launch.
+        The GH Archive census is a retained historical snapshot. Repository automation is disabled, so its coverage does not advance automatically.
       </Empty>
     );
   }

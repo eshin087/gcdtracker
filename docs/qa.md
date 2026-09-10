@@ -1,4 +1,4 @@
-# Local and continuous QA
+# Local QA
 
 The QA tools use PostgreSQL on loopback and the same Neon HTTP client and Drizzle driver as production. They never use the production connection for test setup. `QA_DATABASE_URL` must explicitly name a `gcdtracker_qa*` database on `localhost`, `127.0.0.1`, or IPv6 loopback; URL parameters are rejected.
 
@@ -58,10 +58,8 @@ npm run test:browser
 
 Browser evidence is written beneath `.qa/`. The site runs locally; QA requests do not affect the public sensor. Do not assign production secrets to these shells. The QA bridge is a development utility and must not be hosted publicly.
 
-## CI
+## Repository automation
 
-`.github/workflows/qa.yml` runs on pull requests, pushes to `main`, and manual dispatch. It installs from the lockfile, audits dependencies, lints, typechecks, runs unit tests, and verifies an offline production build. A disposable PostgreSQL service then runs schema initialization, preservation/reapply checks and the integration suite.
-
-CI seeds deterministic fixtures, starts the local Neon bridge, performs a clean seeded production build, and runs Chromium browser tests against the local site. Logs, traces and reports are retained as QA artifacts for seven days. The workflow has read-only repository permissions and receives no deployment or production database secrets.
+GitHub Actions is disabled and no workflow files are included. Run the checks above locally before committing changes. Browser evidence remains beneath the ignored `.qa/` directory and is never uploaded by this repository.
 
 These tests validate the application against deterministic local data. They do not replace a Vercel preview smoke test or establish that a production collector's upstream source is currently healthy.
