@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ReadingReport } from "@/components/ReadingReport";
 import { MiniChart, TimelineChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, StatTiles } from "@/components/ui";
 import { fmtDate, fmtInt, fmtStamp } from "@/lib/format";
@@ -49,6 +50,7 @@ export default async function TrafficPage() {
         title="Traffic"
         sub="AI systems read the web as well as write to it. This page follows the requests: published measurements from network operators and crawler policies in sampled hosts."
       />
+      <ReadingReport data={radarSnapshot} />
       <StatTiles
         tiles={[
           { value: "4.2%", label: "of HTML requests from AI bots other than Googlebot", sub: "Cloudflare Radar, Dec 2025" },

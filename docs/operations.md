@@ -7,7 +7,7 @@ This runbook describes procedures, not the current production deployment or migr
 1. Identify the exact URL and environment: local development, synthetic `/demo`, Vercel preview, or production alias. A login page can be deployment protection rather than an application failure.
 2. Check the requested PR's state and merge commit in GitHub. Inspect the active Vercel deployment and its source SHA/build result separately; merging a PR does not prove the alias serves it.
 3. Check the database environment selection in `src/lib/db/index.ts`: previews use `PREVIEW_DATABASE_URL`, other environments use `DATABASE_URL`. Verify presence and target privately, never by printing values. Previews without their isolated connection remain offline.
-4. Inspect `/api/live` and `/data`. Compare `generatedAt`, last run, source outcomes and observation windows; the health response itself can be cached. Routine sources are scheduled daily, and historical worker datasets are unscheduled. See the [known health-cadence mismatch](roadmap.md#r1-align-health-with-the-daily-schedule).
+4. Inspect `/api/live` and `/data`. Compare `generatedAt`, last run, source outcomes and observation windows; the health response itself can be cached. Routine sources are scheduled daily, and historical worker datasets are unscheduled. See the [remaining health delivery/cache verification](roadmap.md#r1-align-health-with-the-daily-schedule).
 5. If still unresolved, inspect deployment logs, applied schema and source-specific progress using narrow read-only checks. A collector can fail, return partial progress, or be deliberately disabled while the database is reachable. Do not prescribe waiting unless checkpoints or observations demonstrably advance.
 
 Reading `/api/ingest/all` or most source-specific ingestion GET routes triggers writes. Use public health/read-only summaries for diagnosis. Only GH Archive and robots-census have explicit read-only GET status branches; inspect their required query parameters before use. Do not test ingestion by sending live payloads without a scoped repair request.
@@ -54,3 +54,15 @@ Retention is an existing daily collector, not a blanket instruction to clear old
 
 - [MCP official API](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/api/official-registry-api.md): opaque cursor, updated-since filter, latest version and deletion status.
 - [Cloudflare Radar normalization](https://developers.cloudflare.com/radar/concepts/normalization/): normalized series depend on their observation window; scales must not be stitched.
+
+## Social sample rollout and rollback
+
+Apply the reviewed additive [0002_social_samples.sql](../drizzle/0002_social_samples.sql) before enabling this application revision against a database. It creates only the new aggregate table/index and changes no historical rows. The earlier 0001 migration is a prerequisite on databases that have not already received it; do not re-run old repairs as a substitute for checking migration state. No production migration runs during build/startup.
+
+For local QA, `npx tsx scripts/qa-database.ts migrate` applies the migrations only to an explicitly configured loopback `gcdtracker_qa*` database. `migration-check` verifies historical preservation and safe reapplication in its separate disposable database.
+
+Production already has a configured Radar token according to the September 11 environment-name check; do not copy it into public or preview configuration. Its current endpoint permissions still require validation. Social sources need no account key. Previews require an isolated `PREVIEW_DATABASE_URL`, or remain explicitly offline; `/demo` supplies labelled synthetic examples.
+
+After a separately authorized release, let the existing daily schedule run and inspect source outcomes and sample timestamps. A protected manual call to `/api/ingest/bluesky` or `/api/ingest/mastodon` attempts at most one sample that UTC day; it is a write, not a diagnostic read. Failed/reserved days are not automatically retried. Wait until the next UTC date rather than deleting checkpoints to bypass the cap.
+
+For rollback, set `SOCIAL_COLLECTION_ENABLED=0` and revert application code. Keep `social_samples` and its checkpoints; older code simply does not read them. Leave existing historical datasets and migrations intact. No destructive down migration or bulk social backfill is provided.

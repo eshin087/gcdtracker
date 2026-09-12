@@ -13,6 +13,7 @@ import { botcommitsJob } from "@/lib/ingest/botcommits";
 import { agentWatchJob } from "@/lib/ingest/agentwatch";
 import { githubSignaturesJob } from "@/lib/ingest/github-signatures";
 import { radarJob } from "@/lib/ingest/radar";
+import { blueskyJob, mastodonJob } from "@/lib/ingest/social";
 import { retentionJob } from "@/lib/ingest/retention";
 import { ghArchiveJob } from "@/lib/ingest/gharchive";
 import { robotsCensusJob } from "@/lib/ingest/robots-census";
@@ -37,6 +38,8 @@ const JOBS: Record<string, Job> = {
   agentwatch: agentWatchJob,
   "github-signatures": githubSignaturesJob,
   radar: radarJob,
+  bluesky: blueskyJob,
+  mastodon: mastodonJob,
   github: githubJob,
   packages: packagesJob,
   baseline: baselineJob,
@@ -48,7 +51,7 @@ const JOBS: Record<string, Job> = {
 };
 
 /** `all` runs cheap sources first and the rate-limited GitHub job last. */
-const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "packages", "baseline", "github", "watched", "github-signatures", "retention"];
+const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "bluesky", "mastodon", "packages", "baseline", "github", "watched", "github-signatures", "retention"];
 
 const STATUS_SOURCES = new Set(["gharchive", "robots-census"]);
 const BODY_SOURCES = new Set(["gharchive", "robots-census", "ai-robots-history"]);

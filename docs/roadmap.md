@@ -4,9 +4,9 @@ Reviewed September 11, 2026. Priorities below are recommendations, not work alre
 
 ## R1: Align health with the daily schedule
 
-**Priority:** next reliability task. **Status:** confirmed code mismatch; production cache behavior needs investigation.
+**Priority:** release verification. **Status:** daily cadence and unscheduled historical-source handling implemented on the three-source branch; production cache/delivery verification remains open.
 
-[Health defaults](../src/lib/health.ts) expect routine runs every 1,800 seconds and mark them stale after twice that interval. [Scheduling](../vercel.json) is now daily. Historical worker sources also retain old freshness intervals despite having no scheduler. The public health snapshot recorded in [status](status.md) predates this review and must not be assumed current.
+[Health defaults](../src/lib/health.ts) now expect routine runs every 86,400 seconds with a two-interval grace window, matching [scheduling](../vercel.json). Historical workers retain their last outcomes but are explicitly unscheduled and excluded from routine freshness. The public health snapshot recorded in [status](status.md) predates this review and must not be assumed current.
 
 **Done when:** daily sources have an appropriate grace window; historical/unscheduled sources are clearly represented; partial and failed outcomes remain visible; a newly generated public snapshot can be distinguished from cached data; tests cover daily timing, disabled/historical sources and stale response timestamps. Verify schedule delivery and checkpoint movement before claiming new observations are arriving.
 

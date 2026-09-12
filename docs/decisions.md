@@ -38,4 +38,8 @@ The repository name is `gcdtracker`. Public README and operational notes may exp
 
 - Exact raw-record retention windows and storage headroom thresholds beyond today's implementation.
 - A free, bounded replacement for historical archive workers, if their freshness becomes a priority; no replacement is scheduled or approved by this document.
-- Which next research feature to implement first after reliability and retention work. The list in [roadmap](roadmap.md) is a recommendation, not a delivery commitment.
+- Which sources or research features to add after the accepted Radar/Bluesky/Mastodon pilot. Broader additions still require coverage and cost review.
+
+## D9: Separate AI reading from social publishing
+
+Accepted September 11, 2026: start with Cloudflare Radar, Bluesky and selected public Mastodon servers. Reading traffic and posting evidence have separate reports and denominators. Initial social collection is one bounded daily observation per platform, not a continuous archive or a census. English disclosure text matches are unverified; self-designated bot accounts are separate and are not necessarily AI. Store aggregates and coverage only. Preserve the existing navigation, animation and historical reports.

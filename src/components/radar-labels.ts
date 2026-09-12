@@ -3,6 +3,7 @@ export function radarUnit(meta: RadarMetadata | undefined): string {
   if (!meta) return "unit unavailable";
   switch (meta.normalization.toUpperCase()) {
     case "PERCENTAGE": return "percent";
+    case "MIN0_MAX":
     case "MIN_MAX": return "normalized index";
     case "RAW_VALUES": return meta.units.length ? meta.units.map((u) => u.name + ": " + u.value).join(", ") : "raw source values";
     default: return "source normalization: " + meta.normalization;

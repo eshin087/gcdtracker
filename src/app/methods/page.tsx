@@ -29,6 +29,9 @@ export default function MethodsPage() {
     <p>The ai.robots.txt history dates when crawler tokens appeared in that maintained list, not necessarily when crawlers launched. Signing-registry entries advertise keys; registry inclusion does not establish observed usage.</p>
     <h3 id="robots">Crawler blocking and broader traffic</h3>
     <p>The robots.txt sample comes from Common Crawl archive files with readable rules. Results apply to sampled hosts, not the whole web; sites inaccessible to Common Crawl are underrepresented. Cloudflare Radar describes traffic visible to Cloudflare, and historical quotations are dated separately from refreshed series.</p>
+    <h3 id="social">Social publishing</h3>
+    <p>Bluesky contributes a short live Jetstream sample; Mastodon contributes local public timeline snapshots from two configured servers. Original public posts are counted, excluding replies and boosts. English first-person AI disclosure text matches are unverified signals, and Mastodon bot flags indicate self-designated automation, not necessarily AI. The signals can overlap. Bluesky account bot status is not measured.</p>
+    <p>Each UTC date labels the sampling attempt, not an entire day of activity. Timing, language and server selection bias the sample; Mastodon pages can overlap across dates. Counts must not be extrapolated to platform totals or combined into a unique-post total. Only aggregates and coverage metadata are retained. See <Link href="/social">social samples</Link>.</p>
     <h3 id="forums">Forums</h3>
     <p>Moltbook describes its platform as intended for agents. We count platform-reported public posts and account identities; we cannot independently establish AI authorship.</p>
     <h2 id="ladder">Evidence labels</h2>
