@@ -25,7 +25,7 @@ import {
 } from "@/lib/db/schema";
 import { dayOf, dayRange, daysAgo } from "@/lib/format";
 import { cacheSummary } from "./query-cache";
-import type { RadarMetadata } from "./ingest/radar";
+import { RADAR_GROUPS, type RadarMetadata } from "./ingest/radar";
 import { publicRadarMetadata } from "./public-radar";
 import { githubAgentLabel } from "@/lib/github/agents";
 
@@ -299,7 +299,7 @@ async function queryRadarSnapshot(): Promise<{ series: Record<string, SeriesPoin
     lo: externalSeries.lo, hi: externalSeries.hi, state: collectorState.state, stateKey: collectorState.key,
   }).from(collectorState).leftJoin(externalSeries,
     sql`${collectorState.key} = 'radar:' || split_part(${externalSeries.series}, ':', 1) and ${externalSeries.source} = 'radar-v2'`)
-    .where(sql`${collectorState.key} in ('radar:operator','radar:bot-share','radar:crawl-refer')`).orderBy(externalSeries.period));
+    .where(inArray(collectorState.key, RADAR_GROUPS.map(group => "radar:" + group))).orderBy(externalSeries.period));
   const series: Record<string, SeriesPoint[]> = {};
   const metadata: Record<string, RadarMetadata> = {};
   for (const row of rows) {

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — AI reading and social publishing
+
+- Added crawler-purpose share lines from a bounded 28-day Cloudflare Radar snapshot, preserving units, normalization, confidence metadata and missing-day gaps.
+- Added Bluesky and Mastodon publishing reports. Narrow English disclosure text signals and self-designated bot accounts are distinct; no model authorship or whole-platform prevalence is inferred.
+- The first Agents → destinations animation now has Contributions, Social publishing and Web crawling modes. Replaced the social heatmap with sample flows; the original GitHub heatmap and multi-year lines remain. Removed duplicate homepage reports while keeping detailed crawler history on Traffic.
+- Social flows partition each platform's latest sample into disclosure matches and unclassified posts; overlapping bot flags remain inspector metadata. Crawling flows use one complete common Radar date with percentage units. Zero-valued paths have no animated dots, and missing sources remain explicit.
+- Added aggregate-only daily samples with durable once-per-day attempt limits, atomic completion, explicit failure/partial outcomes and no raw posts/media/identifiers retained. Existing history is preserved by additive migration 0002.
+- Added `/social` and `/api/export/social_samples.json`; kept the left navigation, animation, historical lines and GitHub heatmap. Demo data remains explicitly synthetic.
+- Aligned health checks with daily collection and marked retired historical workers unscheduled. GitHub Actions remains disabled; no new dependency or scheduler was added.
+
+
+## Unreleased — Project handbook and skills
+
+- Added a maintained project status, accepted decision record, data/retention contracts, cost controls, roadmap and incident notes, with an index and agent startup guidance.
+- Added four project-local skills for catch-up, data-quality work, release QA and cost reviews. Provider-installed skills remain outside Git.
+- Recorded the preference to prune older detail while preserving historical summaries; clarified existing retention and labelled the earlier QA audit as historical. This documentation change does not alter retention, collection or application behavior.
+
 ## 2026-09-09 — GitHub source hosting only
 
 - GitHub Actions is disabled and all workflow definitions, runner-only scripts, Actions secrets, variables, caches, and artifacts are removed.
@@ -32,6 +49,6 @@
 - Missing database/client identity/secret and database-write failures fail closed. Quota responses include `Retry-After`; JSON bodies are bounded before parsing.
 - Equivalent IP spellings share the same identity. No predictable fallback hash salt is used; deployment details remain private.
 - CSV string cells are protected against spreadsheet formula execution. Baseline framing, content-type, referrer and browser-permission headers are set.
-- Additive collector migrations preserve legacy observations, and new methodology versions remain identifiable. Unit tests, real PostgreSQL concurrency/migration tests, seeded browser QA and a pull-request CI workflow provide repeatable checks.
+- Additive collector migrations preserve legacy observations, and new methodology versions remain identifiable. Unit tests, real PostgreSQL concurrency/migration tests and seeded browser QA provide repeatable local checks. The pull-request CI workflow added during hardening was subsequently removed with GitHub Actions on September 9.
 
 See [QA procedures](docs/qa.md) for local commands and the limits of the test environment.

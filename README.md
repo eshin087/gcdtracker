@@ -2,11 +2,12 @@
 
 An observatory of AI traffic and agent activity across external public sources, with the original Agents → destinations animation, multi-year census line graphs and a daily GitHub heatmap.
 
-Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired; existing history is not deleted.
+Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired. Historical summaries remain available; some detailed records expire under the [retention policy](docs/data-contracts.md#retention).
 
 | Area | Evidence |
 |---|---|
-| Traffic | Cloudflare Radar snapshots and sampled robots.txt policy |
+| Traffic | Cloudflare Radar snapshots, AI crawler-purpose shares and sampled robots.txt policy |
+| Social publishing | Bounded Bluesky/Mastodon samples, disclosure text signals, separate automation flags and coverage |
 | GitHub | GH Archive observations, documented bot accounts, branch-name signals, watched repositories |
 | Wikipedia and Commons | Platform filters, disclosed heuristics, bot activity, files added to tracked AI categories |
 | Maps | Capped overlapping OSM creation-time samples with deduplication |
@@ -17,6 +18,8 @@ Each source covers a different part of the internet; counts cannot be added into
 Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
 
 See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system.
+
+For ongoing work, start with the [project handbook](docs/index.md), [verified status](docs/status.md) and [accepted decisions](docs/decisions.md). [AGENTS.md](AGENTS.md) routes coding agents to four project skills for catch-up, data quality, release QA and cost control. These files are maintained during project work; they do not run background automation.
 
 ## Development
 
@@ -45,6 +48,7 @@ See [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [migration an
 | `IP_HASH_SECRET` | Dedicated secret for privacy-preserving network identifiers. |
 | `GITHUB_TOKEN` | Public GitHub read/search access and API limits. |
 | `CLOUDFLARE_API_TOKEN` | Optional Radar read access. |
+| `SOCIAL_COLLECTION_ENABLED` | Set to `0` to pause both bounded social collectors; enabled by default. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL. |
 
 Deployment credentials belong in Vercel environment settings. Never commit environment values or put production connections into QA or preview configuration.
