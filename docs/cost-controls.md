@@ -45,3 +45,11 @@ Use these official references when reviewing costs; do not treat service allowan
 - [Vercel Hobby](https://vercel.com/docs/plans/hobby) is free within its applicable use and allowance rules; exceeding an allowance can pause a feature. This is not an uptime guarantee or a waiver for paid add-ons.
 - [Vercel cron pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing) counts cron execution as function usage; moving work into a cron does not make compute unlimited.
 - [Neon pricing](https://neon.com/pricing) is the source for current Free and paid allowances. Verify the actual database plan rather than inferring it from this document.
+
+## Bounded social collection
+
+The three-source addition uses the existing daily Vercel route, with no new scheduler, paid API, inference dependency or GitHub Actions. Social collection makes at most one Bluesky connection and two Mastodon HTTP requests per UTC day, even after failures or concurrent manual triggers. Time/processing caps live in `SOCIAL_LIMITS`; there are no archive replays, media downloads or retries. Set `SOCIAL_COLLECTION_ENABLED=0` to disable both social jobs before DB/network work.
+
+Social storage grows by at most two aggregate rows per UTC date per methodology version (730 in a normal year), plus fixed-size per-platform checkpoints. It does not retain raw posts. This row bound is not a measured byte forecast: indexes, database history, other collectors, compute and public page delivery also consume allowances. Radar purpose adds at most one request/day and replaces its bounded 28-day group snapshot.
+
+A free upstream source does not make unlimited site traffic free. Existing account/plan unknowns remain; this code neither changes billing plans nor promises permanent zero charges.

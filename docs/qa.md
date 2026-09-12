@@ -2,7 +2,7 @@
 
 The QA tools use PostgreSQL on loopback and the same Neon HTTP client and Drizzle driver as production. They never use the production connection for test setup. `QA_DATABASE_URL` must explicitly name a `gcdtracker_qa*` database on `localhost`, `127.0.0.1`, or IPv6 loopback; URL parameters are rejected.
 
-The original schema fixture is pinned to the pre-hardening revision recorded in `tests/fixtures/schema-before.sql`. Initialization applies that fixture followed by `drizzle/0001_collector_integrity.sql`. This checks the actual upgrade path rather than creating a different test schema.
+The original schema fixture is pinned to the pre-hardening revision recorded in `tests/fixtures/schema-before.sql`. Initialization applies that fixture followed by `drizzle/0001_collector_integrity.sql` and `drizzle/0002_social_samples.sql`. This checks the actual upgrade path rather than creating a different test schema.
 
 ## Run locally
 
@@ -71,3 +71,9 @@ Documentation-only changes require valid Markdown/skill references, accurate cod
 GitHub Actions is disabled and no workflow files are included. Run the checks above locally before committing changes. Browser evidence remains beneath the ignored `.qa/` directory and is never uploaded by this repository.
 
 These tests validate the application against deterministic local data. They do not replace a Vercel preview smoke test or establish that a production collector's upstream source is currently healthy.
+
+## Reading and social sample regressions
+
+The setup now applies both 0001 and 0002. An existing isolated QA database can run `npx tsx scripts/qa-database.ts migrate`; `init` still refuses a nonempty database. Use only the named loopback QA database. Stop the local Docker container after tests if it is no longer needed.
+
+Unit coverage includes disclosure false positives, malformed/oversized upstream input, byte/time/record limits, missing observations, UTC windows and public nested-field allowlists. Integration cases exercise once-per-day concurrent reservations, atomic summaries/checkpoints and rollback. Browser coverage in `tests/browser/social.spec.ts` exercises the new heatmap, explicit synthetic demo, line gaps, privacy, keyboard operation and light/dark layouts at 390, 768, 1024 and 1440 pixels. Live upstream checks are separate, bounded read-only samples; never seed their raw evidence into fixtures.

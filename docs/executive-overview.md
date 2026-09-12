@@ -103,3 +103,9 @@ Priorities are reliable collection and visible coverage, then comparable crawler
 - [Repository](https://github.com/eshin087/gcdtracker), [operating procedures](operations.md), [QA guide](qa.md), [audit](qa-audit.md).
 - Cloudflare documents the [bot catalog](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/list/) and [bot details including signatureAgentUrl](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/get/).
 - Cloudflare's [crawler summary API](https://developers.cloudflare.com/api/resources/radar/subresources/bots/subresources/web_crawlers/methods/summary/) and [normalization definitions](https://developers.cloudflare.com/radar/concepts/normalization/) explain why units and observation windows must remain attached to the values.
+
+## Reading versus social publishing
+
+The added Radar purpose report shows the mix of observed AI crawler requests over one normalized source window. Bluesky and Mastodon have a separate publishing report. The daily Vercel job takes a short Bluesky live-feed sample and two public Mastodon timeline snapshots, reduces them in memory, and writes only small aggregate rows plus sampling metadata. There is no continuous stream worker, external queue, media archive or model-inference service.
+
+The new `social_samples` table preserves dated summaries. Existing durable `collector_state` transactions prevent repeated daily attempts and ensure counters commit with completion state. Public queries cache for five minutes and project an explicit nested field allowlist. The social heatmap distinguishes unverified disclosure text, ordinary bot-account flags, missing samples and sample size. These signals do not establish platform-wide AI authorship or readership.

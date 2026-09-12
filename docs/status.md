@@ -1,34 +1,36 @@
 # Project status
 
-Verified September 11, 2026 against GitHub `main` at `2885369` and the matching local source. Recheck before relying on service settings or production freshness.
+Verified September 11, 2026 (local date). Recheck deployed revision, source freshness and billing settings before relying on them.
 
-## Current product
+## Current work
 
-External internet evidence only: left navigation, Agents to destinations animation, multi-year line reports and a GitHub calendar heatmap. Detailed analysis remains on source pages. Local visit dashboards are retired. `/demo` is synthetic; an offline observed page does not silently substitute demo data. See [accepted decisions](decisions.md).
+The tested application revision is `c19a6b7`. The three-source implementation is on `codex/open-social-observatory`, stacked on the still-open [handbook PR #8](https://github.com/eshin087/gcdtracker/pull/8). It adds Cloudflare Radar crawler-purpose share lines, bounded Bluesky/Mastodon publishing samples, a separate social heatmap/report, public coverage metadata and additive migration 0002.
+
+The existing left navigation, Agents to destinations animation, multi-year lines and GitHub heatmap remain. No local-visitor dashboard, paid dependency, GitHub workflow or extra scheduler was added. AI reading and publishing remain separate; social samples do not estimate platform-wide prevalence.
 
 ## Verified state
 
 | Area | Evidence and limits |
 |---|---|
-| GitHub | [PR #7](https://github.com/eshin087/gcdtracker/pull/7) merged at `2026-09-10T04:10:00Z`; merge commit `2885369` is current remote main at this check |
-| Automation | GitHub API reports Actions disabled, zero artifacts and zero caches; merged source has no workflow definitions |
-| Routine collection | [vercel.json](../vercel.json) configures one daily `/api/ingest/all` invocation. Configuration alone does not prove a successful scheduled run |
-| Historical workers | GH Archive, Common Crawl robots census and ai.robots.txt history have no scheduled workers. Their receive/status handlers and stored datasets remain |
-| Hosting plan | Authenticated read-only check reports Vercel Hobby. This is a dated setting, not a permanent cost guarantee |
-| Database plan | Neon account billing plan was not independently verified. A database connection cannot establish billing plan or remaining allowance |
-| Public health snapshot | `/api/live` returned `db: true`, `status: stale`, `lastIngest: 2026-09-10T03:49:44.11Z`, and `generatedAt: 2026-09-10T04:10:21.711Z`. Several sources reported partial outcomes. This returned snapshot is not proof of present database connectivity or current source coverage |
-| Production release | Exact active deployment commit and migration state were not inspected during this documentation task |
+| GitHub base | Remote main was `2885369`; PR #8 remains open. Implementation branch/PR, merge and deployment are separate states |
+| Actions | Read-only API check returned disabled; no tracked workflow definitions |
+| Social upstreams | Bounded read-only live checks succeeded for Jetstream v2 and selected public timelines on mastodon.world/fosstodon.org. Raw posts/identifiers were not saved |
+| Social selection | mastodon.social and mastodon.online required authentication. The collector uses explicitly public alternatives; no authentication bypass |
+| Radar | Production environment-name listing includes a Radar token, but local/Vercel-injected smoke processes received no usable token. Live purpose response and permissions remain unverified; fixture and isolated transaction tests pass |
+| Production | No production migration, merge or deployment was performed in this task. New social rows require migration 0002 and a release, then a successful daily attempt |
+| Cost | Vercel Hobby was verified earlier September 11; Neon billing plan remains unverified. The new work has fixed request/time/processing limits and at most two summary rows per UTC date/version, not a permanent zero-cost guarantee |
+| Historical data | Migration 0002 only adds the social aggregate table/index. Legacy preservation and safe migration reapplication pass against isolated PostgreSQL |
 
-## Follow-ups
+## Validation
 
-- [R1](roadmap.md#r1-align-health-with-the-daily-schedule): health defaults still expect a routine run every 30 minutes, and retired historical workers still participate in freshness. The public snapshot also needs a fresh deployment/cache check before interpreting it as current.
-- [R2](roadmap.md#r2-prune-detail-without-losing-historical-summaries): owner confirmed pruning older detail while preserving summaries. Existing retention covers only six tables; implement further pruning only after proving the required summaries survive.
-- [R3](roadmap.md#r3-close-cost-and-runtime-verification-gaps): verify Neon plan and effective deployed collection runtime before forecasting capacity or claiming unconditional zero cost.
+TypeScript, lint and 276 unit tests passed. All 40 integration tests passed against the isolated local PostgreSQL/Neon HTTP bridge, including concurrency, atomic replacement and rollback. Offline and seeded production builds passed. The full 31-test browser suite passed, covering main/subroutes, privacy, controls, missing versus zero, reduced motion, and light/dark layouts at 390, 768, 1024 and 1440 pixels. All 18 affected browser tests passed again after final timestamp/axis-label polish. The final offline build also passed; the local QA server, bridge and Docker database were stopped.
 
-## Documentation handoff
+Screenshots and temporary outputs are ignored under `.qa/`. Public Markdown file links and focused credential-pattern checks passed. Local bridge checks are not Neon-hosted or deployed-production verification.
 
-The handbook and four project skills are prepared on `codex/project-guide` in [draft PR #8](https://github.com/eshin087/gcdtracker/pull/8). Validation passed for all four skills, 18 Markdown files, 94 local links/anchors, focused privacy checks and the Git whitespace check. Provider-installed skills and private configuration remain ignored.
+## Next steps and limitations
 
-This documentation change does not alter application behavior, retention settings, database schema or scheduling. Application tests/build were not rerun for documentation-only changes. Prior application test counts remain historical evidence.
-
-At the next material handoff, replace this snapshot with the newly verified state. Move lasting choices to [decisions](decisions.md) and keep unresolved work in [roadmap](roadmap.md); avoid accumulating session-by-session logs here.
+- Apply reviewed migration 0002 only as part of an authorized release; merge/deploy the reviewed code separately and verify the actual production revision and daily source outcomes.
+- Verify the Radar token's new endpoint access in the deployed environment. A configured variable is not a successful API response.
+- Social observations are short English-signal samples from open sources; closed platforms and most of each day remain unobserved. One attempted sample/day is intentional; failed days remain missing until the next UTC date.
+- Daily health cadence and historical unscheduled status are fixed in this branch. [R1](roadmap.md#r1-align-health-with-the-daily-schedule) still needs production cache/delivery verification.
+- [Retention work](roadmap.md#r2-prune-detail-without-losing-historical-summaries) and [billing/runtime verification](roadmap.md#r3-close-cost-and-runtime-verification-gaps) remain open. No old detail was pruned.
