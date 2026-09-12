@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { ReadingReport, type ReadingSnapshot } from "./ReadingReport";
+import { SocialReport } from "./SocialReport";
+import type { SocialReportData } from "@/lib/social-report";
 import { AgentFlow } from "./AgentFlow";
 import { HomeReportHeadlines, HomeReports } from "./HomeReports";
 import { FigureHead } from "./ui";
@@ -11,9 +14,9 @@ import type { HomeReportsData } from "@/lib/home-reports";
 
 const SECTIONS: RailItem[] = [
   {id:"overview",title:"Overview"},{id:"flow",title:"Agents → destinations"},
-  {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"latest",title:"Latest records"},
+  {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"ai-reading",title:"AI reading"},{id:"ai-publishing",title:"Social publishing"},{id:"latest",title:"Latest records"},
 ];
-export function InternetOverview({ flow, records, reports, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; demo?:boolean }) {
+export function InternetOverview({ flow, records, reports, reading, social, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; reading:ReadingSnapshot; social:SocialReportData; demo?:boolean }) {
   return <div className="shell with-rail home-report">
     <Rail items={SECTIONS}/>
     <article className="overview-content">
@@ -31,6 +34,8 @@ export function InternetOverview({ flow, records, reports, demo = false }: { flo
         <AgentFlow data={flow} records={records}/>
       </section>
       <HomeReports data={reports}/>
+      <ReadingReport data={reading} demo={demo}/>
+      <SocialReport data={social}/>
       <section id="latest" className="overview-report" aria-labelledby="latest-evidence">
         <FigureHead id="latest-evidence" title="Latest records across public sources" sub="Individual examples of external activity, not a combined activity count." more={{href:"/data",label:"Data and source status →"}}/>
         {records.length ? <div className="records">{records.slice(0,6).map(r => <div className="record" key={r.id}>

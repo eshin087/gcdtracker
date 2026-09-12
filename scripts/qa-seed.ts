@@ -3,6 +3,7 @@
  * Never reads DATABASE_URL; refuses non-loopback or non-QA database names.
  */
 import { Pool } from "pg";
+import { DEMO_READING, DEMO_SOCIAL } from "../src/lib/demo-social";
 import { requireQaDatabaseUrl } from "../tests/support/neon-local";
 import { PACKAGES } from "../src/lib/ingest/packages";
 import { ROBOTS_TOKENS } from "../src/lib/robots/tokens";
@@ -30,7 +31,7 @@ async function insert(table: string, rows: Row[]) {
 async function main() {
 try {
   // Deliberately destructive only inside a disposable, validated QA database.
-  const tables = ["visits","traffic_daily","wiki_edits","wiki_daily","github_daily","github_events","forum_posts","forum_daily","guestbook_notes","ip_ranges","ingest_runs","collector_state","watched_repos","watched_prs","watched_signals","wikidata_bot_edits","commons_ai_uploads","wiki_tag_watch","osm_changesets","osm_daily","osm_sample_seen","mcp_servers","external_series","agent_sightings","gh_archive_hourly","gh_archive_daily","gh_archive_completed"];
+  const tables = ["social_samples","visits","traffic_daily","wiki_edits","wiki_daily","github_daily","github_events","forum_posts","forum_daily","guestbook_notes","ip_ranges","ingest_runs","collector_state","watched_repos","watched_prs","watched_signals","wikidata_bot_edits","commons_ai_uploads","wiki_tag_watch","osm_changesets","osm_daily","osm_sample_seen","mcp_servers","external_series","agent_sightings","gh_archive_hourly","gh_archive_daily","gh_archive_completed"];
   await pool.query("TRUNCATE " + tables.map(t => '"' + t + '"').join(",") + " RESTART IDENTITY");
   const traffic: Row[] = [], archive: Row[] = [], markers: Row[] = [], series: Row[] = [];
   for (let i = 1000; i >= 0; i--) {
@@ -78,6 +79,27 @@ try {
   await insert("collector_state",[{key:"mcp",state:{initialComplete:true,until:now} },...["bot-share","operator","crawl-refer"].map(key=>({key:"radar:"+key,state:{version:2,normalization:key==="operator"?"MIN_MAX":"PERCENTAGE",units:[{name:"value",value:key==="operator"?"normalized":"percentage"}],dateRange:[{startTime:dateAt(28)+"T00:00:00Z",endTime:now}],lastUpdated:now,fetchedAt:now}}))]);
   await insert("agent_sightings",Array.from({length:30},(_,i)=>({kind:"ai-robots-txt",token:"SyntheticAgent"+i,operator:"Example operator",fn:"search",url:"https://example.com/agent/"+i,first_seen:dateAt(i)+"T00:00:00Z"})));
   await insert("ingest_runs",["github","watched","wikimedia","osm","mcp","packages","baseline","radar","gharchive","robots-census","forums","new-agents"].map(source=>({source,started_at:now,finished_at:now,ok:true,stats:{outcome:"success",fixture:true}})));
+  const shift = today.getTime() - Date.parse("2026-09-07T00:00:00Z");
+  const shifted = (value: string) => new Date(Date.parse(value) + shift).toISOString();
+  for (const sample of DEMO_SOCIAL.samples) {
+    const {coverage} = sample;
+    await insert("social_samples", [{
+      platform:sample.platform, day:shifted(sample.day).slice(0,10), collection_version:1,
+      started_at:shifted(sample.startedAt), finished_at:shifted(sample.finishedAt),
+      sampled_posts:sample.sampledPosts, ai_disclosure_posts:sample.aiDisclosurePosts,
+      automated_account_posts:sample.automatedAccountPosts ?? 0, scopes:JSON.stringify(sample.scopes), outcome:sample.outcome,
+      coverage:{...coverage, publisherFrom:coverage.publisherFrom && shifted(coverage.publisherFrom),
+        publisherTo:coverage.publisherTo && shifted(coverage.publisherTo), rawEvidence:privateValue},
+    }]);
+  }
+  const purpose = DEMO_READING.metadata["crawl-purpose"];
+  await insert("collector_state", [{key:"radar:crawl-purpose", state:{...purpose, fetchedAt:now, lastUpdated:now,
+    dateRange:[{startTime:dateAt(28)+"T00:00:00Z",endTime:anchor+"T00:00:00Z"}],
+    coverage:{startTime:dateAt(28)+"T00:00:00Z",endTime:anchor+"T00:00:00Z",expectedDays:28,observedDays:27,missingDays:[dateAt(16)]},
+  }}]);
+  await insert("external_series", Object.entries(DEMO_READING.series).flatMap(([name,points]) => points.map(p=>({
+    source:"radar-v2",series:name,period:new Date(Date.parse(p.period)+shift-86400000).toISOString().slice(0,10),value:p.value,
+  }))));
   console.log("Seeded synthetic fixture at "+anchor+"; "+series.length+" series rows. QA database only.");
 } finally { await pool.end(); }
 }
