@@ -45,7 +45,14 @@ next-env.d.ts
 /drizzle/*
 !/drizzle/*.sql
 
-.agents/
+# Keep provider-installed skills local; publish only the project-owned skills.
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/gcdtracker-context/
+!/.agents/skills/gcdtracker-data-quality/
+!/.agents/skills/gcdtracker-release-qa/
+!/.agents/skills/gcdtracker-cost-control/
 skills-lock.json
 
 # Isolated QA outputs

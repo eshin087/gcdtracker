@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Project handbook and skills
+
+- Added a maintained project status, accepted decision record, data/retention contracts, cost controls, roadmap and incident notes, with an index and agent startup guidance.
+- Added four project-local skills for catch-up, data-quality work, release QA and cost reviews. Provider-installed skills remain outside Git.
+- Recorded the preference to prune older detail while preserving historical summaries; clarified existing retention and labelled the earlier QA audit as historical. This documentation change does not alter retention, collection or application behavior.
+
 ## 2026-09-09 — GitHub source hosting only
 
 - GitHub Actions is disabled and all workflow definitions, runner-only scripts, Actions secrets, variables, caches, and artifacts are removed.
@@ -32,6 +38,6 @@
 - Missing database/client identity/secret and database-write failures fail closed. Quota responses include `Retry-After`; JSON bodies are bounded before parsing.
 - Equivalent IP spellings share the same identity. No predictable fallback hash salt is used; deployment details remain private.
 - CSV string cells are protected against spreadsheet formula execution. Baseline framing, content-type, referrer and browser-permission headers are set.
-- Additive collector migrations preserve legacy observations, and new methodology versions remain identifiable. Unit tests, real PostgreSQL concurrency/migration tests, seeded browser QA and a pull-request CI workflow provide repeatable checks.
+- Additive collector migrations preserve legacy observations, and new methodology versions remain identifiable. Unit tests, real PostgreSQL concurrency/migration tests and seeded browser QA provide repeatable local checks. The pull-request CI workflow added during hardening was subsequently removed with GitHub Actions on September 9.
 
 See [QA procedures](docs/qa.md) for local commands and the limits of the test environment.

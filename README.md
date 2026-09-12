@@ -2,7 +2,7 @@
 
 An observatory of AI traffic and agent activity across external public sources, with the original Agents → destinations animation, multi-year census line graphs and a daily GitHub heatmap.
 
-Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired; existing history is not deleted.
+Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired. Historical summaries remain available; some detailed records expire under the [retention policy](docs/data-contracts.md#retention).
 
 | Area | Evidence |
 |---|---|
@@ -17,6 +17,8 @@ Each source covers a different part of the internet; counts cannot be added into
 Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
 
 See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system.
+
+For ongoing work, start with the [project handbook](docs/index.md), [verified status](docs/status.md) and [accepted decisions](docs/decisions.md). [AGENTS.md](AGENTS.md) routes coding agents to four project skills for catch-up, data quality, release QA and cost control. These files are maintained during project work; they do not run background automation.
 
 ## Development
 

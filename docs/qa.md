@@ -56,7 +56,15 @@ export QA_SITE_URL='http://127.0.0.1:3100'
 npm run test:browser
 ```
 
-Browser evidence is written beneath `.qa/`. The site runs locally; QA requests do not affect the public sensor. Do not assign production secrets to these shells. The QA bridge is a development utility and must not be hosted publicly.
+Browser evidence is written beneath `.qa/`. The site runs locally; QA requests do not affect production observations. Do not assign production secrets to these shells. The QA bridge is a development utility and must not be hosted publicly.
+
+## Scope and historical results
+
+The [September 7 audit](qa-audit.md) records checks and homepage measurements for that revision. The homepage now retains the animation, multi-year lines and heatmap; use `tests/browser/dashboard.spec.ts` alongside the site suite when those features change. Re-measure the same seeded data on both revisions for performance claims instead of quoting the older compact-homepage result.
+
+For an offline application build, explicitly clear `DATABASE_URL` and `PREVIEW_DATABASE_URL` in the command environment, even when ignored local environment files exist. Keep the seeded QA build separate as described above. Test results must identify what actually ran; local bridge checks are not Neon-hosted concurrency verification.
+
+Documentation-only changes require valid Markdown/skill references, accurate code/command paths and a review for private data. They do not require a production deployment or a full application test run.
 
 ## Repository automation
 
