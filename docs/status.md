@@ -27,6 +27,8 @@ External internet evidence only: left navigation, Agents to destinations animati
 
 ## Documentation handoff
 
-This task adds a project handbook, four project skills and startup guidance. It changes no application behavior, retention settings, database schema or scheduler. See the branch/PR for documentation validation; prior application test counts are historical evidence, not tests rerun for these documents.
+The handbook and four project skills are prepared on `codex/project-guide` in [draft PR #8](https://github.com/eshin087/gcdtracker/pull/8). Validation passed for all four skills, 18 Markdown files, 94 local links/anchors, focused privacy checks and the Git whitespace check. Provider-installed skills and private configuration remain ignored.
+
+This documentation change does not alter application behavior, retention settings, database schema or scheduling. Application tests/build were not rerun for documentation-only changes. Prior application test counts remain historical evidence.
 
 At the next material handoff, replace this snapshot with the newly verified state. Move lasting choices to [decisions](decisions.md) and keep unresolved work in [roadmap](roadmap.md); avoid accumulating session-by-session logs here.
