@@ -43,3 +43,7 @@ The repository name is `gcdtracker`. Public README and operational notes may exp
 ## D9: Separate AI reading from social publishing
 
 Accepted September 11, 2026: start with Cloudflare Radar, Bluesky and selected public Mastodon servers. Reading traffic and posting evidence have separate reports and denominators. Initial social collection is one bounded daily observation per platform, not a continuous archive or a census. English disclosure text matches are unverified; self-designated bot accounts are separate and are not necessarily AI. Store aggregates and coverage only. Preserve the existing navigation, animation and historical reports.
+
+## D10: Put the new sources in the original animation
+
+Accepted September 11, 2026: one Agents → destinations panel with three modes—Contributions, Social publishing and Web crawling. Remove the new social heatmap and duplicated homepage source panels; keep the original GitHub daily heatmap, multi-year line reports and left navigation. Counts and Radar percentages have separate modes and scales. Preserve detailed crawler lines on Traffic and sampling methodology on Social. This supersedes the social heatmap presentation in the initial three-source implementation; collection and retention are unchanged.

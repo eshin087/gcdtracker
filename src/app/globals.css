@@ -505,16 +505,14 @@
   .census-history > .seg button { flex:1; padding:9px 7px; font-size:11px; }
 }
 
-/* Bounded social samples: missing cells and overlapping signals stay explicit. */
-.social-map-scroll { max-width:100%; overflow-x:auto; padding:4px; }
-.social-map { min-width:670px; }
-.social-map-row { display:grid; grid-template-columns:90px repeat(28,minmax(16px,1fr)); gap:4px; margin:8px 0; align-items:center; }
-.social-map-row > strong { font-family:var(--font-inter),sans-serif; font-size:12px; }
-.social-cell { width:100%; aspect-ratio:1; border:1px solid var(--rule-strong); border-radius:3px; cursor:pointer; }
-.social-cell.missing { background:var(--surface); }
-.social-cell.partial { background-image:repeating-linear-gradient(45deg,transparent 0 4px,var(--rule-strong) 4px 5px); }
-.social-cell[aria-pressed="true"] { outline:2px solid var(--ink); outline-offset:1px; }
-.social-inspector { padding:16px; border:1px solid var(--rule); background:var(--surface); font-family:var(--font-inter),sans-serif; font-size:12px; line-height:1.6; min-height:160px; }
-.social-inspector p { margin-top:8px; overflow-wrap:anywhere; }
+/* Distinct evidence views share the original animation, with only one mounted. */
+.activity-modes { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px; font-family:var(--font-inter),sans-serif; }
+.activity-modes button { font:inherit; font-size:13px; font-weight:600; padding:10px 15px; color:var(--ink-2); background:var(--surface); border:1px solid var(--rule-strong); border-radius:4px; cursor:pointer; }
+.activity-modes button[aria-selected="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+.activity-modes button:focus-visible { outline:2px solid var(--accent-ink); outline-offset:3px; }
+.activity-intro { color:var(--ink-2); font:13px/1.65 var(--font-inter),sans-serif; margin:0 0 18px; }
+.activity-intro a { white-space:normal; }
+@media(max-width:640px) { .activity-modes button { flex:1; padding:10px 8px; font-size:12px; } }
 
-@media(max-width:760px) { .social-map-scroll::after { content:"Scroll to inspect all sample dates →"; display:block; position:sticky; left:0; width:max-content; margin-top:8px; font:12px var(--font-inter),sans-serif; color:var(--ink-2); } }
+.flow-details { color:var(--ink-2); font:12px/1.6 var(--font-inter),sans-serif; }
+.flow-details summary { cursor:pointer; width:fit-content; padding:6px 0; }

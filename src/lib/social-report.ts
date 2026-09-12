@@ -41,12 +41,3 @@ export function sampleDays(endDay: string, count = 28): string[] {
   return Array.from({ length: Math.max(1, Math.min(90, count)) }, (_,i) => i).map((_,i,arr) =>
     new Date(start - (arr.length - 1 - i) * 86400000).toISOString().slice(0,10));
 }
-export type SocialMetric = "disclosures" | "automation" | "sample";
-export function sampleValue(s: PublicSocialSample | undefined, metric: SocialMetric): number | null {
-  if (!s) return null;
-  if (metric === "sample") return s.sampledPosts;
-  if (metric === "automation" && s.platform === "bluesky") return null;
-  if (s.sampledPosts === 0) return null;
-  const value = metric === "disclosures" ? s.aiDisclosurePosts : s.automatedAccountPosts;
-  return value === null ? null : 100 * value / s.sampledPosts;
-}

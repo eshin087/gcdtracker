@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ReadingReport, type ReadingSnapshot } from "./ReadingReport";
-import { SocialReport } from "./SocialReport";
+import type { ReadingSnapshot } from "@/lib/reading-report";
 import type { SocialReportData } from "@/lib/social-report";
-import { AgentFlow } from "./AgentFlow";
+import { ActivityFlow } from "./ActivityFlow";
+import { readingFlow, socialFlow } from "@/lib/flow-observatory";
 import { HomeReportHeadlines, HomeReports } from "./HomeReports";
 import { FigureHead } from "./ui";
 import { Rail, type RailItem } from "./Rail";
@@ -14,7 +14,7 @@ import type { HomeReportsData } from "@/lib/home-reports";
 
 const SECTIONS: RailItem[] = [
   {id:"overview",title:"Overview"},{id:"flow",title:"Agents → destinations"},
-  {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"ai-reading",title:"AI reading"},{id:"ai-publishing",title:"Social publishing"},{id:"latest",title:"Latest records"},
+  {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"latest",title:"Latest records"},
 ];
 export function InternetOverview({ flow, records, reports, reading, social, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; reading:ReadingSnapshot; social:SocialReportData; demo?:boolean }) {
   return <div className="shell with-rail home-report">
@@ -30,12 +30,10 @@ export function InternetOverview({ flow, records, reports, reading, social, demo
       </section>
       <HomeReportHeadlines data={reports}/>
       <section id="flow" className="overview-report" aria-labelledby="agents-destinations">
-        <FigureHead id="agents-destinations" title="Agents → destinations" sub="Recorded contributions across code repositories, encyclopedias, maps and forums."/>
-        <AgentFlow data={flow} records={records}/>
+        <FigureHead id="agents-destinations" title="Agents → destinations" sub="Explore contributions, social publishing and web crawling, each with its own evidence and scale."/>
+        <ActivityFlow data={flow} records={records} reading={readingFlow(reading, flow.mode)} social={socialFlow(social)}/>
       </section>
       <HomeReports data={reports}/>
-      <ReadingReport data={reading} demo={demo}/>
-      <SocialReport data={social}/>
       <section id="latest" className="overview-report" aria-labelledby="latest-evidence">
         <FigureHead id="latest-evidence" title="Latest records across public sources" sub="Individual examples of external activity, not a combined activity count." more={{href:"/data",label:"Data and source status →"}}/>
         {records.length ? <div className="records">{records.slice(0,6).map(r => <div className="record" key={r.id}>
