@@ -4,33 +4,37 @@ Verified September 11, 2026 (local date). Recheck deployed revision, source fres
 
 ## Current work
 
-The tested application revision is `c19a6b7`. The three-source implementation is on `codex/open-social-observatory`, stacked on the still-open [handbook PR #8](https://github.com/eshin087/gcdtracker/pull/8). It adds Cloudflare Radar crawler-purpose share lines, bounded Bluesky/Mastodon publishing samples, a separate social heatmap/report, public coverage metadata and additive migration 0002.
+The tested application revision is `18a0ac5`, on `codex/activity-flow-modes`. The first Agents → destinations panel now has Contributions, Social publishing and Web crawling modes. The social heatmap and duplicate homepage source panels are removed; the original GitHub daily heatmap, multi-year lines, left navigation and contribution replay remain.
 
-The existing left navigation, Agents to destinations animation, multi-year lines and GitHub heatmap remain. No local-visitor dashboard, paid dependency, GitHub workflow or extra scheduler was added. AI reading and publishing remain separate; social samples do not estimate platform-wide prevalence.
+Each social platform displays its latest individual sample. Disclosure matches and unclassified posts partition that sample; overlapping bot flags remain metadata. Radar uses one complete common date with percentage units and a Cloudflare-observed web destination. The inspector exposes accessible values, sample outcomes, timestamps, coverage and expandable methodology details. Only the selected graph mounts, and the browser receives compact flow summaries.
+
+This update changes presentation only: no collectors, schema, historical rows, dependencies or schedules change.
 
 ## Verified state
 
 | Area | Evidence and limits |
 |---|---|
-| GitHub base | Remote main was `2885369`; PR #8 remains open. Implementation branch/PR, merge and deployment are separate states |
+| GitHub base | Remote main is `2885369`. [Source PR #9](https://github.com/eshin087/gcdtracker/pull/9) merged into `codex/project-guide` at `5e6f7a6`; [handbook PR #8](https://github.com/eshin087/gcdtracker/pull/8) remains open. The flow update is based on that combined branch |
 | Actions | Read-only API check returned disabled; no tracked workflow definitions |
-| Social upstreams | Bounded read-only live checks succeeded for Jetstream v2 and selected public timelines on mastodon.world/fosstodon.org. Raw posts/identifiers were not saved |
-| Social selection | mastodon.social and mastodon.online required authentication. The collector uses explicitly public alternatives; no authentication bypass |
-| Radar | Production environment-name listing includes a Radar token, but local/Vercel-injected smoke processes received no usable token. Live purpose response and permissions remain unverified; fixture and isolated transaction tests pass |
-| Production | No production migration, merge or deployment was performed in this task. New social rows require migration 0002 and a release, then a successful daily attempt |
-| Cost | Vercel Hobby was verified earlier September 11; Neon billing plan remains unverified. The new work has fixed request/time/processing limits and at most two summary rows per UTC date/version, not a permanent zero-cost guarantee |
-| Historical data | Migration 0002 only adds the social aggregate table/index. Legacy preservation and safe migration reapplication pass against isolated PostgreSQL |
+| Social upstreams | Earlier bounded read-only checks succeeded for Jetstream v2 and public timelines on mastodon.world/fosstodon.org. No upstream requests were needed for this presentation update |
+| Radar | Live purpose endpoint access remains unverified. A configured token name does not establish a successful API response |
+| Production | No production migration, merge or deployment was performed by this task. Underlying social collection still requires migration 0002, deployed code and a successful daily attempt; actual production state was not rechecked here |
+| Cost and history | No new scheduler, dependency, collection request or database storage was introduced. GitHub is source hosting only. No historical detail or summary was removed |
 
 ## Validation
 
-TypeScript, lint and 276 unit tests passed. All 40 integration tests passed against the isolated local PostgreSQL/Neon HTTP bridge, including concurrency, atomic replacement and rollback. Offline and seeded production builds passed. The full 31-test browser suite passed, covering main/subroutes, privacy, controls, missing versus zero, reduced motion, and light/dark layouts at 390, 768, 1024 and 1440 pixels. All 18 affected browser tests passed again after final timestamp/axis-label polish. The final offline build also passed; the local QA server, bridge and Docker database were stopped.
+Lint, TypeScript and all 301 unit tests passed. Seeded and offline production builds passed. The full 32-test browser suite passed; all 19 affected tests passed again after the final accessibility and compact-props changes. Coverage includes main/subroutes, three-mode keyboard navigation, destination reset, pause/reduced motion, missing versus zero, source exports, and light/dark layouts at 390, 768, 1024 and 1440 pixels. No page-level horizontal overflow was found.
 
-Screenshots and temporary outputs are ignored under `.qa/`. Public Markdown file links and focused credential-pattern checks passed. Local bridge checks are not Neon-hosted or deployed-production verification.
+The prior 40 integration tests cover the unchanged collection/migration implementation. They were not repeated for this presentation-only change. Browser checks used the existing isolated local QA database; the QA server, bridge and Docker container were stopped afterward. No production connection was used for fixtures.
+
+For identical synthetic `/demo` data at 1440 × 1000 with reduced motion, decoded HTML changed from 314,290 to 245,014 bytes (22.0% less), and DOM elements from 1,397 to 1,265 (9.4% fewer). Both revisions retained the original flow and GitHub heatmap; the newer revision removes 56 social heatmap cells and mounts only the selected activity view. These are local document-size measurements, not deployed latency or Core Web Vitals results.
+
+Screenshots and temporary outputs are ignored under `.qa/`. Public docs retain source links and environment names only.
 
 ## Next steps and limitations
 
-- Apply reviewed migration 0002 only as part of an authorized release; merge/deploy the reviewed code separately and verify the actual production revision and daily source outcomes.
-- Verify the Radar token's new endpoint access in the deployed environment. A configured variable is not a successful API response.
-- Social observations are short English-signal samples from open sources; closed platforms and most of each day remain unobserved. One attempted sample/day is intentional; failed days remain missing until the next UTC date.
-- Daily health cadence and historical unscheduled status are fixed in this branch. [R1](roadmap.md#r1-align-health-with-the-daily-schedule) still needs production cache/delivery verification.
-- [Retention work](roadmap.md#r2-prune-detail-without-losing-historical-summaries) and [billing/runtime verification](roadmap.md#r3-close-cost-and-runtime-verification-gaps) remain open. No old detail was pruned.
+- Review the flow branch against `codex/project-guide`; PR #8 is still the outstanding route from the combined source implementation to main. A branch push or preview does not mean production has changed.
+- Apply reviewed migration 0002 only as part of an authorized release if it has not already been applied. Verify the production revision, migration state and daily source outcomes separately.
+- Verify Radar purpose endpoint permissions in the deployed environment.
+- Social samples are short English-signal observations from open sources. Closed platforms and most of each day remain unobserved; one attempt per UTC date is intentional.
+- [Health delivery verification](roadmap.md#r1-align-health-with-the-daily-schedule), [retention](roadmap.md#r2-prune-detail-without-losing-historical-summaries) and [billing/runtime verification](roadmap.md#r3-close-cost-and-runtime-verification-gaps) remain open.

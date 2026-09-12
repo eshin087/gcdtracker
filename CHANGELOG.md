@@ -3,7 +3,9 @@
 ## Unreleased — AI reading and social publishing
 
 - Added crawler-purpose share lines from a bounded 28-day Cloudflare Radar snapshot, preserving units, normalization, confidence metadata and missing-day gaps.
-- Added separate Bluesky and Mastodon publishing reports and a homepage heatmap. Narrow English disclosure text signals and self-designated bot accounts are distinct; no model authorship or whole-platform prevalence is inferred.
+- Added Bluesky and Mastodon publishing reports. Narrow English disclosure text signals and self-designated bot accounts are distinct; no model authorship or whole-platform prevalence is inferred.
+- The first Agents → destinations animation now has Contributions, Social publishing and Web crawling modes. Replaced the social heatmap with sample flows; the original GitHub heatmap and multi-year lines remain. Removed duplicate homepage reports while keeping detailed crawler history on Traffic.
+- Social flows partition each platform's latest sample into disclosure matches and unclassified posts; overlapping bot flags remain inspector metadata. Crawling flows use one complete common Radar date with percentage units. Zero-valued paths have no animated dots, and missing sources remain explicit.
 - Added aggregate-only daily samples with durable once-per-day attempt limits, atomic completion, explicit failure/partial outcomes and no raw posts/media/identifiers retained. Existing history is preserved by additive migration 0002.
 - Added `/social` and `/api/export/social_samples.json`; kept the left navigation, animation, historical lines and GitHub heatmap. Demo data remains explicitly synthetic.
 - Aligned health checks with daily collection and marked retired historical workers unscheduled. GitHub Actions remains disabled; no new dependency or scheduler was added.

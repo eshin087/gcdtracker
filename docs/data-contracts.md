@@ -64,3 +64,9 @@ The `crawl-purpose` Radar group adds `radar-v2 / crawl-purpose:<category>` value
 Public `/api/export/social_samples.json` contains the last 28 UTC sample dates, aggregate counters and a nested field allowlist. It never contains post text, usernames, IDs, media, private state or cursors. Missing, unavailable, partial and observed-zero signals remain distinct. It is not an estimate of social-platform or internet AI prevalence.
 
 Official contracts: [Jetstream v2 lexicon](https://github.com/bluesky-social/jetstream/blob/main/lexicons/network/bsky/jetstream/subscribeEvents.json), [Mastodon public timelines](https://docs.joinmastodon.org/methods/timelines/), [Radar purpose time series](https://developers.cloudflare.com/api/resources/radar/subresources/ai/subresources/bots/methods/timeseries_groups/).
+
+### Activity flow presentation
+
+The homepage mounts one selected flow mode. Contributions retains its existing source/unit scales. Social publishing chooses the latest individual sample per platform by sampling date and timestamps; it never adds overlapping daily snapshots. Disclosure matches and the remaining unclassified posts partition each sample. Bot flags can overlap, so they appear only as metadata. A recorded sample outcome does not establish the status of a later collection attempt.
+
+Web crawling chooses the latest date present in every returned purpose category within one version-2 PERCENTAGE snapshot. It excludes explicit missing/unavailable dates and nonfinite or out-of-range shares; no complete intersection means no paths. Its destination is the Cloudflare-observed web scope, not a named social platform. Shares are never added across days, and tiny positive values remain distinguishable from zero. Zero-valued links do not animate. Exact sample times, publisher windows, scope, normalization and coverage remain inspectable. These are presentation adapters; no historical rows, collectors, schema or public export contracts change.
