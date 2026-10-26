@@ -40,9 +40,9 @@ The three homepage headline tiles and the daily heatmap read GH Archive summarie
 
 **Priority:** before the collector fixes can take effect. **Status:** open; diagnosed October 25.
 
-Production serves `main`, which has the README rewrite but none of PRs #8, #9 and #10 or the October 25 collector fixes. PR #8 and this branch both conflict with main's README. The `social_samples` table from migration 0002 does not exist in production.
+Production serves `main`, which has the README rewrite but none of PRs #8, #9 and #10 or the October 25 collector fixes. [PR #12](https://github.com/eshin087/gcdtracker/pull/12) carries PR #8's commits plus this branch, with the README conflict resolved. The `social_samples` table from migration 0002 does not exist in production.
 
-**Done when:** the README conflict is resolved without losing the portfolio README; migration 0002 is applied under the [operations](operations.md) procedure; the combined branch is reviewed and merged; `/social`, the social export and the health pill are verified on the production alias; PR #3 is closed or rebased.
+**Done when:** PR #12 keeps the portfolio README (done); migration 0002 is applied under the [operations](operations.md) procedure; the combined branch is reviewed and merged; `/social`, the social export and the health pill are verified on the production alias; PR #3 is closed or rebased.
 
 ## R6: Trim and cache the heavy explorer pages
 
