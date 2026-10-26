@@ -1,13 +1,23 @@
 # gcdTracker
 
-An observatory of AI traffic and agent activity across external public sources, with the original Agents → destinations animation, multi-year census line graphs and a daily GitHub heatmap.
+**How much of the public internet is now AI agents, measured from public sources that can be checked.**
 
-Each source covers a different part of the internet; counts cannot be added into a whole-internet AI activity total. Source classifications and attribution evidence stay attached to each measurement. Local visitor tracking and dashboards are retired. Historical summaries remain available; some detailed records expire under the [retention policy](docs/data-contracts.md#retention).
+Live at [gcdtracker.vercel.app](https://gcdtracker.vercel.app).
+
+<a href="https://gcdtracker.vercel.app"><img src="docs/media/agents-to-destinations.webp" alt="Animated chart of coding agents such as Claude, Codex and Cursor on the left, with dots flowing along curves to destinations on the right: code repositories, encyclopedias and wikis, maps and forums, each labelled with its count" width="100%"></a>
+
+It follows crawlers reading the web, coding agents opening pull requests on GitHub, and automated edits to Wikipedia, OpenStreetMap and public forums. Each number stays tied to the source it came from and to the rule used to attribute it to an agent, so the site never adds unlike things into one "AI share of the internet".
+
+## Why I built this
+
+Everyone has an opinion on how much of the web is bots now, and almost nobody shows their evidence. I wanted a place where the counts, the attribution rules and the gaps in coverage are all visible on the same page, so that a reader can judge the claim rather than take it.
+
+## What it measures
 
 | Area | Evidence |
 |---|---|
 | Traffic | Cloudflare Radar snapshots, AI crawler-purpose shares and sampled robots.txt policy |
-| Social publishing | Bounded Bluesky/Mastodon samples, disclosure text signals, separate automation flags and coverage |
+| Social publishing | Bounded Bluesky and Mastodon samples, disclosure text signals, separate automation flags and coverage |
 | GitHub | GH Archive observations, documented bot accounts, branch-name signals, watched repositories |
 | Wikipedia and Commons | Platform filters, disclosed heuristics, bot activity, files added to tracked AI categories |
 | Maps | Capped overlapping OSM creation-time samples with deduplication |
@@ -15,15 +25,15 @@ Each source covers a different part of the internet; counts cannot be added into
 | Tooling | Package downloads, MCP registry entries, quoted external series |
 | Before & After and Notes | Historical context; time correlation does not establish causation |
 
-Legacy Visitors URLs redirect to Traffic; the guestbook view redirects to Forums. Research pages sit under the Research navigation menu; Saved is browser-local.
+The census view puts multi-year series side by side, such as Wikipedia pageviews by user, spider and automated traffic, with model launches marked for context:
 
-See the [executive architecture and operations overview](docs/executive-overview.md) for a guided explanation of the system.
+<a href="https://gcdtracker.vercel.app"><img src="docs/media/census.webp" alt="Line chart of monthly Wikimedia pageviews from 2015 to 2026, split into user-classified, automated and spider traffic, with ChatGPT and GPTBot launch dates marked" width="100%"></a>
 
-For ongoing work, start with the [project handbook](docs/index.md), [verified status](docs/status.md) and [accepted decisions](docs/decisions.md). [AGENTS.md](AGENTS.md) routes coding agents to four project skills for catch-up, data quality, release QA and cost control. These files are maintained during project work; they do not run background automation.
+A claimed crawler name, branch prefix, edit filter or platform assertion does not prove model authorship. Public HTML, JSON and CSV use explicit field allowlists; raw IP addresses are never persisted, and saved bookmarks stay in the reader's browser. Local visitor tracking is retired; historical summaries remain available, and some detailed records expire under the [retention policy](docs/data-contracts.md#retention).
+
+**Tech:** Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle with Neon, Vercel.
 
 ## Development
-
-Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle/Neon HTTP, and Vercel. GitHub is used only for source hosting.
 
 ```sh
 npm ci
@@ -34,47 +44,14 @@ npm test
 npm run build
 ```
 
-Without a configured database, the site renders an explicit offline state. Use environment-specific credentials and keep production values out of local fixtures, previews, logs, and commits.
+Without a configured database, the site renders an explicit offline state.
 
-See [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [migration and bounded repairs](docs/operations.md), and [public interface changes](CHANGELOG.md).
+## Docs
 
-## Configuration
-
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | Production/local Neon connection. |
-| `PREVIEW_DATABASE_URL` | Isolated preview connection. Vercel previews ignore `DATABASE_URL` and remain offline without this value. |
-| `CRON_SECRET` | Secret used to authorize scheduled ingestion. |
-| `IP_HASH_SECRET` | Dedicated secret for privacy-preserving network identifiers. |
-| `GITHUB_TOKEN` | Public GitHub read/search access and API limits. |
-| `CLOUDFLARE_API_TOKEN` | Optional Radar read access. |
-| `SOCIAL_COLLECTION_ENABLED` | Set to `0` to pause both bounded social collectors; enabled by default. |
-| `NEXT_PUBLIC_SITE_URL` | Canonical site URL. |
-
-Deployment credentials belong in Vercel environment settings. Never commit environment values or put production connections into QA or preview configuration.
-
-## Collection
-
-GitHub Actions is disabled and this repository contains no workflow definitions. Vercel invokes the routine collector once daily. GH Archive, Common Crawl robots census, and ai.robots.txt history are retained as historical datasets but no longer update automatically.
-
-Collectors expose explicit outcomes and retain durable checkpoints. See the operations documentation before a repair; there is no automatic multi-year reprocessing job.
-
-Pages cache shared summaries for five minutes; the live endpoint refreshes every 30 seconds. Database and Vercel usage depend on traffic and source latency.
-
-## Evidence and privacy
-
-Public HTML, JSON, and CSV use explicit field allowlists. Sensitive network and request details are excluded. Raw IP addresses are not persisted, and saved bookmarks remain in the reader's browser.
-
-A claimed crawler name, branch prefix, edit filter or platform assertion does not prove model authorship. Policy directives do not prove a visitor fetched or understood robots.txt. Radar normalized values retain their scale, units, window and provenance in the JSON export.
-
-## Next research priorities
-
-1. Crawler-purpose trends with comparable periods and coverage.
-2. Crawl-to-referral trends, with platform-specific denominators.
-3. Coverage timelines marking outages and definition changes.
-4. Crawler-policy history separated from observed behavior.
-
-Multi-site measurement and controlled experiments are deferred. A future multi-site implementation should collect server/CDN logs because many crawlers do not execute browser analytics.
+- [Configuration and collection](docs/configuration.md): environment variables, how the daily collector runs, and the next research priorities.
+- [Executive overview](docs/executive-overview.md): a guided explanation of the system.
+- [Project handbook](docs/index.md), [verified status](docs/status.md) and [accepted decisions](docs/decisions.md): where the project stands and why. [AGENTS.md](AGENTS.md) routes coding agents to four project skills for catch-up, data quality, release QA and cost control; these files are maintained during project work and run no background automation.
+- [Operations](docs/operations.md), [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [public interface changes](CHANGELOG.md).
 
 ## Licences
 

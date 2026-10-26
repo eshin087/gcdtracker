@@ -9,6 +9,7 @@ Start with [status](status.md) for the latest verified state and [decisions](dec
 | [Executive overview](executive-overview.md) | Purpose, architecture, technology and code ownership | Architecture or dependencies materially change |
 | [Data contracts](data-contracts.md) | Source meaning, coverage, versioning, progress and retention | A metric, collector or schema changes |
 | [Cost controls](cost-controls.md) | No-cost operating policy and how to verify cost exposure | Scheduling, storage, providers or billing assumptions change |
+| [Configuration](configuration.md) | Environment variable names, how the daily collector runs and the next research priorities | A variable, schedule or research priority changes |
 | [Operations](operations.md) | Release, preview, migration, rollback and bounded repair procedures | An operating procedure changes |
 | [QA](qa.md) | Local unit, database and browser validation setup | Test setup or commands change |
 | [Roadmap](roadmap.md) | Open work with evidence and completion criteria | A finding is added, prioritized or completed |
