@@ -7,17 +7,23 @@ const API = "https://api.cloudflare.com/client/v4/radar/bots";
 export const REGISTRY_KEY = "agentwatch:signature-catalog";
 const PAGE_SIZE = 100;
 const MAX_DETAILS = 20;
+const MAX_LIST_PAGES = 5;
 interface Scan extends Record<string, unknown> {
-  offset: number; pending: string[]; exhausted: boolean; checked: number; found: number; completedAt?: string;
+  offset: number; pending: string[]; exhausted: boolean; checked: number; found: number; skipped?: number; completedAt?: string;
 }
 const fresh = ():Scan => ({offset:0,pending:[],exhausted:false,checked:0,found:0});
-export function registrySlugs(body: unknown): string[] {
+const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+/** Entries with unexpected slugs are skipped and counted; one odd catalog entry must not stop discovery. */
+export function registrySlugs(body: unknown): { slugs: string[]; listed: number; skipped: number } {
   const b = body as {success?:boolean;result?:{bots?:Array<{slug?:unknown}>}} | null;
   if (b?.success !== true || !Array.isArray(b.result?.bots)) throw new Error("Radar bot catalog missing list");
-  return b.result.bots.map(bot => {
-    if (!bot || typeof bot.slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(bot.slug)) throw new Error("Invalid Radar bot slug");
-    return bot.slug;
-  });
+  const slugs: string[] = [];
+  let skipped = 0;
+  for (const bot of b.result.bots) {
+    if (bot && typeof bot.slug === "string" && SLUG_RE.test(bot.slug) && !bot.slug.includes("..")) slugs.push(bot.slug);
+    else skipped++;
+  }
+  return { slugs, listed: b.result.bots.length, skipped };
 }
 export function registryEntry(body: unknown, slug: string) {
   const b = body as {success?:boolean;result?:{bot?:{slug?:unknown;signatureAgentUrl?:unknown;operator?:unknown}}} | null;
@@ -45,16 +51,18 @@ export async function collectSignatureRegistry(ctx: JobContext) {
     if (result.status!==200) throw new Error("Radar bot API HTTP "+result.status);
     return result.body;
   };
-  let checked=0;
-  while (timeLeft(ctx)>4_000 && checked<MAX_DETAILS) {
+  let checked=0, listPages=0;
+  while (timeLeft(ctx)>4_000 && checked<MAX_DETAILS && listPages<MAX_LIST_PAGES) {
     const state=snapshot.state;
     if (!state.pending.length) {
-      const slugs=await request(API+`?limit=${PAGE_SIZE}&offset=${state.offset}`).then(registrySlugs);
-      const next:Scan={...state,offset:state.offset+slugs.length,pending:slugs,exhausted:slugs.length<PAGE_SIZE};
-      if (!slugs.length) next.completedAt=new Date().toISOString();
+      const page=await request(API+`?limit=${PAGE_SIZE}&offset=${state.offset}`).then(registrySlugs);
+      listPages++;
+      const next:Scan={...state,offset:state.offset+page.listed,pending:page.slugs,exhausted:page.listed<PAGE_SIZE,skipped:(state.skipped ?? 0)+page.skipped};
+      if (!page.listed || (!page.slugs.length && next.exhausted)) next.completedAt=new Date().toISOString();
       if (!await commitCollectorState(ctx.db,REGISTRY_KEY,snapshot,next)) break;
       snapshot={state:next,revision:snapshot.revision+1};
       if (next.completedAt) break;
+      if (!next.pending.length) continue;
     }
     const slug=snapshot.state.pending[0];
     const entry=registryEntry(await request(API+"/"+encodeURIComponent(slug)),slug);
@@ -68,5 +76,5 @@ export async function collectSignatureRegistry(ctx: JobContext) {
     snapshot={state:next,revision:snapshot.revision+1};checked++;
     if (next.completedAt) break;
   }
-  return {partial:!snapshot.state.completedAt,stats:{registry:"Radar bot API",registryChecked:snapshot.state.checked,signedAgents:snapshot.state.found,registryCompletedAt:snapshot.state.completedAt ?? null}};
+  return {partial:!snapshot.state.completedAt,stats:{registry:"Radar bot API",registryChecked:snapshot.state.checked,signedAgents:snapshot.state.found,registrySkippedSlugs:snapshot.state.skipped ?? 0,registryCompletedAt:snapshot.state.completedAt ?? null}};
 }

@@ -15,9 +15,9 @@ beforeEach(()=>{
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();if(original===undefined)delete process.env.CLOUDFLARE_API_TOKEN;else process.env.CLOUDFLARE_API_TOKEN=original;});
 describe("authenticated signature catalog",()=>{
  it("validates API objects and only accepts HTTPS directory URLs",()=>{
-  expect(registrySlugs({success:true,result:{bots:[{slug:"gptbot"}]}})).toEqual(["gptbot"]);
+  expect(registrySlugs({success:true,result:{bots:[{slug:"gptbot"},{slug:"GPTBot_v2.1"}]}})).toEqual({slugs:["gptbot","GPTBot_v2.1"],listed:2,skipped:0});
   expect(()=>registrySlugs({success:false,result:{bots:[]}})).toThrow();
-  expect(()=>registrySlugs({success:true,result:{bots:[{slug:"../secrets"}]}})).toThrow();
+  expect(registrySlugs({success:true,result:{bots:[{slug:"../secrets"},{slug:"ok-bot"},{slug:42},{slug:"has space"}]}})).toEqual({slugs:["ok-bot"],listed:4,skipped:3});
   expect(registryEntry(detail("example"),"example")).toBeNull();
   expect(registryEntry(detail("example","https://example.com/.well-known/keys"),"example")).toMatchObject({token:"example.com"});
   expect(()=>registryEntry(detail("example","http://example.com"),"example")).toThrow();
@@ -46,5 +46,12 @@ describe("authenticated signature catalog",()=>{
   vi.mocked(commitCollectorState).mockResolvedValue(false);
   vi.stubGlobal("fetch",vi.fn().mockResolvedValue(Response.json(detail("example"))));
   expect((await collectSignatureRegistry(ctx())).partial).toBe(true);expect(state.pending).toEqual(["example"]);
+ });
+ it("skips an unexpected catalog slug and still completes the scan",async()=>{
+  const fetch=vi.fn(async(input:string)=>Response.json(input.includes("?")?{success:true,result:{bots:[{slug:"odd slug!"},{slug:"good-bot"}]}}:detail("good-bot","https://good-bot.example/keys")));
+  vi.stubGlobal("fetch",fetch);
+  const result=await collectSignatureRegistry(ctx());
+  expect(result.partial).toBe(false);expect(result.stats).toMatchObject({registrySkippedSlugs:1,signedAgents:1,registryChecked:1});
+  expect(state.completedAt).toBeDefined();expect(fetch.mock.calls).toHaveLength(2);
  });
 });

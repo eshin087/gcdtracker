@@ -1,40 +1,33 @@
 # Project status
 
-Verified September 11, 2026 (local date). Recheck deployed revision, source freshness and billing settings before relying on them.
+Verified October 25, 2026 (local date). Recheck deployed revision, source freshness and billing settings before relying on them.
 
 ## Current work
 
-The tested application revision is `18a0ac5`, on `codex/activity-flow-modes`. The first Agents → destinations panel now has Contributions, Social publishing and Web crawling modes. The social heatmap and duplicate homepage source panels are removed; the original GitHub daily heatmap, multi-year lines, left navigation and contribution replay remain.
-
-Each social platform displays its latest individual sample. Disclosure matches and unclassified posts partition that sample; overlapping bot flags remain metadata. Radar uses one complete common date with percentage units and a Cloudflare-observed web destination. The inspector exposes accessible values, sample outcomes, timestamps, coverage and expandable methodology details. Only the selected graph mounts, and the browser receives compact flow summaries.
-
-This update changes presentation only: no collectors, schema, historical rows, dependencies or schedules change.
+Collector accuracy fixes are prepared on `codex/activity-flow-modes` on top of `32b31c0`; at the time of writing they are working-tree changes, not a commit or PR. They cover Wikimedia metrics lag handling with isolated steps, a time-spread Wikipedia tier-2 sample, tolerant signature-registry slugs, GitHub work ordering without provisional current-day counts, a Moltbook feed walk with durable coverage, Radar partial logic for absent values only, an eight-slot OSM sample, and a rebalanced daily job order. The Forums, Maps and Wikipedia pages describe the sampling. No schema, migration, dependency, scheduler or billing change is involved; `collector_state` gains one key, `moltbook:coverage`. See the [changelog](../CHANGELOG.md) and [data contracts](data-contracts.md).
 
 ## Verified state
 
 | Area | Evidence and limits |
 |---|---|
-| GitHub base | Remote main is `2885369`. [Source PR #9](https://github.com/eshin087/gcdtracker/pull/9) merged into `codex/project-guide` at `5e6f7a6`; [handbook PR #8](https://github.com/eshin087/gcdtracker/pull/8) remains open. The flow update is based on that combined branch |
-| Actions | Read-only API check returned disabled; no tracked workflow definitions |
-| Social upstreams | Earlier bounded read-only checks succeeded for Jetstream v2 and public timelines on mastodon.world/fosstodon.org. No upstream requests were needed for this presentation update |
-| Radar | Live purpose endpoint access remains unverified. A configured token name does not establish a successful API response |
-| Production | No production migration, merge or deployment was performed by this task. Underlying social collection still requires migration 0002, deployed code and a successful daily attempt; actual production state was not rechecked here |
-| Cost and history | No new scheduler, dependency, collection request or database storage was introduced. GitHub is source hosting only. No historical detail or summary was removed |
+| Production | `gcdtracker.vercel.app` serves remote `main` at `e396e21` ([README PR #11](https://github.com/eshin087/gcdtracker/pull/11), deployed October 25, 21:14 UTC). Every route returned 200 except `/social` and the social export, which are not on `main`. The database is connected and the daily cron ran at 03:47 UTC in about 170 seconds |
+| GitHub base | Remote main is `e396e21`. [PR #8](https://github.com/eshin087/gcdtracker/pull/8) (`codex/project-guide` to main) is open and conflicts with main's rewritten README; this branch conflicts on the same file. [PR #3](https://github.com/eshin087/gcdtracker/pull/3) has been stale since September 8. PRs #9 and #10 merged into `codex/project-guide`, not main |
+| Actions | Read-only API check: disabled, zero artifacts, zero caches, no workflow files |
+| Production health | Deployed code still expects every source every 30 minutes, so `/api/live` marked every source stale and the pill reported that collection needs attention. This branch's daily interval is not deployed |
+| Collector outcomes, 31 daily runs (September 25 to October 25) | wikimedia failed 24; agentwatch failed 30; github, moltbook, osm, radar, watched and wikipedia partial on all 31; baseline, botcommits, packages, ipranges, mcp, github-signatures and retention mostly success. Verified causes are in [incidents](incidents.md) |
+| Data freshness | Rows dated October 24 or 25: GitHub search daily, Radar operator, bot-share and crawl-refer, npm and PyPI, OSM, Moltbook, MCP, IP ranges, watched signals. Historical by design: GH Archive daily ends September 9 (worker retired) and the robots census August 7. Publisher lag: Wikimedia daily totals end September 30, Hugging Face agent usage September 30. Empty: `github_events` has 0 rows; `/api/export/social_samples.json` is 404 on `main` |
+| Database | 139 MB in total: `gh_archive_hourly` 69 MB, `forum_posts` 21 MB, `mcp_servers` 19 MB. Migration 0001 markers are present; the `social_samples` table from migration 0002 does not exist in production |
+| Cost | No new scheduler, dependency, paid API or storage integration. The Moltbook walk adds at most 60 requests per day and stores 200 posts per run instead of 500; the OSM change keeps eight requests per run. Vercel and Neon plan tiers were not re-verified from the CLI; check both dashboards |
 
 ## Validation
 
-Lint, TypeScript and all 301 unit tests passed. Seeded and offline production builds passed. The full 32-test browser suite passed; all 19 affected tests passed again after the final accessibility and compact-props changes. Coverage includes main/subroutes, three-mode keyboard navigation, destination reset, pause/reduced motion, missing versus zero, source exports, and light/dark layouts at 390, 768, 1024 and 1440 pixels. No page-level horizontal overflow was found.
+On this working tree: lint, TypeScript and all 311 unit tests passed across 36 files, including new Moltbook, Wikimedia-metrics, Radar, OSM slot and signature-registry cases. An offline production build passed and confirmed that the Forums, GitHub and Wikipedia routes render dynamically on demand. On a fresh disposable PostgreSQL 16 container, `init` and `migration-check` passed and the integration suite passed all 42 tests, including the two new cases in `tests/moltbook.integration.test.ts` that exercise the feed walk's seed query, guarded daily and sample writes, and capped-day coverage. Browser checks were limited to an offline local build and the live production site; the seeded browser suite was not repeated. The container was stopped afterwards.
 
-The prior 40 integration tests cover the unchanged collection/migration implementation. They were not repeated for this presentation-only change. Browser checks used the existing isolated local QA database; the QA server, bridge and Docker container were stopped afterward. No production connection was used for fixtures.
-
-For identical synthetic `/demo` data at 1440 × 1000 with reduced motion, decoded HTML changed from 314,290 to 245,014 bytes (22.0% less), and DOM elements from 1,397 to 1,265 (9.4% fewer). Both revisions retained the original flow and GitHub heatmap; the newer revision removes 56 social heatmap cells and mounts only the selected activity view. These are local document-size measurements, not deployed latency or Core Web Vitals results.
-
-Screenshots and temporary outputs are ignored under `.qa/`. Public docs retain source links and environment names only.
+No production write, migration, merge or deployment was performed. Production checks used the public site, its exports, read-only Vercel and GitHub CLI commands, and aggregate read-only database queries whose outputs stayed out of the repository.
 
 ## Next steps and limitations
 
-- Review the flow branch against `codex/project-guide`; PR #8 is still the outstanding route from the combined source implementation to main. A branch push or preview does not mean production has changed.
-- Apply reviewed migration 0002 only as part of an authorized release if it has not already been applied. Verify the production revision, migration state and daily source outcomes separately.
-- Verify Radar purpose endpoint permissions in the deployed environment.
-- Social samples are short English-signal observations from open sources. Closed platforms and most of each day remain unobserved; one attempt per UTC date is intentional.
-- [Health delivery verification](roadmap.md#r1-align-health-with-the-daily-schedule), [retention](roadmap.md#r2-prune-detail-without-losing-historical-summaries) and [billing/runtime verification](roadmap.md#r3-close-cost-and-runtime-verification-gaps) remain open.
+- Commit and review these fixes, then resolve the README conflict and route the combined September work (PR #8 plus this branch) to main. Apply migration 0002 before deploying code that reads `social_samples`.
+- After deployment, confirm on `/data` that wikimedia, agentwatch, radar and osm reach `success`, that moltbook and github reach `success` once the first feed walk and the next finalization complete, and that the pill leaves its degraded state. The first Moltbook walk may be partial and will list capped days on the Forums page.
+- The homepage headline tiles and daily heatmap depend on retired GH Archive data and stay frozen at September 9; see [R4](roadmap.md#r4-replace-the-frozen-homepage-archive-figures).
+- Radar purpose endpoint permissions, Neon plan verification, retention ([R2](roadmap.md#r2-prune-detail-without-losing-historical-summaries)) and the GitHub page payload ([R6](roadmap.md#r6-trim-and-cache-the-heavy-explorer-pages)) remain open.

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Collector accuracy and outcome fixes
+
+- Wikimedia edit metrics are requested from the day after the last stored day and treat upstream HTTP 404 as publisher lag rather than failure; the Wikidata, Commons and tag-sweep steps no longer abort when the metrics dataset is not loaded yet.
+- Wikipedia tier-2 heuristic scanning is a time-spread sample of twelve one-page reads across the previous 24 hours with recorded coverage, replacing a drifting cursor that had fallen more than two weeks behind. The Wikipedia page states the sampling method.
+- The signature-registry scan skips and counts unexpected Cloudflare catalog slugs instead of failing the whole agentwatch run.
+- The GitHub search collector finalizes the previous UTC day first, then takes one rotating sample-feed query, then fills gaps; it no longer counts the current day provisionally, and the by-day series ends at the last complete day.
+- Moltbook counts come from a daily walk of the public feed back to the previous run, up to 6,000 posts, with durable coverage state and explicit lower-bound days; only a 200-post sample per run is stored. Flow and page totals read `forum_daily`.
+- Radar reports partial only for absent observations or missing purpose days; a publisher-reported non-finite ratio stays in metadata.
+- The OpenStreetMap sample takes one page from each of eight equal creation-time slots across the 48-hour window instead of the newest 800 changesets, and a completed capped sample reports success. Maps and Forums pages explain the sampling.
+- The daily `all` route runs the feed walk and retention before the paced GitHub jobs and reserves time for jobs still queued.
+
 ## Unreleased — AI reading and social publishing
 
 - Added crawler-purpose share lines from a bounded 28-day Cloudflare Radar snapshot, preserving units, normalization, confidence metadata and missing-day gaps.

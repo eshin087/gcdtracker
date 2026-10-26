@@ -50,8 +50,10 @@ const JOBS: Record<string, Job> = {
   "ai-robots-history": aiRobotsHistoryJob,
 };
 
-/** `all` runs cheap sources first and the rate-limited GitHub job last. */
-const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "moltbook", "osm", "mcp", "botcommits", "agentwatch", "radar", "bluesky", "mastodon", "packages", "baseline", "github", "watched", "github-signatures", "retention"];
+/** `all` runs cheap sources first; the feed walk and the paced GitHub jobs come last with the largest shares. */
+const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "osm", "mcp", "botcommits", "agentwatch", "radar", "bluesky", "mastodon", "packages", "baseline", "moltbook", "retention", "github", "watched", "github-signatures"];
+/** Time kept back for each job still queued, so an early job cannot consume the whole deadline. */
+const RESERVE_PER_JOB_MS = 12_000;
 
 const STATUS_SOURCES = new Set(["gharchive", "robots-census"]);
 const BODY_SOURCES = new Set(["gharchive", "robots-census", "ai-robots-history"]);
@@ -86,7 +88,8 @@ async function handle(req: Request, source: string): Promise<Response> {
         break;
       }
       const jobsLeft = ALL_ORDER.length - i;
-      const slice = Math.max(20_000, Math.min(remaining, (remaining / jobsLeft) * 1.8));
+      const reserved = RESERVE_PER_JOB_MS * (jobsLeft - 1);
+      const slice = Math.max(20_000, Math.min(remaining - reserved, (remaining / jobsLeft) * 1.8));
       reports.push(await runJob(name, JOBS[name], { db, deadline: Date.now() + slice, payload, query }));
     }
   } else {

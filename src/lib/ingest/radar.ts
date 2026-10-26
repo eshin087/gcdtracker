@@ -112,6 +112,11 @@ export function radarSummaryValue(value: unknown, ratio: boolean): number | "mis
   if (!Number.isFinite(number) || number < 0) throw new Error("Radar invalid summary value");
   return number;
 }
+/** Only absent observations degrade the outcome; a publisher-reported non-finite ratio is a preserved observation. */
+export function snapshotIncomplete(metadata: Pick<RadarMetadata, "coverage" | "unavailable"> | null): boolean {
+  if (!metadata) return false;
+  return !!metadata.coverage?.missingDays.length || (metadata.unavailable ?? []).some((entry) => entry.reason === "missing");
+}
 /** One request with no retries; the durable attempt checkpoint enforces the daily cost bound. */
 async function fetchPurpose(url: string, token: string, timeoutMs: number): Promise<{ status: number; body: unknown }> {
   const response = await fetch(url, { headers: { ...OUTBOUND_HEADERS, authorization: "Bearer " + token },
@@ -131,7 +136,7 @@ export const radarJob: Job = async (ctx) => {
     ["crawl-purpose", radarPurposeEndpoint()],
   ] as const;
   const failed: string[] = [];
-  let rows = 0, partial = false;
+  let rows = 0, partial = false, unavailableSeries = 0;
   const unavailable: string[] = [];
   const attemptedToday: string[] = [];
   for (const [group, endpoint] of endpoints) {
@@ -142,7 +147,8 @@ export const radarJob: Job = async (ctx) => {
       const cachedMetadata = publicRadarMetadata(snapshot.state);
       // One successful snapshot per UTC day, avoiding alternate-day skips from cron jitter.
       if (cachedMetadata && cachedMetadata.fetchedAt.slice(0, 10) === new Date().toISOString().slice(0, 10) && Date.parse(cachedMetadata.fetchedAt) <= Date.now()) {
-        if (cachedMetadata.unavailable?.length || cachedMetadata.coverage?.missingDays.length) { partial = true; unavailable.push(group); }
+        unavailableSeries += cachedMetadata.unavailable?.length ?? 0;
+        if (snapshotIncomplete(cachedMetadata)) { partial = true; unavailable.push(group); }
         continue;
       }
       if (group === "crawl-purpose") {
@@ -168,10 +174,11 @@ export const radarJob: Job = async (ctx) => {
       ]);
       if (committed) {
         rows += parsed.rows.length;
-        if (parsed.metadata.unavailable?.length || parsed.metadata.coverage?.missingDays.length) { partial = true; unavailable.push(group); }
+        unavailableSeries += parsed.metadata.unavailable?.length ?? 0;
+        if (snapshotIncomplete(parsed.metadata)) { partial = true; unavailable.push(group); }
       }
       else partial = true;
     } catch (err) { failed.push(group + ": " + (err instanceof Error ? err.message : "fetch failed")); }
   }
-  return { stats: { rows, failed, unavailable, attemptedToday }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
+  return { stats: { rows, failed, unavailable, unavailableSeries, attemptedToday }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

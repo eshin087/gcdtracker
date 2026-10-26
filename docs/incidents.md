@@ -22,4 +22,14 @@ The owner encountered Vercel login protection while opening previews, saw merged
 
 **Lesson:** identify the exact URL/environment and deployed commit first, then inspect observation freshness, source outcomes and migrations. Do not promise that waiting will fix missing data without evidence of a progressing collector. See [operations](operations.md#preview-and-production-diagnosis).
 
+## Daily collectors reporting failed or partial for a month
+
+**Recorded:** October 25, 2026 from read-only production checks. **Status:** causes verified in collector code and run statistics; fixes prepared on `codex/activity-flow-modes`, not yet deployed.
+
+Over the 31 daily runs from September 25 to October 25, 2026, Wikimedia failed on 24, agentwatch failed on 30, and GitHub, Moltbook, OSM, Radar, watched repositories and Wikipedia ended partial on every run. Production also still used the retired 30-minute freshness interval, so the health pill reported stale sources permanently.
+
+Verified causes: Wikimedia's edits metrics API returns 404 for dates not yet loaded because the dataset is published per complete month, and the first 404 aborted the Wikidata and Commons steps. One Cloudflare bot-catalog slug failed a strict pattern and aborted the registry scan. The GitHub time slice allowed about 25 search queries against 38 required ones, so the sample feed never ran and the recent-PR export stayed empty. Moltbook stored exactly 500 posts per run, its page cap, so daily counts were the cap rather than platform volume. OSM sampled the newest 800 changesets, about 90 minutes before each run. Wikipedia's heuristic cursor advanced about one hour per day and sat sixteen days behind. Radar marked every run partial for one publisher-reported non-finite ratio.
+
+**Lesson:** a daily cadence changes what "complete" means for cursor and page-capped collectors. Treat publisher lag, by-design caps and per-series publisher states as recorded coverage, not as run failures, and keep each sub-step's outcome independent. Verify outcome history over weeks, not a single run.
+
 For new incidents, add impact, dated evidence, confirmed cause or explicit unknown, fix/PR, verification and follow-up. Avoid copying raw headers, connection details, mail or credentials.

@@ -9,6 +9,7 @@ import {
   collectorState,
   commonsAiUploads,
   externalSeries,
+  forumDaily,
   forumPosts,
   githubDaily,
   ingestRuns,
@@ -351,7 +352,7 @@ async function queryFlowData(days = 30): Promise<FlowData> {
       d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(wikidataBotEdits.ts)})::int`, latest: sql<Date>`max(${wikidataBotEdits.ts})` }).from(wikidataBotEdits).where(between(wikidataBotEdits.ts)),
       d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(commonsAiUploads.ts)})::int`, latest: sql<Date>`max(${commonsAiUploads.ts})` }).from(commonsAiUploads).where(and(between(commonsAiUploads.ts), sql`${commonsAiUploads.title} like ${"File:%"}`)),
       d.select({ value: sql<number>`coalesce(sum(${osmDaily.aiAssisted}),0)::int`, days: count(), latest: sql<string>`max(${osmDaily.day})` }).from(osmDaily).where(and(gte(osmDaily.day, windowStart), lt(osmDaily.day, windowEnd), eq(osmDaily.collectionVersion, 2))),
-      d.select({ value: count(), days: sql<number>`count(distinct ${dayCol(forumPosts.ts)})::int`, latest: sql<Date>`max(${forumPosts.ts})` }).from(forumPosts).where(between(forumPosts.ts)),
+      d.select({ value: sql<number>`coalesce(sum(${forumDaily.posts}),0)::int`, days: count(), latest: sql<string>`max(${forumDaily.day})` }).from(forumDaily).where(and(gte(forumDaily.day, windowStart), lt(forumDaily.day, windowEnd))),
       d.selectDistinctOn([ingestRuns.source], { source: ingestRuns.source, finishedAt: ingestRuns.finishedAt, ok: ingestRuns.ok, stats: ingestRuns.stats })
         .from(ingestRuns).orderBy(ingestRuns.source, desc(ingestRuns.startedAt)),
     ]);
@@ -387,7 +388,7 @@ async function queryFlowData(days = 30): Promise<FlowData> {
     append(wikidata[0], { id:"wiki:wikidata", label:"Wikidata bots", feed:"wikimedia", unit:"edits", purpose:"Structured-data editing", evidence:"Bot-account activity", method:"Tracked automation includes conventional scripts. Bot status does not establish AI use.", href:"/wikipedia/wikimedia" }, "wikis");
     append(commons[0], { id:"wiki:commons", label:"Commons AI-category files", feed:"wikimedia", unit:"files", purpose:"Media categorization", evidence:"Tracked category additions", method:"Files added to tracked AI categories; not upload counts. Non-file entries are excluded.", href:"/wikipedia/wikimedia" }, "wikis");
     append(maps[0], { id:"maps:ai", label:"AI-assisted map tools", feed:"osm", unit:"changesets", purpose:"Map editing", evidence:"Self-declared editor tags", method:"Collection v2: capped overlapping creation-time samples with persisted deduplication. Historical v1 counts are excluded.", href:"/maps" }, "maps");
-    append(forums[0], { id:"forum:agents", label:"Moltbook reported agents", feed:"moltbook", unit:"posts", purpose:"Forum discussion", evidence:"Platform-reported activity", method:"The platform describes these accounts as agents; this is not independent verification of authorship.", href:"/forums" }, "forums");
+    append(forums[0], { id:"forum:agents", label:"Moltbook reported agents", feed:"moltbook", unit:"posts", purpose:"Forum discussion", evidence:"Platform-reported activity", method:"Daily post counts from walking the platform's public feed; days at the walk's cap are lower bounds. The platform describes these accounts as agents; this is not independent verification of authorship.", href:"/forums" }, "forums");
     return { ...empty, mode: "observed", sources, links, feeds };
   });
 }

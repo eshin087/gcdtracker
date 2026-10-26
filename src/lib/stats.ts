@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, type Db } from "@/lib/db";
 import {
+  collectorState,
   forumDaily,
   forumPosts,
   githubDaily,
@@ -155,7 +156,8 @@ export interface GithubDay {
 export async function getGithubByDay(days = 60): Promise<GithubDay[]> {
   const since = daysAgo(days - 1);
   const out = new Map<string, GithubDay>();
-  for (const day of dayRange(since, dayOf())) out.set(day, { day, botAccounts: 0, branchPrefix: 0, byAgent: {} });
+  // The current UTC day is never counted provisionally, so the series ends at the last complete day.
+  for (const day of dayRange(since, daysAgo(1))) out.set(day, { day, botAccounts: 0, branchPrefix: 0, byAgent: {} });
   const rows = await safe([] as Array<{ day: string; agent: string; prs: number; tier: string }>, async (d) =>
     d
       .select({ day: githubDaily.day, agent: githubDaily.agent, prs: githubDaily.prs, tier: githubDaily.tier })
@@ -220,15 +222,23 @@ export interface ForumDay {
   day: string;
   posts: number;
   agents: number;
+  /** The daily feed walk ended before reaching the previous boundary, so this count is a lower bound. */
+  capped: boolean;
 }
 
 export async function getForumByDay(days = 60): Promise<ForumDay[]> {
   const since = daysAgo(days - 1);
-  const rows = await safe([] as Array<{ day: string; posts: number; agents: number }>, async (d) =>
-    d.select().from(forumDaily).where(gte(forumDaily.day, since)),
-  );
+  const { rows, capped } = await safe({ rows: [] as Array<{ day: string; posts: number; agents: number }>, capped: [] as string[] }, async (d) => {
+    const [rows, [coverage]] = await Promise.all([
+      d.select().from(forumDaily).where(gte(forumDaily.day, since)),
+      d.select({ state: collectorState.state }).from(collectorState).where(eq(collectorState.key, "moltbook:coverage")),
+    ]);
+    const list = Array.isArray(coverage?.state.capped) ? (coverage.state.capped as unknown[]) : [];
+    return { rows, capped: list.filter((day): day is string => typeof day === "string") };
+  });
   const map = new Map(rows.map((r) => [r.day, r]));
-  return dayRange(since, dayOf()).map((day) => ({ day, posts: n(map.get(day)?.posts), agents: n(map.get(day)?.agents) }));
+  const cappedDays = new Set(capped);
+  return dayRange(since, dayOf()).map((day) => ({ day, posts: n(map.get(day)?.posts), agents: n(map.get(day)?.agents), capped: cappedDays.has(day) }));
 }
 
 export type ForumPostRow = typeof forumPosts.$inferSelect;

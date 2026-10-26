@@ -171,6 +171,16 @@ describe("bounded Radar collection", () => {
     upstream.mockResolvedValueOnce(Response.json(purposeBody({ timestamps: [timestamps[0]], TRAINING: [null] })));
     expect(await radarJob(ctx())).toMatchObject({ outcome: "partial", stats: { unavailable: ["crawl-purpose"] } });
   });
+  it("keeps a publisher-reported non-finite ratio as metadata without degrading the outcome", async () => {
+    vi.mocked(readCollectorState).mockImplementation(async (_db, key) => ({ state: key === "radar:crawl-refer" ? {} : fresh, revision: 1 }));
+    vi.mocked(fetchJson).mockResolvedValueOnce({ status: 200, headers: new Headers(), body: { success: true, result: { meta: { ...meta, normalization: "RATIO" }, summary_0: { OpenAI: "12.5", Mistral: "Infinity" } } } });
+    expect(await radarJob(ctx())).toMatchObject({ outcome: "success", stats: { rows: 1, unavailable: [], unavailableSeries: 1 } });
+  });
+  it("still reports a value the publisher left missing as partial coverage", async () => {
+    vi.mocked(readCollectorState).mockImplementation(async (_db, key) => ({ state: key === "radar:crawl-refer" ? {} : fresh, revision: 1 }));
+    vi.mocked(fetchJson).mockResolvedValueOnce({ status: 200, headers: new Headers(), body: { success: true, result: { meta: { ...meta, normalization: "RATIO" }, summary_0: { OpenAI: "12.5", Other: null } } } });
+    expect(await radarJob(ctx())).toMatchObject({ outcome: "partial", stats: { unavailable: ["crawl-refer"], unavailableSeries: 1 } });
+  });
   it("stops before fetching when the shared deadline is nearly exhausted", async () => {
     expect((await radarJob({ ...ctx(), deadline: now.getTime() + 4_000 })).outcome).toBe("partial");
     expect(upstream).not.toHaveBeenCalled();
