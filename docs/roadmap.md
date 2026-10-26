@@ -28,7 +28,7 @@ Vercel Hobby and disabled GitHub Actions were checked on September 11; GitHub Ac
 
 ## R4: Replace the frozen homepage archive figures
 
-**Priority:** next product task. **Status:** diagnosed October 25; no change made.
+**Priority:** next product task. **Status:** implemented on branch `codex/search-homepage-census` on October 26 as GitHub search census v1, not merged or deployed. After deployment the tiles show no value until the first comparable days exist; reference counts backfill at the spare search budget of each daily run, roughly ten days to cover the previous 30.
 
 The three homepage headline tiles and the daily heatmap read GH Archive summaries. The archive worker was retired on September 9, 2026, so the tiles show no value with "0/7 comparable UTC days" and the 2026 heatmap row has 4 validated days out of 298. Decision [D2](decisions.md#d2-preserve-the-distinctive-homepage) keeps the heatmap; its data source is what stopped.
 

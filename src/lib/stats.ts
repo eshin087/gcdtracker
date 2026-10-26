@@ -169,7 +169,8 @@ export async function getGithubByDay(days = 60): Promise<GithubDay[]> {
     if (!row) continue;
     row.byAgent[r.agent] = n(r.prs);
     if (r.tier === "branch-prefix") row.branchPrefix += n(r.prs);
-    else row.botAccounts += n(r.prs);
+    // Text-signature phrase matches are a separate measure and stay out of the bot-account line.
+    else if (r.tier === "bot-account") row.botAccounts += n(r.prs);
   }
   return [...out.values()];
 }

@@ -5,9 +5,10 @@ import type { HomeReportsData } from "@/lib/home-reports";
 
 export function HomeReportHeadlines({ data }: { data: HomeReportsData }) {
   const crawl = data.robots.at(-1);
+  const week = data.searchWeek;
   return <StatTiles tiles={[
-    {value:data.githubWeek.days ? fmtInt(data.githubWeek.agentPrs) : "–",label:"Agent-attributed public PRs, 7-day window",sub:`${data.githubWeek.days}/7 comparable UTC days · GH Archive`},
-    {value:data.githubWeek.prsOpened > 0 ? fmtPct(data.githubWeek.agentPrs/data.githubWeek.prsOpened) : "–",label:"Agent share of observed public PRs",sub:"Same comparable days and detector cohort"},
+    {value:week.days ? fmtInt(week.agentPrs) : "–",label:"Agent-attributed public PRs, 7-day window",sub:week.days ? `${week.days}/7 comparable UTC days · GitHub search v1` : "GitHub search v1 · collecting comparable days"},
+    {value:week.prsOpened > 0 ? fmtPct(week.agentPrs/week.prsOpened) : "–",label:"Agent share of public PRs opened",sub:"Same days · deduplicated detector union"},
     {value:crawl ? fmtInt(crawl.sites) : "–",label:"Hosts in the latest policy sample",sub:crawl ? "Common Crawl · "+fmtDate(crawl.date) : "Corrected v2 sample unavailable"},
   ]}/>;
 }
@@ -19,8 +20,8 @@ export function HomeReports({ data }: { data: HomeReportsData }) {
       <CensusHistory wikimedia={data.wikimedia} github={data.github} robots={data.robots}/>
     </section>
     <section id="activity-heatmap" className="overview-report" aria-labelledby="heatmap-title">
-      <FigureHead id="heatmap-title" title="Agent activity, day by day" sub="A calendar of agent-attributed pull requests in the public GitHub event feed." more={{href:"/github",label:"Full GitHub census →"}}/>
-      <ActivityHeatmap days={data.daily} windowEnd={data.windowEnd}/>
+      <FigureHead id="heatmap-title" title="Agent activity, day by day" sub="A calendar of the agent-attributed share of public GitHub pull requests, by detector version." more={{href:"/github",label:"Full GitHub census →"}}/>
+      <ActivityHeatmap archive={data.daily} search={data.searchDaily} windowEnd={data.windowEnd}/>
     </section>
   </>;
 }

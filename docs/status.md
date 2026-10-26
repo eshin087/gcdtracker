@@ -6,6 +6,8 @@ Verified October 25, 2026 (local date). Recheck deployed revision, source freshn
 
 Collector accuracy fixes are committed (`04e7c74`) and pushed on `codex/activity-flow-modes`, merged with `main` at `847f467`, and open as [PR #12](https://github.com/eshin087/gcdtracker/pull/12) against `main`. They cover Wikimedia metrics lag handling with isolated steps, a time-spread Wikipedia tier-2 sample, tolerant signature-registry slugs, GitHub work ordering without provisional current-day counts, a Moltbook feed walk with durable coverage, Radar partial logic for absent values only, an eight-slot OSM sample, and a rebalanced daily job order. The Forums, Maps and Wikipedia pages describe the sampling. No schema, migration, dependency, scheduler or billing change is involved; `collector_state` gains one key, `moltbook:coverage`. See the [changelog](../CHANGELOG.md) and [data contracts](data-contracts.md).
 
+R4 is implemented on `codex/search-homepage-census` (not merged, not deployed): the homepage tiles and default heatmap source use the GitHub search census v1, the GH Archive history stays as a separately labelled heatmap source, and the collector stores the per-day reference counts. On that branch: lint, TypeScript, 317 unit tests, 44 integration tests on a fresh disposable PostgreSQL and the full 33-test seeded browser suite passed on October 26. See [data contracts](data-contracts.md#github-search-census-version-1).
+
 ## Verified state
 
 | Area | Evidence and limits |

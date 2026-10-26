@@ -102,6 +102,8 @@ test("multi-year census uses lines and mounts only the selected view", async ({ 
 test("heatmap inspects dates with keyboard and separates missing, partial and zero observations", async ({ page }) => {
   await page.goto("/demo",{waitUntil:"networkidle"});
   const heatmap = page.locator("#activity-heatmap");
+  await heatmap.getByLabel("Heatmap source").selectOption("archive");
+  await expect(heatmap.getByRole("group")).toHaveAttribute("aria-label",/GH Archive/);
   await expect(heatmap.locator("svg.heatmap")).toHaveCount(1);
   const selected = heatmap.locator('.cell[tabindex="0"]');
   await selected.focus();
@@ -121,4 +123,20 @@ test("heatmap inspects dates with keyboard and separates missing, partial and ze
   await expect(heatmap.locator(".cell")).toHaveCount(365);
   await heatmap.getByLabel("Heatmap year").selectOption("2026");
   await expect(heatmap.locator(".cell")).toHaveCount(249);
+});
+
+test("heatmap defaults to the labelled GitHub search census and never mixes it with the archive", async ({ page }) => {
+  await page.goto("/demo",{waitUntil:"networkidle"});
+  const heatmap = page.locator("#activity-heatmap");
+  await expect(heatmap.getByLabel("Heatmap source")).toHaveValue("search");
+  await expect(heatmap.getByRole("group")).toHaveAttribute("aria-label",/GitHub search v1/);
+  await expect(heatmap.locator(".report-source")).toContainText("never combined");
+  await heatmap.locator(".cell.observed").last().click();
+  await expect(heatmap.locator(".heatmap-detail")).toContainText("public PRs");
+  await expect(heatmap.locator(".heatmap-detail")).toContainText("16/16 detector counts final");
+  await heatmap.locator(".cell.partial").first().click();
+  await expect(heatmap.locator(".heatmap-detail")).toContainText("Share unavailable");
+  await heatmap.getByLabel("Heatmap source").selectOption("archive");
+  await expect(heatmap.locator(".report-source")).toContainText("retired on 9 September 2026");
+  await expect(page.locator(".tiles .tile").first()).toContainText("GitHub search v1");
 });

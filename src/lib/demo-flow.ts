@@ -40,6 +40,14 @@ const demoStart = Date.UTC(2025,0,1), demoEnd = Date.UTC(2026,8,7);
 export const DEMO_REPORTS: import("./home-reports").HomeReportsData = {
   windowEnd:"2026-09-07",
   githubWeek: {agentPrs: 36420, prsOpened: 620000, days: 7},
+  searchWeek: {agentPrs: 1065400, prsOpened: 7080000, days: 7},
+  searchDaily: Array.from({length:31}, (_,i) => {
+    const day = new Date(Date.UTC(2026,7,7+i)).toISOString().slice(0,10);
+    const partial = i===12 || i===30;
+    const prsOpened = 1_000_000+(i%7>4 ? -180_000 : 20_000)+i*1500;
+    const agentPrs = Math.round(prsOpened*(.13+i*.0012+(i%7>4 ? .02 : 0)));
+    return {day,share:partial ? null : agentPrs/prsOpened,partial,agentPrs:partial ? null : agentPrs,prsOpened:partial ? null : prsOpened,detectorsFinal:partial ? 15 : 16,referencesPresent:partial ? 3 : 4};
+  }),
   github: Array.from({length:44}, (_,i) => ({
     period: new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),
     agentPrs: i<24 ? 0 : Math.round(3000*Math.pow(i-22,1.55)),
