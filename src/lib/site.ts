@@ -24,6 +24,7 @@ export interface NavGroup {
 export type NavEntry = NavLink | NavGroup;
 
 export const SOURCES: NavLink[] = [
+  { href: "/social", label: "Social publishing", blurb: "bounded Bluesky and Mastodon samples, disclosure signals and coverage" },
   { href: "/wikipedia", label: "Wikipedia & Wikimedia", blurb: "edits flagged as AI on Wikipedia; bot volume across Wikimedia; AI-generated media on Commons" },
   { href: "/github", label: "GitHub", blurb: "pull requests by coding agents, watched repositories, self-disclosure signals" },
   { href: "/maps", label: "Maps", blurb: "AI-assisted and bot edits to OpenStreetMap" },

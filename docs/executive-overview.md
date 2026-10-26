@@ -1,6 +1,6 @@
 # gcdTracker: executive overview
 
-Updated September 9, 2026 (Pacific time). GitHub is used only to host source files; GitHub Actions is disabled and no workflow definitions are included.
+Architecture reviewed September 11, 2026. GitHub is used only to host source files; GitHub Actions is disabled and no workflow definitions are included. See the [handbook](index.md) and [dated status](status.md) for operating state, accepted decisions and outstanding work.
 
 ## What the site does
 
@@ -10,7 +10,7 @@ The site does not run AI agents to crawl the whole web, and it does not have a g
 
 The homepage contains the Agents to destinations animation, a multi-year census, a daily GitHub heatmap, and recent public records. The animation illustrates stored observations; its moving dots are not a live stream of internet requests. The left menu navigates between these reports. Traffic is the main crawler-analysis page; the Research menu groups GitHub, Wikipedia, Maps, Forums, Tooling, historical comparisons, and Notes. Data explains collection status and exports; Methods explains evidence and limitations; Saved stores bookmarks in the reader's browser.
 
-Requests to gcdTracker itself are no longer collected as an analytics source. Legacy visitor URLs redirect to Traffic. Old database tables remain so the redesign does not destroy prior history. The `/demo` page uses clearly identified synthetic fixtures; it is not evidence about production activity.
+Requests to gcdTracker itself are no longer collected as an analytics source. Legacy visitor URLs redirect to Traffic. Old database tables remain for compatibility, but some detailed rows expire under the existing [retention policy](data-contracts.md#retention); historical summaries remain separately. The `/demo` page uses clearly identified synthetic fixtures; it is not evidence about production activity.
 
 ## The architecture in one picture
 
@@ -70,7 +70,7 @@ GH Archive, Common Crawl robots census, and ai.robots.txt history no longer have
 
 ## GitHub repository automation
 
-GitHub Actions is disabled. The repository contains no workflow definitions, Actions secrets, Actions variables, caches, or artifacts. Old workflow notification emails describe historical runs and can be ignored. Code validation is run locally, while Vercel continues to build deployments through its separate Git integration.
+GitHub Actions is disabled and the repository contains no workflow definitions. The removal also cleared its Actions secrets, variables, caches and artifacts; current verification is recorded in [status](status.md). If another workflow email arrives, identify its repository and run timestamp before assuming it concerns an active gcdTracker workflow. Code validation is run locally, while Vercel continues to build deployments through its separate Git integration.
 
 ## Code map and data ownership
 
@@ -103,3 +103,9 @@ Priorities are reliable collection and visible coverage, then comparable crawler
 - [Repository](https://github.com/eshin087/gcdtracker), [operating procedures](operations.md), [QA guide](qa.md), [audit](qa-audit.md).
 - Cloudflare documents the [bot catalog](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/list/) and [bot details including signatureAgentUrl](https://developers.cloudflare.com/api/resources/radar/subresources/bots/methods/get/).
 - Cloudflare's [crawler summary API](https://developers.cloudflare.com/api/resources/radar/subresources/bots/subresources/web_crawlers/methods/summary/) and [normalization definitions](https://developers.cloudflare.com/radar/concepts/normalization/) explain why units and observation windows must remain attached to the values.
+
+## Reading versus social publishing
+
+The added Radar purpose report shows the mix of observed AI crawler requests over one normalized source window. Bluesky and Mastodon have a separate publishing report. The daily Vercel job takes a short Bluesky live-feed sample and two public Mastodon timeline snapshots, reduces them in memory, and writes only small aggregate rows plus sampling metadata. There is no continuous stream worker, external queue, media archive or model-inference service.
+
+The new `social_samples` table preserves dated summaries. Existing durable `collector_state` transactions prevent repeated daily attempts and ensure counters commit with completion state. Public queries cache for five minutes and project an explicit nested field allowlist. The first Agents → destinations animation has separate Contributions, Social publishing and Web crawling modes. Social publishing shows each platform's latest sample partitioned into disclosure matches and unclassified posts, with overlapping bot flags in the inspector. Web crawling shows purpose shares on the latest complete common Radar date; it does not identify individual destination sites. The original GitHub heatmap remains, and Traffic retains detailed crawler history. These signals do not establish platform-wide AI authorship or readership.

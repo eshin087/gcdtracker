@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MiniChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, Pagination, Segmented, StatTiles, TierBadge } from "@/components/ui";
 import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
+import { TIER2_SLICES } from "@/lib/ingest/wikipedia";
 import { getOverview, getWikiByDay, getWikiEditors, getWikiEdits, hasDatabase } from "@/lib/stats";
 import { Wikimedia } from "../Wikimedia";
 
@@ -33,7 +34,7 @@ export default async function WikipediaPage({ params }: { params: Promise<{ view
     {
       value: latestTotals ? fmtInt(latestTotals.total) : "–",
       label: "edits per day on enwiki",
-      sub: latestTotals ? `Wikimedia metrics for ${fmtDay(latestTotals.day)} (lags a few days)` : "waiting for Wikimedia metrics",
+      sub: latestTotals ? `Wikimedia metrics for ${fmtDay(latestTotals.day)} (published per complete month)` : "waiting for Wikimedia metrics",
     },
     { value: per10k === null ? "–" : per10k.toFixed(1), label: "flagged per 10,000 edits", sub: latestTotals ? `on ${fmtDay(latestTotals.day)}` : undefined },
     { value: latestTotals?.bot !== null && latestTotals ? fmtInt(latestTotals.bot) : "–", label: "classic bot edits per day", sub: "rule-based bots such as ClueBot; not AI" },
@@ -64,10 +65,14 @@ export default async function WikipediaPage({ params }: { params: Promise<{ view
 }
 
 function ByDay({ byDay, db }: { byDay: Awaited<ReturnType<typeof getWikiByDay>>; db: boolean }) {
-  if (!byDay.some((d) => d.tier1 + d.tier2 > 0 || d.total)) return <Empty db={db}>The Wikipedia poller runs every 30 minutes.</Empty>;
+  if (!byDay.some((d) => d.tier1 + d.tier2 > 0 || d.total)) return <Empty db={db}>The Wikipedia collector runs once a day.</Empty>;
   const days = byDay.map((d) => d.day);
   return (
     <>
+      <p className="meta">
+        Filter-flagged counts cover every tagged edit from the previous 48 hours. Heuristic matches come from {TIER2_SLICES} one-page samples spread across the previous 24 hours, a bounded sample of non-bot edits rather than a scan of every edit.
+        Daily edit totals come from Wikimedia&apos;s metrics dataset, which is published per complete month and lags by several weeks.
+      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24, margin: "0 0 28px" }}>
         <MiniChart days={days} values={byDay.map((d) => d.tier1)} label="Filter-flagged per day" />
         <MiniChart days={days} values={byDay.map((d) => d.tier2)} label="Heuristic matches per day" />

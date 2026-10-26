@@ -1,6 +1,6 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { githubDaily, githubEvents } from "@/lib/db/schema";
-import { dayOf, dayRange, daysAgo } from "@/lib/format";
+import { dayRange, daysAgo } from "@/lib/format";
 import { GITHUB_AGENTS, type GithubAgent } from "@/lib/github/agents";
 import { fetchJson, type Job, type JobContext, sleep, timeLeft } from "./common";
 
@@ -85,7 +85,6 @@ export function canCall(ctx: JobContext): boolean {
 export const githubJob: Job = async (ctx) => {
   const stats: Record<string, unknown> = { queries: 0, backfilled: 0 };
   let partial = false;
-  const today = dayOf();
   const yesterday = daysAgo(1);
 
   const rows = await ctx.db
@@ -94,30 +93,30 @@ export const githubJob: Job = async (ctx) => {
     .where(gte(githubDaily.day, daysAgo(30)));
   const have = new Map(rows.map((r) => [`${r.day}|${r.agent}`, r.final]));
 
-  const work: Array<{ agent: GithubAgent; day: string; final: boolean }> = [];
-  for (const a of GITHUB_AGENTS) if (!have.get(`${yesterday}|${a.key}`)) work.push({ agent: a, day: yesterday, final: true });
-  for (const a of GITHUB_AGENTS) work.push({ agent: a, day: today, final: false });
-  // gradual 30-day backfill, oldest missing first
+  // Required work in priority order: finalize yesterday, take the sample feed, then fill 30-day gaps.
+  // The current UTC day is not counted provisionally; an incomplete day is not an observation.
+  const finals: Array<{ agent: GithubAgent; day: string }> = [];
+  for (const a of GITHUB_AGENTS) if (!have.get(`${yesterday}|${a.key}`)) finals.push({ agent: a, day: yesterday });
+  const backfill: Array<{ agent: GithubAgent; day: string }> = [];
   for (const day of dayRange(daysAgo(30), daysAgo(2))) {
-    for (const a of GITHUB_AGENTS) if (!have.get(`${day}|${a.key}`)) work.push({ agent: a, day, final: true });
+    for (const a of GITHUB_AGENTS) if (!have.get(`${day}|${a.key}`)) backfill.push({ agent: a, day });
   }
 
   try {
-    for (const w of work) {
+    for (const w of finals) {
       if (!canCall(ctx)) {
         partial = true;
         break;
       }
-      await countDay(ctx, w.agent, w.day, w.final);
+      await countDay(ctx, w.agent, w.day, true);
       stats.queries = (stats.queries as number) + 1;
-      if (w.day !== today && w.day !== yesterday) stats.backfilled = (stats.backfilled as number) + 1;
     }
 
-    // Sample feed: one agent per run, rotating every 30 minutes.
-    if (canCall(ctx)) {
-      const idx = Math.floor(Date.now() / 1_800_000) % GITHUB_AGENTS.length;
+    // Sample feed: one agent per run, rotating by UTC day so each agent is sampled in turn.
+    if (!partial && canCall(ctx)) {
+      const idx = Math.floor(Date.now() / 86_400_000) % GITHUB_AGENTS.length;
       const agent = GITHUB_AGENTS[idx];
-      const body = await search(`is:pr ${agent.query}`, { sort: "created", order: "desc", per_page: "20" });
+      const body = await search(`is:pr ${agent.query}`, { sort: "created", order: "desc", per_page: "30" });
       stats.queries = (stats.queries as number) + 1;
       const items = (body.items ?? []).filter((i) => i.id && i.html_url);
       if (items.length > 0) {
@@ -139,6 +138,16 @@ export const githubJob: Job = async (ctx) => {
       stats.sample = `${agent.key}:${items.length}`;
     } else {
       partial = true;
+    }
+
+    for (const w of backfill) {
+      if (partial || !canCall(ctx)) {
+        partial = true;
+        break;
+      }
+      await countDay(ctx, w.agent, w.day, true);
+      stats.queries = (stats.queries as number) + 1;
+      stats.backfilled = (stats.backfilled as number) + 1;
     }
   } catch (err) {
     if (err instanceof RateLimited) {

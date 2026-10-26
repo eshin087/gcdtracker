@@ -10,3 +10,7 @@ describe("Radar labels", () => {
     expect(radarUnit(meta("RAW_VALUES"))).toBe("raw source values");
   });
 });
+
+it("labels the source MIN0_MAX scale as a normalized index", () => {
+  expect(radarUnit(meta("MIN0_MAX"))).toBe("normalized index");
+});

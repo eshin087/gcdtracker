@@ -12,6 +12,7 @@ Environment variables, how collection runs, and the open research questions. Mov
 | `IP_HASH_SECRET` | Dedicated secret for privacy-preserving network identifiers. |
 | `GITHUB_TOKEN` | Public GitHub read/search access and API limits. |
 | `CLOUDFLARE_API_TOKEN` | Optional Radar read access. |
+| `SOCIAL_COLLECTION_ENABLED` | Set to `0` to pause both bounded social collectors; enabled by default. |
 | `NEXT_PUBLIC_SITE_URL` | Canonical site URL. |
 
 Deployment credentials belong in Vercel environment settings. Never commit environment values or put production connections into QA or preview configuration. Without a configured database, the site renders an explicit offline state.

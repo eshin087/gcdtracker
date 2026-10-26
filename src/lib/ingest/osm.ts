@@ -8,7 +8,16 @@ import { advisoryLocks, resultRows } from "./state";
 const API = "https://api.openstreetmap.org/api/0.6/changesets.json";
 export const OSM_COLLECTION_VERSION = 2;
 export const OSM_LOOKBACK_MS = 48 * 3_600_000;
-const MAX_PAGES = 8;
+/** Each daily run takes one page of up to 100 closed changesets from each slot across the lookback window. */
+export const OSM_SLOTS = 8;
+const PAGE_LIMIT = 100;
+
+/** Equal creation-time slots, oldest first, so the capped sample is spread across the window instead of its final minutes. */
+export function osmSlots(until: Date, lookbackMs = OSM_LOOKBACK_MS, slots = OSM_SLOTS): Array<{ from: Date; to: Date }> {
+  const start = until.getTime() - lookbackMs;
+  const width = lookbackMs / slots;
+  return Array.from({ length: slots }, (_, i) => ({ from: new Date(start + i * width), to: i === slots - 1 ? until : new Date(start + (i + 1) * width) }));
+}
 
 export interface Changeset {
   id: number; created_at: string; closed_at?: string; open: boolean;
@@ -74,30 +83,32 @@ export async function commitOsmSamples(db: Db, records: OsmSample[]): Promise<{ 
 export const osmJob: Job = async (ctx) => {
   const until = new Date();
   const from = new Date(until.getTime() - OSM_LOOKBACK_MS);
-  const stats: Record<string, unknown> = { version: 2, windowFrom: from.toISOString(), windowTo: until.toISOString(), pages: 0, observed: 0, inserted: 0, ai: 0, cappedSample: true };
-  let before = until;
+  const stats: Record<string, unknown> = { version: 2, strategy: "time-spread", windowFrom: from.toISOString(), windowTo: until.toISOString(), slots: OSM_SLOTS, slotsSampled: 0, pages: 0, observed: 0, inserted: 0, ai: 0, cappedSample: true };
   const seen = new Set<number>();
-  for (let page = 0; page < MAX_PAGES; page++) {
+  let sampledFrom: number | null = null, sampledTo: number | null = null;
+  for (const slot of osmSlots(until)) {
     if (timeLeft(ctx) < 12_000) return { stats, outcome: "partial" };
-    const qs = new URLSearchParams({ limit: "100", closed: "true", from: from.toISOString(), to: before.toISOString() });
+    const qs = new URLSearchParams({ limit: String(PAGE_LIMIT), closed: "true", from: slot.from.toISOString(), to: slot.to.toISOString() });
     const { status, body } = await fetchJson<{ changesets?: Changeset[] }>(`${API}?${qs}`, {}, Math.min(20_000, timeLeft(ctx) - 3000));
     if (status !== 200 || !Array.isArray(body?.changesets)) throw new Error(`osm changesets ${status}`);
     stats.pages = Number(stats.pages) + 1;
-    if (!body.changesets.length) return { stats, outcome: "success" };
     const records = body.changesets.map((c) => osmSample(c, from, until)).filter((r): r is OsmSample => r !== null).filter((r) => !seen.has(r.id));
     records.forEach((r) => seen.add(r.id));
     const committed = await commitOsmSamples(ctx.db, records);
     stats.observed = Number(stats.observed) + records.length;
     stats.inserted = Number(stats.inserted) + committed.inserted;
     stats.ai = Number(stats.ai) + committed.ai;
-    const oldest = Math.min(...body.changesets.map((c) => Date.parse(c.created_at)));
-    stats.sampledCreationFrom = new Date(oldest).toISOString();
-    if (body.changesets.length < 100) return { stats, outcome: "success" };
-    // Include the boundary instant on the next page. Saturated equal timestamps are
-    // reported as a capped sample instead of silently stepping over unseen rows.
-    const nextBefore = new Date(oldest + 1);
-    if (!records.length || nextBefore >= before) return { stats: { ...stats, boundaryLimited: true }, outcome: "partial" };
-    before = nextBefore;
+    for (const r of records) {
+      const created = Date.parse(r.created_at);
+      sampledFrom = sampledFrom === null ? created : Math.min(sampledFrom, created);
+      sampledTo = sampledTo === null ? created : Math.max(sampledTo, created);
+    }
+    stats.slotsSampled = Number(stats.slotsSampled) + 1;
   }
-  return { stats: { ...stats, pageLimitReached: true }, outcome: "partial" };
+  if (sampledFrom !== null && sampledTo !== null) {
+    stats.sampledCreationFrom = new Date(sampledFrom).toISOString();
+    stats.sampledCreationTo = new Date(sampledTo).toISOString();
+  }
+  // Every slot was sampled: the capped sample is complete by design, not resumable work left undone.
+  return { stats, outcome: "success" };
 };

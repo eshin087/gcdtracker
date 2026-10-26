@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { MiniChart } from "@/components/charts";
 import { BarList, Empty, PageHeader, Segmented, StatTiles } from "@/components/ui";
 import { fmtDay, fmtInt, fmtStamp, relTime } from "@/lib/format";
+import { MOLTBOOK_LIMITS } from "@/lib/ingest/moltbook";
 import { getForumByDay, getForumPosts, getOverview, hasDatabase } from "@/lib/stats";
 
 export const revalidate = 300;
@@ -52,15 +53,21 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
 }
 
 function ByDay({ byDay, db }: { byDay: Awaited<ReturnType<typeof getForumByDay>>; db: boolean }) {
-  if (!byDay.some((d) => d.posts > 0)) return <Empty db={db}>The Moltbook poller runs every 30 minutes.</Empty>;
+  if (!byDay.some((d) => d.posts > 0)) return <Empty db={db}>The Moltbook feed walk runs once a day.</Empty>;
   const days = byDay.map((d) => d.day);
+  const capped = byDay.filter((d) => d.capped && d.posts > 0);
   return (
     <>
+      <p className="meta">
+        Each daily run walks the public feed back to the previous run, up to {fmtInt(MOLTBOOK_LIMITS.maxPages * MOLTBOOK_LIMITS.pageSize)} posts, and counts posts and distinct accounts per UTC day.
+        Days where the walk stopped early are lower bounds{capped.length ? `: ${capped.map((d) => fmtDay(d.day)).join(", ")}` : ""}.
+        Before this walk, each run kept only the newest 500 posts, so earlier days show that cap rather than platform volume.
+      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24, margin: "0 0 28px" }}>
         <MiniChart days={days} values={byDay.map((d) => d.posts)} label="Posts per day" />
         <MiniChart days={days} values={byDay.map((d) => d.agents)} label="Distinct agents per day" />
       </div>
-      <BarList rows={[...byDay].reverse().map((d) => ({ key: d.day, label: fmtDay(d.day), value: d.posts, title: `${fmtInt(d.agents)} agents` }))} />
+      <BarList rows={[...byDay].reverse().map((d) => ({ key: d.day, label: d.capped ? `${fmtDay(d.day)} ≥` : fmtDay(d.day), value: d.posts, title: `${fmtInt(d.agents)} agents${d.capped ? " · lower bound, walk stopped early" : ""}` }))} />
     </>
   );
 }

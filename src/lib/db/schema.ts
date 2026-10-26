@@ -433,3 +433,18 @@ export const ghArchiveCompleted = pgTable("gh_archive_completed", {
   ingestVersion: smallint("ingest_version").notNull(),
   completedAt: ts("completed_at").notNull().defaultNow(),
 });
+
+/** Aggregate-only daily observation samples; these are not full-day platform totals. */
+export const socialSamples = pgTable("social_samples", {
+  platform: text("platform").notNull(),
+  day: day("day").notNull(),
+  collectionVersion: smallint("collection_version").notNull().default(1),
+  startedAt: ts("started_at").notNull(),
+  finishedAt: ts("finished_at").notNull(),
+  sampledPosts: integer("sampled_posts").notNull(),
+  aiDisclosurePosts: integer("ai_disclosure_posts").notNull(),
+  automatedAccountPosts: integer("automated_account_posts").notNull(),
+  scopes: jsonb("scopes").$type<string[]>().notNull(),
+  outcome: text("outcome").notNull(),
+  coverage: jsonb("coverage").$type<Record<string, unknown>>().notNull(),
+}, (t) => [primaryKey({ columns: [t.platform, t.day, t.collectionVersion] }), index("social_samples_day_idx").on(t.day.desc())]);

@@ -15,6 +15,7 @@ async function applyBaseline(pool: Pool) {
 }
 async function applyMigration(pool: Pool) {
   await pool.query(await readFile(MIGRATION, "utf8"));
+  await pool.query(await readFile(path.resolve("drizzle/0002_social_samples.sql"), "utf8"));
 }
 
 async function dataSnapshot(client: Pool) {
@@ -108,12 +109,12 @@ async function migrationCheck(baseUrl: string) {
 
 async function main() {
   const mode = process.argv[2];
-  if (!["init", "migration-check"].includes(mode)) throw new Error("Usage: tsx scripts/qa-database.ts init|migration-check");
+  if (!["init", "migrate", "migration-check"].includes(mode)) throw new Error("Usage: tsx scripts/qa-database.ts init|migrate|migration-check");
   const url = requireQaDatabaseUrl();
   if (mode === "migration-check") return migrationCheck(url);
   const pool = new Pool({ connectionString: url, max: 1 });
   try {
-    await applyBaseline(pool);
+    if (mode === "init") await applyBaseline(pool);
     await applyMigration(pool);
     console.log("Initialized isolated QA schema from the original schema plus additive migration.");
   } finally {

@@ -1,11 +1,12 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { wikiDaily, wikiEdits } from "@/lib/db/schema";
-import { compactDay, daysAgo } from "@/lib/format";
-import { fetchJson, type Job, lastCursor, timeLeft } from "./common";
+import { dayOf } from "@/lib/format";
+import { fetchJson, type Job, timeLeft } from "./common";
+import { fetchEditMetrics, lagDays, METRICS_LAG_PARTIAL_DAYS, metricsWindow, resolveLoadedWindow } from "./wikimedia-metrics";
 
 const WIKI = "en";
 const API = "https://en.wikipedia.org/w/api.php";
-const METRICS = "https://wikimedia.org/api/rest_v1/metrics/edits/aggregate/en.wikipedia";
+const PROJECT = "en.wikipedia";
 const RCPROP = "title|ids|sizes|flags|user|timestamp|comment|tags";
 
 /** First-party change tags that mark suspected AI involvement (verified 2026-09-06). */
@@ -108,6 +109,17 @@ async function upsertEdits(ctx: Parameters<Job>[0], rows: Array<{ rc: RecentChan
   return values.length;
 }
 
+/** Heuristic scanning cannot keep pace with every non-bot edit; it samples fixed slices spread across the previous day. */
+export const TIER2_SLICES = 12;
+export const TIER2_WINDOW_MS = 24 * 3_600_000;
+
+/** Slice start times, oldest first, evenly spaced through the window ending at `now`. */
+export function tier2Slices(now: Date, slices = TIER2_SLICES, windowMs = TIER2_WINDOW_MS): string[] {
+  const start = now.getTime() - windowMs;
+  const width = windowMs / slices;
+  return Array.from({ length: slices }, (_, i) => new Date(start + i * width).toISOString());
+}
+
 export const wikipediaJob: Job = async (ctx) => {
   const stats: Record<string, unknown> = { tier1: 0, tier2: 0, pages: 0 };
   let partial = false;
@@ -133,18 +145,17 @@ export const wikipediaJob: Job = async (ctx) => {
     if (cont) partial = true;
   }
 
-  // Tier 2: heuristic scan of non-bot edits since the cursor.
-  let cursor = await lastCursor(ctx.db, "wikipedia");
-  const minCursor = new Date(Date.now() - 30 * 86_400_000);
-  if (!cursor || new Date(cursor) < minCursor) cursor = new Date(Date.now() - 6 * 3_600_000).toISOString();
-  let cont: string | undefined;
-  let newest = cursor;
-  for (let page = 0; page < 12; page++) {
+  // Tier 2: one page of non-bot edits from each slice of the previous 24 hours. This is a
+  // time-spread sample with explicit coverage, not a continuous scan of every edit.
+  const now = new Date();
+  const slices = tier2Slices(now);
+  let scanned = 0, coveredMs = 0, slicesDone = 0;
+  for (const slice of slices) {
     if (timeLeft(ctx) < 10_000) {
       partial = true;
       break;
     }
-    const body = await rcFetch({ rcdir: "newer", rcstart: cursor, rcshow: "!bot", rctype: "edit|new", ...(cont ? { rccontinue: cont } : {}) });
+    const body = await rcFetch({ rcdir: "newer", rcstart: slice, rcshow: "!bot", rctype: "edit|new" });
     const items = body.query?.recentchanges ?? [];
     const scored: Array<{ rc: RecentChange; score: Score }> = [];
     for (const rc of items) {
@@ -153,49 +164,58 @@ export const wikipediaJob: Job = async (ctx) => {
     }
     stats.tier2 = (stats.tier2 as number) + (await upsertEdits(ctx, scored));
     stats.pages = (stats.pages as number) + 1;
-    const last = items[items.length - 1];
-    if (last && last.timestamp > newest) newest = last.timestamp;
-    cont = body.continue?.rccontinue;
-    if (!cont) break;
+    scanned += items.length;
+    slicesDone++;
+    const first = items[0]?.timestamp, last = items[items.length - 1]?.timestamp;
+    if (first && last) coveredMs += Math.max(0, Date.parse(last) - Date.parse(first));
   }
-  if (cont) partial = true;
-  stats.scannedUntil = newest;
+  stats.tier2Slices = `${slicesDone}/${slices.length}`;
+  stats.tier2Scanned = scanned;
+  stats.tier2Window = { from: new Date(now.getTime() - TIER2_WINDOW_MS).toISOString(), to: now.toISOString() };
+  stats.tier2CoveredMinutes = Math.round(coveredMs / 60_000);
 
-  // Daily totals lag upstream; unavailable components must not erase cached values.
+  // Daily totals come from a monthly-published dataset; a 404 means not loaded yet, not failure.
   if (timeLeft(ctx) > 15_000) {
-    const start = compactDay(daysAgo(12));
-    const end = compactDay(daysAgo(2));
-    const series: Record<string, Map<string, number>> = {};
-    const editors = ["all-editor-types", "group-bot", "anonymous"];
-    for (const editor of editors) {
-      try {
-        const { status, body } = await fetchJson<{ items?: Array<{ results?: Array<{ timestamp: string; edits: number }> }> }>(
-          `${METRICS}/${editor}/all-page-types/daily/${start}/${end}`,
-        );
-        if (status === 404) { partial = true; continue; }
-        const values = body?.items?.[0]?.results;
-        if (status !== 200 || !Array.isArray(values)) throw new Error(`metrics ${editor} ${status}: missing results`);
-        const map = new Map<string, number>();
-        for (const value of values) {
-          if (typeof value?.timestamp !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value.timestamp) || !Number.isFinite(value.edits) || value.edits < 0) throw new Error(`metrics ${editor}: invalid observation`);
-          map.set(value.timestamp.slice(0, 10), value.edits);
-        }
-        if (map.size === 0) partial = true;
-        series[editor] = map;
-      } catch (error) {
-        failed.push(editor);
-        stats[editor] = (error instanceof Error ? error.message : String(error)).slice(0, 160);
-      }
-    }
+    const today = dayOf();
+    const [stored] = await ctx.db.select({ day: sql<string | null>`max(${wikiDaily.day})` }).from(wikiDaily).where(eq(wikiDaily.wiki, WIKI));
+    const loadedThrough = stored?.day ? String(stored.day).slice(0, 10) : null;
+    const window = metricsWindow(loadedThrough, today);
+    stats.metricsLoadedThrough = loadedThrough;
     let updated = 0;
-    if (editors.every((editor) => series[editor])) {
-      const days = new Set(editors.flatMap((editor) => [...series[editor].keys()]));
-      for (const day of days) {
-        if (editors.some((editor) => !series[editor].has(day))) { partial = true; continue; }
-        await ctx.db.insert(wikiDaily).values({
-          day, wiki: WIKI, total: series["all-editor-types"].get(day)!, bot: series["group-bot"].get(day)!, anon: series["anonymous"].get(day)!,
-        }).onConflictDoUpdate({ target: [wikiDaily.day, wikiDaily.wiki], set: { total: sql`excluded.total`, bot: sql`excluded.bot`, anon: sql`excluded.anon` } });
-        updated++;
+    if (!window) {
+      stats.metricsUpToDate = true;
+    } else {
+      try {
+        const resolved = await resolveLoadedWindow(PROJECT, "all-editor-types", window);
+        if (!resolved) {
+          const lag = lagDays(loadedThrough, today);
+          stats.metricsUpstreamLag = true;
+          stats.metricsLagDays = lag;
+          if (lag === null || lag > METRICS_LAG_PARTIAL_DAYS) partial = true;
+        } else {
+          const series: Record<string, Map<string, number>> = { "all-editor-types": resolved.first };
+          for (const editor of ["group-bot", "anonymous"]) {
+            const result = await fetchEditMetrics(PROJECT, editor, window.start, resolved.end);
+            if (result === "not-loaded") { partial = true; continue; }
+            series[editor] = result;
+          }
+          const editors = ["all-editor-types", "group-bot", "anonymous"];
+          if (editors.every((editor) => series[editor])) {
+            const days = new Set(editors.flatMap((editor) => [...series[editor].keys()]));
+            if (!days.size) partial = true;
+            for (const day of [...days].sort()) {
+              if (editors.some((editor) => !series[editor].has(day))) { partial = true; continue; }
+              await ctx.db.insert(wikiDaily).values({
+                day, wiki: WIKI, total: series["all-editor-types"].get(day)!, bot: series["group-bot"].get(day)!, anon: series["anonymous"].get(day)!,
+              }).onConflictDoUpdate({ target: [wikiDaily.day, wikiDaily.wiki], set: { total: sql`excluded.total`, bot: sql`excluded.bot`, anon: sql`excluded.anon` } });
+              updated++;
+            }
+          }
+          stats.metricsLoadedEnd = resolved.end;
+        }
+      } catch (error) {
+        failed.push("metrics");
+        stats.metrics = (error instanceof Error ? error.message : String(error)).slice(0, 160);
       }
     }
     stats.metricsDays = updated;
@@ -203,5 +223,5 @@ export const wikipediaJob: Job = async (ctx) => {
     partial = true;
   }
   stats.failed = failed;
-  return { stats, cursor: newest, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
+  return { stats, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

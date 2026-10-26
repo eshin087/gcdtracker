@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { Db } from "@/lib/db";
-import { commitOsmSamples, osmPageStatements, osmSample, type Changeset } from "./osm";
+import { commitOsmSamples, OSM_LOOKBACK_MS, osmPageStatements, osmSample, osmSlots, type Changeset } from "./osm";
 
 const from = new Date("2026-09-05T12:00:00Z"), to = new Date("2026-09-07T12:00:00Z");
 const changeset: Changeset = { id: 42, created_at: "2026-09-06T11:00:00Z", closed_at: "2026-09-07T10:00:00Z", open: false, tags: { created_by: "Rapid 2.0" } };
@@ -39,5 +39,14 @@ describe("OSM bounded samples", () => {
     const dialect = new PgDialect();
     expect(dialect.sqlToQuery(statements[0]).params).toContain("2026-09-06");
     expect(dialect.sqlToQuery(statements[1]).params).toContain("2026-09-07");
+  });
+  it("spreads the capped sample across equal creation-time slots covering the whole window", () => {
+    const until = new Date("2026-10-25T03:47:11.032Z");
+    const slots = osmSlots(until);
+    expect(slots).toHaveLength(8);
+    expect(slots[0].from.toISOString()).toBe(new Date(until.getTime() - OSM_LOOKBACK_MS).toISOString());
+    expect(slots.at(-1)!.to).toBe(until);
+    for (let i = 1; i < slots.length; i++) expect(slots[i].from.getTime()).toBe(slots[i - 1].to.getTime());
+    expect(new Set(slots.map((s) => s.to.getTime() - s.from.getTime())).size).toBe(1);
   });
 });

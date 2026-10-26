@@ -4,7 +4,6 @@ import { externalSeries, wikiDaily } from "@/lib/db/schema";
 import { AGENT_WATCH, agentWatchJob } from "./agentwatch";
 import { botcommitsJob } from "./botcommits";
 import { ipRangesJob, parsePrefixes } from "./ipranges";
-import { moltbookJob } from "./moltbook";
 import { wikipediaJob } from "./wikipedia";
 
 const registry = vi.hoisted(() => vi.fn());
@@ -136,20 +135,6 @@ describe("Wikipedia source outcomes", () => {
 });
 
 describe("remaining enabled feeds", () => {
-  it("rejects a Moltbook success:false payload", async () => {
-    mocked.fetchJson.mockResolvedValue(response({ success: false, posts: [] }));
-    await expect(moltbookJob(fixture().ctx)).rejects.toThrow("invalid or failed");
-  });
-  it("does not claim completion after a filtered page with more upstream data", async () => {
-    mocked.fetchJson.mockResolvedValue(response({ success: true, posts: [], has_more: true, next_cursor: "next" }));
-    expect((await moltbookJob(fixture().ctx)).outcome).toBe("partial");
-  });
-  it("marks the Moltbook page cap partial", async () => {
-    let page = 0;
-    mocked.fetchJson.mockImplementation(async () => response({ success: true, posts: [{ id: String(++page), title: "Post", created_at: new Date().toISOString() }], has_more: true, next_cursor: String(page) }));
-    expect((await moltbookJob(fixture().ctx)).outcome).toBe("partial");
-    expect(page).toBe(10);
-  });
   it.each([{}, { labels: [], tools: {} }, { labels: ["2026-01"], tools: { claude: ["oops"] } }, { labels: ["2026-01"], tools: { claude: [null] } }])("retains botcommits history for malformed/empty payloads", async (body) => {
     const f = fixture();
     mocked.fetchJson.mockResolvedValue(response(body));

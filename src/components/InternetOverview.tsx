@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { AgentFlow } from "./AgentFlow";
+import type { ReadingSnapshot } from "@/lib/reading-report";
+import type { SocialReportData } from "@/lib/social-report";
+import { ActivityFlow } from "./ActivityFlow";
+import { readingFlow, socialFlow } from "@/lib/flow-observatory";
 import { HomeReportHeadlines, HomeReports } from "./HomeReports";
 import { FigureHead } from "./ui";
 import { Rail, type RailItem } from "./Rail";
@@ -13,7 +16,7 @@ const SECTIONS: RailItem[] = [
   {id:"overview",title:"Overview"},{id:"flow",title:"Agents → destinations"},
   {id:"census",title:"The census"},{id:"activity-heatmap",title:"Daily heatmap"},{id:"latest",title:"Latest records"},
 ];
-export function InternetOverview({ flow, records, reports, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; demo?:boolean }) {
+export function InternetOverview({ flow, records, reports, reading, social, demo = false }: { flow:FlowData; records:LatestRecord[]; reports:HomeReportsData; reading:ReadingSnapshot; social:SocialReportData; demo?:boolean }) {
   return <div className="shell with-rail home-report">
     <Rail items={SECTIONS}/>
     <article className="overview-content">
@@ -27,8 +30,8 @@ export function InternetOverview({ flow, records, reports, demo = false }: { flo
       </section>
       <HomeReportHeadlines data={reports}/>
       <section id="flow" className="overview-report" aria-labelledby="agents-destinations">
-        <FigureHead id="agents-destinations" title="Agents → destinations" sub="Recorded contributions across code repositories, encyclopedias, maps and forums."/>
-        <AgentFlow data={flow} records={records}/>
+        <FigureHead id="agents-destinations" title="Agents → destinations" sub="Explore contributions, social publishing and web crawling, each with its own evidence and scale."/>
+        <ActivityFlow data={flow} records={records} reading={readingFlow(reading, flow.mode)} social={socialFlow(social)}/>
       </section>
       <HomeReports data={reports}/>
       <section id="latest" className="overview-report" aria-labelledby="latest-evidence">

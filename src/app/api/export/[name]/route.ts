@@ -6,6 +6,7 @@ import { exportColumns } from "@/lib/export-columns";
 import { visitEvidenceColumns, publicVisit, visitCsvRow, VISIT_CSV_COLUMNS, guestbookEvidenceColumns, publicGuestbookNote, guestbookJson } from "@/lib/public-evidence";
 import { db } from "@/lib/db";
 import { RADAR_SOURCE } from "@/lib/ingest/radar";
+import { getSocialReport } from "@/lib/stats-social";
 import { getRadarSnapshot } from "@/lib/stats-sources";
 import { forumDaily, ghArchiveDaily, githubDaily, githubEvents, guestbookNotes, osmChangesets, trafficDaily, watchedPrs, watchedSignals, mcpServers, externalSeries, agentSightings, visits, wikiEdits } from "@/lib/db/schema";
 
@@ -77,6 +78,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ name: s
     case "gh_archive_daily.csv": {
       const rows = await db.select(exportColumns.ghArchiveDaily).from(ghArchiveDaily).orderBy(desc(ghArchiveDaily.day), ghArchiveDaily.kind, ghArchiveDaily.key).limit(LIMIT);
       return csv(name, toCsv(rows, Object.keys(exportColumns.ghArchiveDaily)));
+    }
+    case "social_samples.json": {
+      const report = await getSocialReport();
+      if (report.mode === "unavailable") return NextResponse.json({ok:false,reason:"social-observations-unavailable"},{status:503});
+      return NextResponse.json({ ...report, methodology: "Bounded daily samples; text signals are unverified. Bot flags are not necessarily AI. No platform-wide extrapolation." }, { headers:CACHE });
     }
     case "radar.json": {
       const { series, metadata } = await getRadarSnapshot();

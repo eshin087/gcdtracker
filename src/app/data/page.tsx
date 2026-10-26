@@ -17,6 +17,7 @@ export default async function DataPage() {
   const [counts, runs] = await Promise.all([getTableCounts(), getIngestStatus()]);
 
   const files = [
+    { name: "social_samples.json", href: "/api/export/social_samples.json", rows: null, desc: "last 28 UTC sample dates from Bluesky and Mastodon, aggregate counts and sampling coverage; no raw posts" },
     { name: "wiki_edits.csv", href: "/api/export/wiki_edits.csv", rows: counts.wikiEdits, desc: "flagged Wikipedia edits with tier, signals, tags and diff links" },
     { name: "github_daily.csv", href: "/api/export/github_daily.csv", rows: counts.githubDaily, desc: "pull requests per day per coding agent, with the counting method" },
     { name: "github_events.csv", href: "/api/export/github_events.csv", rows: counts.githubEvents, desc: "sample of recent agent pull requests" },
@@ -106,7 +107,7 @@ export default async function DataPage() {
                     <code>{r.source}</code>
                   </td>
                   <td>{fmtStamp(r.startedAt)}</td>
-                  <td>{health ? `${health.outcome}${health.stale ? " · stale" : ""}` : "running or interrupted"}</td>
+                  <td>{health ? `${health.outcome}${health.schedule === "unscheduled" ? " · unscheduled" : health.stale ? " · stale" : ""}` : "running or interrupted"}</td>
                   <td>
                     {r.finishedAt ? fmtStamp(r.finishedAt) : "No completion recorded"}
                   </td>

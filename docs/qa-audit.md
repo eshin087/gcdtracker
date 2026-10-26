@@ -1,5 +1,7 @@
 # QA and hardening audit — 2026-09-07
 
+> Historical audit for the revision named below. Later owner decisions restored the homepage animation, multi-year lines and heatmap, retired local visitor dashboards, and removed GitHub Actions. The measurements and test counts here are not current-release measurements. See [status](status.md) and [accepted decisions](decisions.md) before using the recommendations.
+
 Scope: implement the approved traffic-first QA plan on `codex/qa-hardening`, targeting `main` at `8822e28f3950f8eb9e342c1989b3bf3bbd485e5b`. No production migration, merge or deployment was performed.
 
 ## Confirmed findings and changes

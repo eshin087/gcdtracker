@@ -36,6 +36,7 @@ export function MultiLine({
   annotations = [],
   labelWidth = 128,
   showPoints = true,
+  shortAxis = false,
 }: {
   series: LineSeries[];
   format?: (v: number) => string;
@@ -47,6 +48,8 @@ export function MultiLine({
   labelWidth?: number;
   /** Long homepage histories use paths plus end labels without a DOM node per point. */
   showPoints?: boolean;
+  /** Label month/day for short snapshots without changing historical chart axes. */
+  shortAxis?: boolean;
 }) {
   const W = 760;
   const H = height;
@@ -122,8 +125,9 @@ export function MultiLine({
         );
       })}
       <text x={padL} y={H - 8} textAnchor="start">
-        {fmtYear(x0)}
+        {shortAxis ? new Date(x0).toISOString().slice(5,10) : fmtYear(x0)}
       </text>
+      {shortAxis ? <text x={W-padR} y={H-8} textAnchor="end">{new Date(x1).toISOString().slice(5,10)}</text> : null}
       <line className="axis" x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} />
       {visibleAnnotations.map((a) => (
           <g className="annot" key={`${a.day}-${a.label}`}>

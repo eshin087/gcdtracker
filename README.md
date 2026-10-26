@@ -16,7 +16,8 @@ Everyone has an opinion on how much of the web is bots now, and almost nobody sh
 
 | Area | Evidence |
 |---|---|
-| Traffic | Cloudflare Radar snapshots and sampled robots.txt policy |
+| Traffic | Cloudflare Radar snapshots, AI crawler-purpose shares and sampled robots.txt policy |
+| Social publishing | Bounded Bluesky and Mastodon samples, disclosure text signals, separate automation flags and coverage |
 | GitHub | GH Archive observations, documented bot accounts, branch-name signals, watched repositories |
 | Wikipedia and Commons | Platform filters, disclosed heuristics, bot activity, files added to tracked AI categories |
 | Maps | Capped overlapping OSM creation-time samples with deduplication |
@@ -28,7 +29,7 @@ The census view puts multi-year series side by side, such as Wikipedia pageviews
 
 <a href="https://gcdtracker.vercel.app"><img src="docs/media/census.webp" alt="Line chart of monthly Wikimedia pageviews from 2015 to 2026, split into user-classified, automated and spider traffic, with ChatGPT and GPTBot launch dates marked" width="100%"></a>
 
-A claimed crawler name, branch prefix, edit filter or platform assertion does not prove model authorship. Public HTML, JSON and CSV use explicit field allowlists; raw IP addresses are never persisted, and saved bookmarks stay in the reader's browser.
+A claimed crawler name, branch prefix, edit filter or platform assertion does not prove model authorship. Public HTML, JSON and CSV use explicit field allowlists; raw IP addresses are never persisted, and saved bookmarks stay in the reader's browser. Local visitor tracking is retired; historical summaries remain available, and some detailed records expire under the [retention policy](docs/data-contracts.md#retention).
 
 **Tech:** Next.js 16, React 19, TypeScript, Tailwind 4, Drizzle with Neon, Vercel.
 
@@ -49,6 +50,7 @@ Without a configured database, the site renders an explicit offline state.
 
 - [Configuration and collection](docs/configuration.md): environment variables, how the daily collector runs, and the next research priorities.
 - [Executive overview](docs/executive-overview.md): a guided explanation of the system.
+- [Project handbook](docs/index.md), [verified status](docs/status.md) and [accepted decisions](docs/decisions.md): where the project stands and why. [AGENTS.md](AGENTS.md) routes coding agents to four project skills for catch-up, data quality, release QA and cost control; these files are maintained during project work and run no background automation.
 - [Operations](docs/operations.md), [QA setup](docs/qa.md), [audit and results](docs/qa-audit.md), [public interface changes](CHANGELOG.md).
 
 ## Licences
