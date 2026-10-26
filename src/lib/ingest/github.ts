@@ -1,7 +1,8 @@
 import { and, eq, gte, sql } from "drizzle-orm";
-import { githubDaily, githubEvents } from "@/lib/db/schema";
+import { externalSeries, githubDaily, githubEvents } from "@/lib/db/schema";
 import { dayRange, daysAgo } from "@/lib/format";
 import { GITHUB_AGENTS, type GithubAgent } from "@/lib/github/agents";
+import { SEARCH_CENSUS_SOURCE, SEARCH_REFERENCES, type SearchReference } from "@/lib/github/search-census";
 import { fetchJson, type Job, type JobContext, sleep, timeLeft } from "./common";
 
 const SEARCH = "https://api.github.com/search/issues";
@@ -77,6 +78,30 @@ async function countDay(ctx: JobContext, agent: GithubAgent, day: string, final:
   return prs;
 }
 
+/** One finalized reference count for the search census (denominator or overlap), stored per UTC day. */
+async function countReference(ctx: JobContext, ref: SearchReference, day: string): Promise<void> {
+  const body = await search(`is:pr created:${day} ${ref.query}`.trim());
+  await ctx.db
+    .insert(externalSeries)
+    .values({ source: SEARCH_CENSUS_SOURCE, series: ref.series, period: day, value: body.total_count!, lo: null, hi: null })
+    .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, fetchedAt: new Date() } });
+}
+
+/**
+ * Missing reference counts in priority order: days that already have some references first
+ * (closest to comparable), then yesterday, then the remaining days oldest first.
+ */
+export function searchReferenceWork(days: string[], yesterday: string, have: Set<string>): Array<{ ref: SearchReference; day: string }> {
+  const rank = (day: string) => {
+    const present = SEARCH_REFERENCES.filter((r) => have.has(`${day}|${r.series}`)).length;
+    return present > 0 ? 0 : day === yesterday ? 1 : 2;
+  };
+  return days
+    .filter((day) => SEARCH_REFERENCES.some((r) => !have.has(`${day}|${r.series}`)))
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .flatMap((day) => SEARCH_REFERENCES.filter((r) => !have.has(`${day}|${r.series}`)).map((ref) => ({ ref, day })));
+}
+
 /** Budget-aware: returns false when the deadline is too close for another paced call. */
 export function canCall(ctx: JobContext): boolean {
   return timeLeft(ctx) > gapMs() + 22_000;
@@ -92,6 +117,11 @@ export const githubJob: Job = async (ctx) => {
     .from(githubDaily)
     .where(gte(githubDaily.day, daysAgo(30)));
   const have = new Map(rows.map((r) => [`${r.day}|${r.agent}`, r.final]));
+  const refRows = await ctx.db
+    .select({ period: externalSeries.period, series: externalSeries.series })
+    .from(externalSeries)
+    .where(and(eq(externalSeries.source, SEARCH_CENSUS_SOURCE), gte(externalSeries.period, daysAgo(30))));
+  const haveRef = new Set(refRows.map((r) => `${r.period}|${r.series}`));
 
   // Required work in priority order: finalize yesterday, take the sample feed, then fill 30-day gaps.
   // The current UTC day is not counted provisionally; an incomplete day is not an observation.
@@ -101,6 +131,7 @@ export const githubJob: Job = async (ctx) => {
   for (const day of dayRange(daysAgo(30), daysAgo(2))) {
     for (const a of GITHUB_AGENTS) if (!have.get(`${day}|${a.key}`)) backfill.push({ agent: a, day });
   }
+  const refWork = searchReferenceWork(dayRange(daysAgo(30), yesterday), yesterday, haveRef);
 
   try {
     for (const w of finals) {
@@ -111,6 +142,20 @@ export const githubJob: Job = async (ctx) => {
       await countDay(ctx, w.agent, w.day, true);
       stats.queries = (stats.queries as number) + 1;
     }
+
+    // Reference counts, finishing days that already have some before starting new ones, so a
+    // short slice still converges instead of restarting yesterday's set every run.
+    let refsDone = 0;
+    for (const w of refWork) {
+      if (!canCall(ctx)) {
+        partial = true;
+        break;
+      }
+      await countReference(ctx, w.ref, w.day);
+      stats.queries = (stats.queries as number) + 1;
+      refsDone++;
+    }
+    stats.references = `${refsDone}/${refWork.length}`;
 
     // Sample feed: one agent per run, rotating by UTC day so each agent is sampled in turn.
     if (!partial && canCall(ctx)) {

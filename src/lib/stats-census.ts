@@ -2,7 +2,8 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, type Db } from "@/lib/db";
 import { resultRows } from "./ingest/state";
 import { calendarWindow, dateBefore, isUtcDay } from "./ingest/windows";
-import { daysAgo } from "@/lib/format";
+import { dayRange, daysAgo } from "@/lib/format";
+import { foldSearchDays, SEARCH_CENSUS_SOURCE, SEARCH_DETECTOR_KEYS, type SearchDay } from "@/lib/github/search-census";
 import { PACKAGES, type TrackedPackage } from "@/lib/ingest/packages";
 import { ROBOTS_TOKENS } from "@/lib/robots/tokens";
 import { getSeries, type SeriesPoint } from "@/lib/stats-sources";
@@ -259,6 +260,33 @@ export interface RobotsCrawl {
   sites: number;
   files: number;
   tokens: Record<string, { mentioned: number; blocked: number }>;
+}
+
+/* ------------------------------------------------------------------ */
+/* GitHub search census (version 1)                                   */
+/* ------------------------------------------------------------------ */
+
+/** Every completed UTC day from the first stored detector count, folded into comparable search-census days. */
+export async function getSearchCensusDays(today = daysAgo(0)): Promise<SearchDay[]> {
+  return safe([] as SearchDay[], (d) => querySearchCensusDays(d, today));
+}
+
+export async function querySearchCensusDays(d: Db, today: string): Promise<SearchDay[]> {
+  {
+    const keys = sql.join(SEARCH_DETECTOR_KEYS.map((k) => sql`${k}`), sql`, `);
+    const [detectors, references] = await Promise.all([
+      d.execute(sql`select day::text as day, agent, prs, final from github_daily where agent in (${keys}) and day < ${today}::date`),
+      d.execute(sql`select period, series, value from external_series where source = ${SEARCH_CENSUS_SOURCE}`),
+    ]);
+    const detectorRows = resultRows<{ day: string; agent: string; prs: number | string; final: boolean }>(detectors)
+      .map((r) => ({ day: String(r.day).slice(0, 10), agent: r.agent, prs: n(r.prs), final: r.final === true }));
+    const referenceRows = resultRows<{ period: string; series: string; value: number | string }>(references)
+      .map((r) => ({ period: String(r.period), series: r.series, value: n(r.value) }));
+    const first = detectorRows.map((r) => r.day).sort()[0];
+    const last = daysAgo(1, new Date(today + "T00:00:00Z"));
+    if (!first || first > last) return [];
+    return foldSearchDays(dayRange(first, last), detectorRows, referenceRows);
+  }
 }
 
 export async function getRobotsCensus(): Promise<RobotsCrawl[]> {

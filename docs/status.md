@@ -6,6 +6,8 @@ Verified October 26, 2026, 06:50 UTC. Recheck deployed revision, source freshnes
 
 Released October 26, 2026: [PR #12](https://github.com/eshin087/gcdtracker/pull/12) merged into `main` as `068098d` at 06:46 UTC, carrying the handbook, the Radar purpose and social reports, the three-mode activity flow and the October 25 collector fixes (`04e7c74`). Migration 0002 was applied to production at 06:46 UTC, immediately before the merge. `collector_state` gains one key, `moltbook:coverage`, at the first post-release run. See the [changelog](../CHANGELOG.md) and [data contracts](data-contracts.md).
 
+R4 ([PR #14](https://github.com/eshin087/gcdtracker/pull/14), merged October 26 after docs PR #13) feeds the homepage tiles and the default heatmap source from the GitHub search census v1 and keeps the GH Archive history as a separately labelled heatmap source; the collector stores seven reference counts per finalized day. The tiles show no value until the first daily run after deployment finalizes a day; the 30-day history fills with spare search budget over several weeks. Checks on the merged revision: lint, TypeScript, 319 unit tests and 44 integration tests on a disposable PostgreSQL; the 33-test seeded browser suite passed on the first revision of the branch. See [data contracts](data-contracts.md#github-search-census-version-1).
+
 ## Verified state
 
 | Area | Evidence and limits |

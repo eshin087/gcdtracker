@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { completedMonths, queryHomeReports } from "./home-reports";
-import { getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getRobotsCensus, type ArchivePeriod } from "./stats-census";
+import { getArchiveMonthly, getArchiveShareByDay, getArchiveSummary, getRobotsCensus, getSearchCensusDays, type ArchivePeriod } from "./stats-census";
 import { getSeries } from "./stats-sources";
 
 vi.mock("./stats-census", async importOriginal => ({
   ...await importOriginal<typeof import("./stats-census")>(),
-  getArchiveMonthly:vi.fn(),getArchiveShareByDay:vi.fn(),getArchiveSummary:vi.fn(),getRobotsCensus:vi.fn(),
+  getArchiveMonthly:vi.fn(),getArchiveShareByDay:vi.fn(),getArchiveSummary:vi.fn(),getRobotsCensus:vi.fn(),getSearchCensusDays:vi.fn(async () => []),
 }));
 vi.mock("./stats-sources", () => ({getSeries:vi.fn()}));
 vi.mock("./db", () => ({db:null}));
@@ -36,6 +36,13 @@ describe("multi-year homepage measurements", () => {
       expect(legacy.wikimedia.at(-1)).toEqual({month:"2026-08",human:null,spider:null,automated:null});
       expect(legacy.daily).toHaveLength(1);
       expect(legacy.daily[0]).toMatchObject({day:"2026-09-06",share:0});
+      expect(legacy.searchWeek).toEqual({agentPrs:0,prsOpened:0,days:0});
+      expect(legacy.searchDaily).toEqual([]);
+      const searchDay = {day:"2026-09-03",agentPrs:300,prsOpened:1000,share:.3,partial:false,detectorsFinal:16,referencesPresent:4};
+      vi.mocked(getSearchCensusDays).mockResolvedValue([{...searchDay,day:"2026-08-30"},searchDay,{...searchDay,day:"2026-09-04",agentPrs:null,prsOpened:null,share:null,partial:true,detectorsFinal:15}]);
+      const withSearch = await queryHomeReports();
+      expect(withSearch.searchWeek).toEqual({agentPrs:300,prsOpened:1000,days:1});
+      expect(withSearch.searchDaily).toHaveLength(3);
       vi.mocked(getArchiveMonthly).mockResolvedValue([{...month,validatedHours:744}]);
       expect((await queryHomeReports()).github[0]).toMatchObject({share:5,partial:false});
     } finally {vi.useRealTimers();}
