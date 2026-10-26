@@ -46,7 +46,7 @@ export const DEMO_REPORTS: import("./home-reports").HomeReportsData = {
     const partial = i===12 || i===30;
     const prsOpened = 1_000_000+(i%7>4 ? -180_000 : 20_000)+i*1500;
     const agentPrs = Math.round(prsOpened*(.13+i*.0012+(i%7>4 ? .02 : 0)));
-    return {day,share:partial ? null : agentPrs/prsOpened,partial,agentPrs:partial ? null : agentPrs,prsOpened:partial ? null : prsOpened,detectorsFinal:partial ? 15 : 16,referencesPresent:partial ? 3 : 4};
+    return {day,share:partial ? null : agentPrs/prsOpened,partial,agentPrs:partial ? null : agentPrs,prsOpened:partial ? null : prsOpened,detectorsFinal:partial ? 15 : 16,referencesPresent:partial ? 6 : 7};
   }),
   github: Array.from({length:44}, (_,i) => ({
     period: new Date(Date.UTC(2023,i,1)).toISOString().slice(0,7),

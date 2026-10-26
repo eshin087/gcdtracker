@@ -4,7 +4,7 @@
 
 - The homepage headline tiles now report a GitHub search census (version 1): the deduplicated union of 16 tracked agent detectors per completed UTC day and its share of all public PRs opened that day, with the comparable-day count shown. They no longer show the GH Archive figures frozen since 9 September 2026.
 - The daily heatmap has a source selector. GitHub search v1 is the default when it has comparable days; GH Archive remains available as labelled history to 9 September 2026. Each source keeps its own color scale and the two are never combined.
-- The GitHub collector stores four reference counts per finalized day (all PRs opened plus three measured overlaps) in `external_series` source `github-search`, and backfills them for the previous 30 days alongside detector gaps.
+- The GitHub collector stores seven reference counts per finalized day in `external_series` source `github-search`: all PRs opened, plus each tracked branch prefix's PRs by any tracked bot account in two disjoint query chunks. Partially collected days are completed first, then yesterday, then the remaining previous 30 days.
 - The `/github` "Search API by day" bot-account line no longer includes text-signature phrase matches.
 
 ## Unreleased - Collector accuracy and outcome fixes

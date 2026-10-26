@@ -5,10 +5,12 @@ import { GITHUB_AGENTS } from "./agents";
  * tracked agent detectors, with all public PRs opened that day as the denominator.
  *
  * Bot-account detectors cannot overlap each other (a PR has one author) and branch-prefix
- * detectors cannot overlap each other (a PR has one head branch). The only cross-group
- * overlaps are agent apps that open branches under a tracked prefix; those are counted
- * directly and subtracted. This is a different detector from the GH Archive census and is
- * never spliced into that history.
+ * detectors cannot overlap each other (a PR has one head branch). Every cross-group
+ * intersection is measured directly: for each tracked prefix, the PRs authored by any tracked
+ * bot account, using repeated `author:` qualifiers (which GitHub search combines with OR)
+ * packed into chunks under the 256-character query limit. Chunks are disjoint, so their sum is
+ * the exact overlap. This is a different detector from the GH Archive census and is never
+ * spliced into that history.
  */
 export const SEARCH_CENSUS_VERSION = 1;
 export const SEARCH_CENSUS_SOURCE = "github-search";
@@ -16,12 +18,32 @@ export const SEARCH_TOTAL_SERIES = "prs-opened";
 
 export interface SearchReference { series: string; query: string; label: string }
 
+/** GitHub search rejects longer queries; the longest prefix base is `is:pr created:YYYY-MM-DD head:cursor/ `. */
+export const SEARCH_QUERY_LIMIT = 256;
+const QUERY_BASE_ALLOWANCE = "is:pr created:2026-01-01 ".length;
+
+/** Packs bot-account qualifiers into disjoint chunks that keep each overlap query under the limit. */
+export function botAuthorChunks(prefixQualifier: string, limit = SEARCH_QUERY_LIMIT): string[][] {
+  const authors = GITHUB_AGENTS.filter((a) => a.tier === "bot-account").map((a) => a.query);
+  const room = limit - QUERY_BASE_ALLOWANCE - prefixQualifier.length - 1;
+  const chunks: string[][] = [];
+  for (const author of authors) {
+    const current = chunks.at(-1);
+    if (current && [...current, author].join(" ").length <= room) current.push(author);
+    else chunks.push([author]);
+  }
+  return chunks;
+}
+
 /** Reference counts collected per finalized UTC day alongside the detector counts. */
 export const SEARCH_REFERENCES: SearchReference[] = [
   { series: SEARCH_TOTAL_SERIES, query: "", label: "All public PRs opened" },
-  { series: "overlap:claude", query: "head:claude/ author:app/claude", label: "Claude app PRs on claude/ branches" },
-  { series: "overlap:cursor", query: "head:cursor/ author:app/cursor", label: "Cursor app PRs on cursor/ branches" },
-  { series: "overlap:codex", query: "head:codex/ author:app/chatgpt-codex-connector", label: "Codex connector PRs on codex/ branches" },
+  ...GITHUB_AGENTS.filter((a) => a.tier === "branch-prefix").flatMap((prefix) =>
+    botAuthorChunks(prefix.query).map((chunk, i) => ({
+      series: `overlap:${prefix.key}:${i + 1}`,
+      query: `${prefix.query} ${chunk.join(" ")}`,
+      label: `${prefix.label}: PRs by tracked bot accounts, part ${i + 1}`,
+    }))),
 ];
 
 export const SEARCH_DETECTOR_KEYS = GITHUB_AGENTS.map((a) => a.key);

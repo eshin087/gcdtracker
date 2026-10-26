@@ -87,6 +87,21 @@ async function countReference(ctx: JobContext, ref: SearchReference, day: string
     .onConflictDoUpdate({ target: [externalSeries.source, externalSeries.series, externalSeries.period], set: { value: sql`excluded.value`, fetchedAt: new Date() } });
 }
 
+/**
+ * Missing reference counts in priority order: days that already have some references first
+ * (closest to comparable), then yesterday, then the remaining days oldest first.
+ */
+export function searchReferenceWork(days: string[], yesterday: string, have: Set<string>): Array<{ ref: SearchReference; day: string }> {
+  const rank = (day: string) => {
+    const present = SEARCH_REFERENCES.filter((r) => have.has(`${day}|${r.series}`)).length;
+    return present > 0 ? 0 : day === yesterday ? 1 : 2;
+  };
+  return days
+    .filter((day) => SEARCH_REFERENCES.some((r) => !have.has(`${day}|${r.series}`)))
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .flatMap((day) => SEARCH_REFERENCES.filter((r) => !have.has(`${day}|${r.series}`)).map((ref) => ({ ref, day })));
+}
+
 /** Budget-aware: returns false when the deadline is too close for another paced call. */
 export function canCall(ctx: JobContext): boolean {
   return timeLeft(ctx) > gapMs() + 22_000;
@@ -112,13 +127,11 @@ export const githubJob: Job = async (ctx) => {
   // The current UTC day is not counted provisionally; an incomplete day is not an observation.
   const finals: Array<{ agent: GithubAgent; day: string }> = [];
   for (const a of GITHUB_AGENTS) if (!have.get(`${yesterday}|${a.key}`)) finals.push({ agent: a, day: yesterday });
-  const refsYesterday = SEARCH_REFERENCES.filter((r) => !haveRef.has(`${yesterday}|${r.series}`));
   const backfill: Array<{ agent: GithubAgent; day: string }> = [];
-  const refBackfill: Array<{ ref: SearchReference; day: string }> = [];
   for (const day of dayRange(daysAgo(30), daysAgo(2))) {
     for (const a of GITHUB_AGENTS) if (!have.get(`${day}|${a.key}`)) backfill.push({ agent: a, day });
-    for (const ref of SEARCH_REFERENCES) if (!haveRef.has(`${day}|${ref.series}`)) refBackfill.push({ ref, day });
   }
+  const refWork = searchReferenceWork(dayRange(daysAgo(30), yesterday), yesterday, haveRef);
 
   try {
     for (const w of finals) {
@@ -130,15 +143,19 @@ export const githubJob: Job = async (ctx) => {
       stats.queries = (stats.queries as number) + 1;
     }
 
-    // Reference counts that make yesterday comparable in the search census.
-    for (const ref of refsYesterday) {
+    // Reference counts, finishing days that already have some before starting new ones, so a
+    // short slice still converges instead of restarting yesterday's set every run.
+    let refsDone = 0;
+    for (const w of refWork) {
       if (!canCall(ctx)) {
         partial = true;
         break;
       }
-      await countReference(ctx, ref, yesterday);
+      await countReference(ctx, w.ref, w.day);
       stats.queries = (stats.queries as number) + 1;
+      refsDone++;
     }
+    stats.references = `${refsDone}/${refWork.length}`;
 
     // Sample feed: one agent per run, rotating by UTC day so each agent is sampled in turn.
     if (!partial && canCall(ctx)) {
@@ -174,16 +191,6 @@ export const githubJob: Job = async (ctx) => {
         break;
       }
       await countDay(ctx, w.agent, w.day, true);
-      stats.queries = (stats.queries as number) + 1;
-      stats.backfilled = (stats.backfilled as number) + 1;
-    }
-
-    for (const w of refBackfill) {
-      if (partial || !canCall(ctx)) {
-        partial = true;
-        break;
-      }
-      await countReference(ctx, w.ref, w.day);
       stats.queries = (stats.queries as number) + 1;
       stats.backfilled = (stats.backfilled as number) + 1;
     }
