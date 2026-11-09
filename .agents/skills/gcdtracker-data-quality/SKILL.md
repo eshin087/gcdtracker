@@ -11,7 +11,7 @@ Read [data contracts](../../../docs/data-contracts.md) and the relevant source i
 
 Identify the requested URL, dataset, metric and expected period. `/demo` is synthetic; Vercel previews require an isolated `PREVIEW_DATABASE_URL`; observed pages must not silently substitute demo values. Check the deployed commit and migration state if local and production behavior differ.
 
-Start with the public `/api/live` and `/data` views. Check `generatedAt` before trusting freshness, then `lastIngest`, per-source outcome and observation timestamps. HTTP 200 can contain `partial`; `db: true` in a cached response is not a new connection test. Confirm source coverage rather than changing a missing value to zero.
+Start with the public `/api/live` and `/data` views. Check `generatedAt` before trusting freshness, then `lastIngest`, per-source outcome, its `detail` reason and observation timestamps. HTTP 200 can contain `partial`; `db: true` in a cached response is not a new connection test. Confirm source coverage rather than changing a missing value to zero. The exports carry their own evidence: `fetchedAt` in `external_series.csv`, `github_daily.csv` and `radar.json`, and `lastObservedAt` in `watched_prs.csv`, show when a source last stored anything, whatever its run reported.
 
 Compare the actual scheduler with the health interval. GitHub Actions is intentionally disabled. GH Archive, robots census and ai.robots.txt historical workers are unscheduled; their old data is not evidence of a newly failed worker. See the open cadence issue in the roadmap.
 

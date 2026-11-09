@@ -50,8 +50,12 @@ const JOBS: Record<string, Job> = {
   "ai-robots-history": aiRobotsHistoryJob,
 };
 
-/** `all` runs cheap sources first; the feed walk and the paced GitHub jobs come last with the largest shares. */
-const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "osm", "mcp", "botcommits", "agentwatch", "radar", "bluesky", "mastodon", "packages", "baseline", "moltbook", "retention", "github", "watched", "github-signatures"];
+/**
+ * `all` runs cheap sources first; the feed walk and the paced GitHub jobs come last with the largest shares.
+ * The three GitHub jobs share one search allowance, so they run in order of what a missed day costs:
+ * the census, then the daily signature counts, then the watched repositories, whose rotation resumes.
+ */
+const ALL_ORDER = ["ipranges", "wikipedia", "wikimedia", "osm", "mcp", "botcommits", "agentwatch", "radar", "bluesky", "mastodon", "packages", "baseline", "moltbook", "retention", "github", "github-signatures", "watched"];
 /** Time kept back for each job still queued, so an early job cannot consume the whole deadline. */
 const RESERVE_PER_JOB_MS = 12_000;
 

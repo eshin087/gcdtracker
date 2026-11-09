@@ -93,7 +93,9 @@ export async function sampleBluesky(durationMs: number = SOCIAL_LIMITS.bluesky.d
         meta.receivedRecords++;
         const size = typeof event.data === "string" ? Buffer.byteLength(event.data, "utf8") : event.data instanceof ArrayBuffer ? event.data.byteLength : SOCIAL_LIMITS.bluesky.frameBytes + 1;
         meta.receivedBytes += size;
-        if (size > SOCIAL_LIMITS.bluesky.frameBytes || meta.receivedBytes > SOCIAL_LIMITS.bluesky.bytes) { finish("byte-limit", false); return; }
+        // An oversized frame is an anomaly. Reaching the decoded-byte budget is one of the sample's three bounds.
+        if (size > SOCIAL_LIMITS.bluesky.frameBytes) { finish("byte-limit", false); return; }
+        if (meta.receivedBytes > SOCIAL_LIMITS.bluesky.bytes) { finish("byte-limit", true); return; }
         if (typeof event.data !== "string") { finish("unexpected-binary-frame", false); return; }
         try {
           const parsed = blueskyEvidence(JSON.parse(event.data));

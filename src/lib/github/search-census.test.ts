@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GITHUB_AGENTS } from "./agents";
 import { botAuthorChunks, foldSearchDays, SEARCH_QUERY_LIMIT, SEARCH_REFERENCES, SEARCH_TOTAL_SERIES, searchWindow, type SearchDetectorRow, type SearchReferenceRow } from "./search-census";
-import { searchReferenceWork } from "../ingest/github";
 
 const day = "2026-10-24";
 const overlapSeries = SEARCH_REFERENCES.filter((r) => r.series !== SEARCH_TOTAL_SERIES).map((r) => r.series);
@@ -49,16 +48,5 @@ describe("GitHub search census v1", () => {
       [...refs(1_000_000, {}, "2026-10-20"), ...refs(1_000_000, {}, "2026-10-21"), ...refs(1_000_000, {}, "2026-10-22")]);
     expect(searchWindow(days, "2026-10-20", "2026-10-22")).toEqual({ agentPrs: 0, prsOpened: 2_000_000, days: 2 });
     expect(searchWindow(days, "2026-10-21", "2026-10-23")).toEqual({ agentPrs: 0, prsOpened: 1_000_000, days: 1 });
-  });
-});
-
-describe("search reference work order", () => {
-  it("finishes days that already have some references before yesterday, then fills the rest oldest first", () => {
-    const have = new Set([`2026-10-20|${SEARCH_TOTAL_SERIES}`, ...SEARCH_REFERENCES.map((r) => `2026-10-21|${r.series}`)]);
-    const work = searchReferenceWork(["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-24"], "2026-10-24", have);
-    const order = [...new Set(work.map((w) => w.day))];
-    expect(order).toEqual(["2026-10-20", "2026-10-24", "2026-10-19"]);
-    expect(work.filter((w) => w.day === "2026-10-20")).toHaveLength(SEARCH_REFERENCES.length - 1);
-    expect(work.some((w) => w.day === "2026-10-21")).toBe(false);
   });
 });

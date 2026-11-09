@@ -62,6 +62,24 @@ describe("bounded Bluesky sample", () => {
     expect(result).toMatchObject({ outcome: "partial", reason: "upstream-protocol-error", sample: { sampledPosts: 1 } });
     expect(JSON.stringify(result)).not.toContain("private upstream text");
   });
+  it("treats the decoded-byte budget as a bound that completes the sample, like the frame and time bounds", async () => {
+    fakeSocket();
+    const promise = sampleBluesky();
+    // Each frame stays under the per-frame cap; together they pass the 256 KiB budget before 300 frames.
+    const padding = "x".repeat(60_000);
+    for (let i = 0; i < 5; i++) socket().emit(blue("post-" + i, padding));
+    const result = await promise;
+    expect(result).toMatchObject({ outcome: "success", reason: "byte-limit", sample: { sampledPosts: 4, outcome: "success", coverage: { scopes: [{ outcome: "success", reason: "byte-limit", sampledPosts: 4 }] } } });
+    expect(result.sample!.coverage.receivedBytes).toBeGreaterThan(SOCIAL_LIMITS.bluesky.bytes);
+    expect(socket().closed).toBe(true);
+  });
+  it("still reports no observation when the byte budget is reached before any usable post", async () => {
+    fakeSocket();
+    const promise = sampleBluesky();
+    const filler = JSON.stringify({ $type: "message", payload: { $type: "network.bsky.jetstream.subscribeEvents#commit", collection: "app.bsky.feed.like", operation: "create", pad: "x".repeat(60_000) } });
+    for (let i = 0; i < 5; i++) socket().emit(filler);
+    expect(await promise).toMatchObject({ sample: null, outcome: "failed", reason: "byte-limit" });
+  });
   it("stops oversized frames and never fabricates a zero for empty connections", async () => {
     vi.useFakeTimers(); fakeSocket();
     const oversized = sampleBluesky();

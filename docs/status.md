@@ -1,35 +1,42 @@
 # Project status
 
-Verified October 26, 2026, 06:50 UTC. Recheck deployed revision, source freshness and billing settings before relying on them.
+Verified November 9, 2026, 02:10 to 03:20 UTC, from the public site, its exports, the GitHub CLI and local checks. Recheck deployed revision, source freshness and billing settings before relying on them.
 
 ## Current work
 
-Released October 26, 2026: [PR #12](https://github.com/eshin087/gcdtracker/pull/12) merged into `main` as `068098d` at 06:46 UTC, carrying the handbook, the Radar purpose and social reports, the three-mode activity flow and the October 25 collector fixes (`04e7c74`). Migration 0002 was applied to production at 06:46 UTC, immediately before the merge. `collector_state` gains one key, `moltbook:coverage`, at the first post-release run. See the [changelog](../CHANGELOG.md) and [data contracts](data-contracts.md).
+Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It is not merged and not deployed, needs no migration, and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
 
-R4 ([PR #14](https://github.com/eshin087/gcdtracker/pull/14), merged October 26 after docs PR #13) feeds the homepage tiles and the default heatmap source from the GitHub search census v1 and keeps the GH Archive history as a separately labelled heatmap source; the collector stores seven reference counts per finalized day. The tiles show no value until the first daily run after deployment finalizes a day; the 30-day history fills with spare search budget over several weeks. Checks on the merged revision: lint, TypeScript, 319 unit tests and 44 integration tests on a disposable PostgreSQL; the 33-test seeded browser suite passed on the first revision of the branch. See [data contracts](data-contracts.md#github-search-census-version-1).
+- Radar accepts a snapshot when only a supplementary publisher field (an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block) fails validation, and records what it left out.
+- `/data` and `/api/live` show a short reason for each source's latest run, built from fixed phrases only.
+- The GitHub census counts the previous day, then takes the sample feed, then repairs at most one earlier day from the last week. It no longer fills 30-day reference gaps. The three GitHub jobs honour GitHub's own pause headers and run census, signatures, watched.
+- Bluesky's byte budget and an in-progress signing-registry scan no longer mark a run partial.
 
 ## Verified state
 
 | Area | Evidence and limits |
 |---|---|
-| Production | `gcdtracker.vercel.app` serves the `068098d` release; `/social` went live about 30 seconds after the merge. Every checked route returned 200, including `/social`, `/api/export/social_samples.json` and `/api/export/radar.json`. `/github` is still 1.8 MB |
-| GitHub base | Remote main is `068098d`. [PR #8](https://github.com/eshin087/gcdtracker/pull/8) is superseded: its only commit not in main, `0719a21`, is a merge with a tree identical to content main now has. PR #8 and stale [PR #3](https://github.com/eshin087/gcdtracker/pull/3) are still open because closing them was not permitted from the agent session; close them manually |
-| Actions | Read-only API check: disabled, zero artifacts, zero caches, no workflow files |
-| Production health | The daily interval is deployed: `/api/live` reports `schedule: daily` and no stale sources. Status remains `degraded` because the latest outcomes are from the 03:47 UTC run on October 26, which used the pre-release collectors. The fixed collectors first run at 03:47 UTC on October 27 |
-| Collector outcomes, 31 daily runs (September 25 to October 25) | wikimedia failed 24; agentwatch failed 30; github, moltbook, osm, radar, watched and wikipedia partial on all 31; baseline, botcommits, packages, ipranges, mcp, github-signatures and retention mostly success. Verified causes are in [incidents](incidents.md) |
-| Data freshness | Rows dated October 24 or 25: GitHub search daily, Radar operator, bot-share and crawl-refer, npm and PyPI, OSM, Moltbook, MCP, IP ranges, watched signals. Historical by design: GH Archive daily ends September 9 (worker retired) and the robots census August 7. Publisher lag: Wikimedia daily totals end September 30, Hugging Face agent usage September 30. Empty: `github_events` has 0 rows; `/api/export/social_samples.json` is 404 on `main` |
-| Database | 139 MB on October 25: `gh_archive_hourly` 69 MB, `forum_posts` 21 MB, `mcp_servers` 19 MB. Migration 0002 applied October 26 in one transaction after pre-checks (0001 markers present, table absent, recent ingest runs present); afterwards `social_samples` had 11 columns, the primary key and `social_samples_day_idx`, and 0 rows. No Neon restore branch was created from the agent session; Neon point-in-time restore to 2026-10-26T06:46:00Z is the pre-migration reference |
-| Cost | No new scheduler, dependency, paid API or storage integration. The Moltbook walk adds at most 60 requests per day and stores 200 posts per run instead of 500; the OSM change keeps eight requests per run. Vercel and Neon plan tiers were not re-verified from the CLI; check both dashboards |
+| Production | `gcdtracker.vercel.app` returned 200 on 22 routes and exports (and 307 on `/visitors`) with no browser console errors on the homepage or Traffic. It shows the PR #14 behaviour: homepage tiles and the default heatmap read the GitHub search census. The deployed SHA was not read from Vercel. `/github` is still 1.8 MB |
+| GitHub base | `origin/main` is `864f4f0` (PR #14 merge). `gh pr list` shows no open pull requests, so PRs #8 and #3 are closed. Local `main` was still at a September 7 commit |
+| Actions | Read-only API check: disabled; no workflow directory |
+| Production health | The daily run completed on November 8 at about 03:00 to 03:03 UTC. `/api/live` reported `degraded`: radar failed; agentwatch, bluesky, github, github-signatures, moltbook and watched partial; the other ten success. The first request returned a snapshot generated October 26 with every `stale` flag false; the next was current |
+| Radar | Every stored group was last fetched October 25, 03:47 UTC, the last run before the release, and `crawl-purpose` has never been stored. The homepage Web crawling mode is empty and Traffic shows "stale snapshot". The same Cloudflare token recorded signing-registry entries on eleven dates from October 27 to November 8, so the token works. The stored failure message was not read |
+| GitHub search | Comparable census days are October 26 to November 7, one per run. Reference backfill reached only September 27, October 1 and October 9, two of seven counts each. `github_events` has 0 rows. Text-signature counts were last collected November 1 and before that October 26; watched pull requests were last observed on the same two dates |
+| Other sources | Wikimedia, Wikipedia and OSM now succeed. Moltbook daily counts were between 5,726 and 6,150 on November 1 to 7, the walk's 6,000-post ceiling, and Forums marks them as lower bounds. All 13 Bluesky samples since October 27 are partial, each ending at 247 to 287 frames in under eight seconds, short of both the 300-frame and the time bound. Social disclosure matches: 0 of 2,913 sampled posts |
+| Historical or lagging by design | GH Archive daily ends September 9 and the robots census August 7. Hugging Face agent usage ends September 30; the publisher's dataset was last modified October 5 |
+| Database and cost | Not measured in this review: a read-only database query was not permitted from the agent session. Vercel and Neon plan tiers were not re-verified |
 
 ## Validation
 
-On this working tree: lint, TypeScript and all 311 unit tests passed across 36 files, including new Moltbook, Wikimedia-metrics, Radar, OSM slot and signature-registry cases. An offline production build passed and confirmed that the Forums, GitHub and Wikipedia routes render dynamically on demand. On a fresh disposable PostgreSQL 16 container, `init` and `migration-check` passed and the integration suite passed all 42 tests, including the two new cases in `tests/moltbook.integration.test.ts` that exercise the feed walk's seed query, guarded daily and sample writes, and capped-day coverage. Browser checks were limited to an offline local build and the live production site; the seeded browser suite was not repeated. The container was stopped afterwards.
+On the branch working tree: lint, TypeScript and all 377 unit tests in 39 files passed, including new cases for Radar metadata, the run-detail vocabulary, GitHub pacing and pauses, census and signature work order, watched rotation, the Bluesky byte bound and the registry scan outcome. An offline production build passed with `DATABASE_URL` and `PREVIEW_DATABASE_URL` cleared, and its `/data` page rendered the no-database state.
 
-No production write, migration, merge or deployment was performed. Production checks used the public site, its exports, read-only Vercel and GitHub CLI commands, and aggregate read-only database queries whose outputs stayed out of the repository.
+Not run: the PostgreSQL integration suite and the seeded browser suite, because Docker Desktop was not running. The new reason line on `/data` was therefore not seen in a browser with data. Narrow layouts were not checked on production.
+
+No production write, migration, merge or deployment was performed, and no production database query was made.
 
 ## Next steps and limitations
 
-- After the 03:47 UTC run on October 27, confirm on `/data` that wikimedia, agentwatch, radar and osm reach `success`, that bluesky and mastodon record outcomes and `social_samples` gains up to two rows, and that moltbook and github reach `success` once the first feed walk and the next finalization complete. The first Moltbook walk may be partial and list capped days on the Forums page.
-- Close PR #8 and PR #3.
-- The homepage headline tiles and daily heatmap depend on retired GH Archive data and stay frozen at September 9; see [R4](roadmap.md#r4-replace-the-frozen-homepage-archive-figures).
+- Run the integration and seeded browser suites on the branch before merging.
+- After a deployment, read `/data` following the next daily run. The Radar line should name the group and either an HTTP status or the rejected check; the GitHub lines should say whether a pause came from `retry-after` or the window reset. Until then the Radar cause is inferred by elimination, not confirmed.
+- If GitHub's refusal is a minute-long `retry-after`, the three GitHub jobs cannot all finish inside one invocation; see [R7](roadmap.md#r7-give-the-github-jobs-enough-time).
+- Decide the Moltbook cap ([R8](roadmap.md#r8-moltbook-volume-exceeds-the-walk-cap)) and the presentation fixes ([R9](roadmap.md#r9-presentation-and-interpretation-fixes)).
 - Radar purpose endpoint permissions, Neon plan verification, retention ([R2](roadmap.md#r2-prune-detail-without-losing-historical-summaries)) and the GitHub page payload ([R6](roadmap.md#r6-trim-and-cache-the-heavy-explorer-pages)) remain open.
