@@ -169,6 +169,8 @@
 .prose th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule-strong); }
 .prose td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 .prose td .run-detail { color: var(--muted); font-size: 12px; line-height: 1.4; margin-top: 3px; max-width: 46ch; }
+/* A source name stays on one line; the reason beside it wraps instead. */
+.prose td .run-source { white-space: nowrap; }
 .prose .callout { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 3px; margin: 0 0 22px; font-size: 15.5px; }
 .prose .callout p:last-child { margin-bottom: 0; }
 .prose .footnotes { font-family: var(--font-inter), system-ui, sans-serif; font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--rule); padding-top: 16px; margin-top: 48px; }

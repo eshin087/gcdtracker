@@ -1,10 +1,10 @@
 # Project status
 
-Verified November 9, 2026, 02:10 to 03:20 UTC, from the public site, its exports, the GitHub CLI and local checks. Recheck deployed revision, source freshness and billing settings before relying on them.
+Verified November 9, 2026, 02:10 to 04:15 UTC, from the public site, its exports, the GitHub CLI and local checks. Recheck deployed revision, source freshness and billing settings before relying on them.
 
 ## Current work
 
-Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It is not merged and not deployed, needs no migration, and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
+Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It is open as [PR #15](https://github.com/eshin087/gcdtracker/pull/15), not merged and not deployed. It needs no migration and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
 
 - Radar accepts a snapshot when only a supplementary publisher field (an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block) fails validation, and records what it left out.
 - `/data` and `/api/live` show a short reason for each source's latest run, built from fixed phrases only.
@@ -27,15 +27,16 @@ Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, 
 
 ## Validation
 
-On the branch working tree: lint, TypeScript and all 377 unit tests in 39 files passed, including new cases for Radar metadata, the run-detail vocabulary, GitHub pacing and pauses, census and signature work order, watched rotation, the Bluesky byte bound and the registry scan outcome. An offline production build passed with `DATABASE_URL` and `PREVIEW_DATABASE_URL` cleared, and its `/data` page rendered the no-database state.
+On the branch: lint, TypeScript and all 377 unit tests in 39 files passed, including new cases for Radar metadata, the run-detail vocabulary, GitHub pacing and pauses, census and signature work order, watched rotation, the Bluesky byte bound and the registry scan outcome. An offline production build passed with `DATABASE_URL` and `PREVIEW_DATABASE_URL` cleared, and its `/data` page rendered the no-database state.
 
-Not run: the PostgreSQL integration suite and the seeded browser suite, because Docker Desktop was not running. The new reason line on `/data` was therefore not seen in a browser with data. Narrow layouts were not checked on production.
+On a fresh disposable PostgreSQL 16 container: `init` and `migration-check` passed, the integration suite passed all 44 tests in 7 files, and the seeded browser suite passed all 33 tests, first on the seeded build and again on the final build. The container was removed afterwards.
 
-No production write, migration, merge or deployment was performed, and no production database query was made.
+The reason line on `/data` was then checked in a browser against synthetic failed and partial runs added to the QA database. It rendered at desktop and 375-pixel widths without horizontal overflow, `/api/live` carried the same text, and a run whose stored error contained a hostname showed only "error: network error". The check also found source names breaking mid-word at phone width, which the branch fixes.
+
+Narrow layouts were not checked on production. No production write, migration, merge or deployment was performed, and no production database query was made.
 
 ## Next steps and limitations
 
-- Run the integration and seeded browser suites on the branch before merging.
 - After a deployment, read `/data` following the next daily run. The Radar line should name the group and either an HTTP status or the rejected check; the GitHub lines should say whether a pause came from `retry-after` or the window reset. Until then the Radar cause is inferred by elimination, not confirmed.
 - If GitHub's refusal is a minute-long `retry-after`, the three GitHub jobs cannot all finish inside one invocation; see [R7](roadmap.md#r7-give-the-github-jobs-enough-time).
 - Decide the Moltbook cap ([R8](roadmap.md#r8-moltbook-volume-exceeds-the-walk-cap)) and the presentation fixes ([R9](roadmap.md#r9-presentation-and-interpretation-fixes)).

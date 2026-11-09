@@ -2,7 +2,7 @@
 
 ## Unreleased - Collector budget, Radar metadata and run reasons
 
-- `/data` shows a short reason under each source's latest result, and `/api/live` adds the same text as `detail` (null when there is nothing to explain). The text is built from fixed phrases, HTTP status codes, UTC times and collector step or repository names; raw error messages are never published.
+- `/data` shows a short reason under each source's latest result, and `/api/live` adds the same text as `detail` (null when there is nothing to explain). The text is built from fixed phrases, HTTP status codes, UTC times and collector step or repository names; raw error messages are never published. Source names in that table no longer break mid-word on narrow screens.
 - Radar stores a snapshot when only a supplementary publisher field fails validation: an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block is left out and named in the run statistics. Normalization and the observation window are still required. In `/api/export/radar.json`, an annotation's `startDate` or `endDate` can now be null for open-ended or instantaneous events.
 - The GitHub census run counts the previous UTC day, then takes the sample-feed query, then repairs at most one earlier day from the previous week. It no longer fills 30-day reference gaps, so days before 26 October 2026 keep detector counts without reference counts and stay marked incomplete on the heatmap.
 - GitHub search requests follow GitHub's pause headers: `retry-after`, then the window reset when no requests remain, otherwise one minute. A job waits when its remaining time allows and otherwise stops without sending requests. The search timeout is 12 seconds.

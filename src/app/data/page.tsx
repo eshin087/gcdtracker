@@ -104,7 +104,7 @@ export default async function DataPage() {
                 return (
                 <tr key={r.id}>
                   <td>
-                    <code>{r.source}</code>
+                    <code className="run-source">{r.source}</code>
                   </td>
                   <td>{fmtStamp(r.startedAt)}</td>
                   <td>
