@@ -80,8 +80,37 @@ describe("Radar crawl-purpose snapshots", () => {
   it.each([{ ...purposeMeta, normalization: "MIN0_MAX" }, { ...purposeMeta, aggInterval: "ONE_HOUR" }, { ...purposeMeta, aggInterval: undefined }])("rejects altered purpose units and intervals", (metadata) => {
     expect(() => parseRadar("crawl-purpose", purposeBody({ timestamps: ["2026-08-01"], TRAINING: [1] }, metadata), purposeNow)).toThrow();
   });
-  it.each([null, [], { success: false }, { success: true, result: { meta: { ...meta, dateRange: [null] } } }, { success: true, result: { meta: { ...meta, units: [null] } } }])("rejects invalid public source envelopes", (body) => {
-    expect(() => parseRadar("crawl-purpose", body, purposeNow)).toThrow(/metadata/);
+  it.each([
+    [null, "envelope"], [[], "envelope"], [{ success: false }, "envelope"], [{ success: true, result: {} }, "envelope"],
+    [{ success: true, result: { meta: { ...meta, dateRange: [null] } } }, "window or normalization"],
+    [{ success: true, result: { meta: { ...meta, normalization: 7 } } }, "window or normalization"],
+    [{ success: true, result: { meta: { ...meta, dateRange: [meta.dateRange[0], meta.dateRange[0]] } } }, "multiple windows"],
+  ])("rejects invalid public source envelopes and names the failed check", (body, check) => {
+    expect(() => parseRadar("crawl-purpose", body, purposeNow)).toThrow("Radar metadata rejected: " + check);
+  });
+});
+
+describe("publisher metadata that the collector cannot verify", () => {
+  const event = { dataSource: "BOTS", description: "Bot classification update", eventType: "PIPELINE", isInstantaneous: false, linkedUrl: "https://example.com/private" };
+  const summary = (confidenceInfo: unknown, extra: Record<string, unknown> = {}) => ({ success: true, result: {
+    meta: { ...meta, normalization: "PERCENTAGE", units: [{ name: "*", value: "requests" }], lastUpdated: "2026-08-29T02:30:00Z", confidenceInfo, ...extra },
+    summary_0: { GoogleBot: "12.5", other: "87.5" } } });
+  it("stores the values when an annotation has no end date and keeps that annotation", () => {
+    const parsed = parseRadar("bot-share", summary({ level: 5, annotations: [{ ...event, startDate: "2026-08-20T00:00:00Z" }] }));
+    expect(parsed.rows.map((row) => row.value)).toEqual([12.5, 87.5]);
+    expect(parsed.dropped).toEqual([]);
+    expect(parsed.metadata.confidenceInfo).toEqual({ level: 5, annotations: [{ dataSource: "BOTS", description: "Bot classification update", eventType: "PIPELINE", isInstantaneous: false, startDate: "2026-08-20T00:00:00Z", endDate: null }] });
+    expect(JSON.stringify(parsed.metadata)).not.toContain("private");
+  });
+  it.each([
+    [{ level: null, annotations: [] }, {}, ["confidenceInfo"]],
+    [{ level: 5, annotations: [{ ...event, description: "" }, "unexpected"] }, {}, ["annotation", "annotation"]],
+    [{ level: 5, annotations: [] }, { aggInterval: null, units: [null] }, ["unit"]],
+  ])("stores the values and reports the supplementary field it left out", (confidenceInfo, extra, dropped) => {
+    const parsed = parseRadar("bot-share", summary(confidenceInfo, extra));
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.dropped).toEqual(dropped);
+    expect(parsed.metadata).toMatchObject({ normalization: "PERCENTAGE", dateRange: meta.dateRange });
   });
 });
 

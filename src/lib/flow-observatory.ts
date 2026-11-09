@@ -68,6 +68,11 @@ function purposeLabel(key: string): string {
     ?? purpose.replaceAll("_", " ").toLowerCase();
 }
 
+/** A publisher annotation can be open-ended or a single instant, so either date may be absent. */
+function annotationSpan(from: string | null, to: string | null): string {
+  return from && to ? ` (${from} → ${to})` : from ? ` (from ${from})` : to ? ` (until ${to})` : "";
+}
+
 /** One complete common date from one normalized snapshot; never add percentages across dates. */
 export function readingFlow(snapshot: ReadingSnapshot, mode: FlowData["mode"] = "observed"): FlowData {
   const meta = snapshot.metadata["crawl-purpose"];
@@ -116,7 +121,7 @@ export function readingFlow(snapshot: ReadingSnapshot, mode: FlowData["mode"] = 
       { label: "Source coverage", value: meta.coverage ? `${meta.coverage.observedDays}/${meta.coverage.expectedDays} complete dates; ${meta.coverage.missingDays.length} missing or incomplete. ${meta.coverage.startTime} → ${meta.coverage.endTime} (exclusive).` : "Overall collection coverage unavailable; common dates checked from returned values." },
       { label: "Snapshot fetched", value: meta.fetchedAt },
       { label: "Publisher updated", value: meta.lastUpdated ?? "Unavailable" },
-      { label: "Publisher confidence", value: meta.confidenceInfo ? `Level ${meta.confidenceInfo.level}. ${meta.confidenceInfo.annotations.map(item => `${item.dataSource}: ${item.description} (${item.startDate} → ${item.endDate})`).join("; ")}` : "Not supplied; no confidence inferred." },
+      { label: "Publisher confidence", value: meta.confidenceInfo ? `Level ${meta.confidenceInfo.level}. ${meta.confidenceInfo.annotations.map(item => `${item.dataSource}: ${item.description}${annotationSpan(item.startDate, item.endDate)}`).join("; ")}` : "Not supplied; no confidence inferred." },
     ],
   }));
   return { ...empty, sources, links: sources.map(source => ({ source: source.id, target: "cloudflare-web", value: source.total })),

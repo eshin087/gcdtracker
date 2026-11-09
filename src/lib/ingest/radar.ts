@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { fetchJson, OUTBOUND_HEADERS, type Job, timeLeft } from "./common";
 import { readCollectorState, commitCollectorState } from "./state";
 import { seriesWrites, type SeriesRow } from "./series-write";
-import { publicRadarMetadata } from "../public-radar";
+import { publicRadarMetadata, readRadarMetadata } from "../public-radar";
 
 export interface RadarMetadata extends Record<string, unknown> {
   normalization: string;
@@ -14,7 +14,8 @@ export interface RadarMetadata extends Record<string, unknown> {
   aggInterval?: string;
   confidenceInfo?: {
     level: number;
-    annotations: Array<{ dataSource: string; description: string; startDate: string; endDate: string; eventType: string; isInstantaneous: boolean }>;
+    /** Open-ended and instantaneous events can lack either date. */
+    annotations: Array<{ dataSource: string; description: string; startDate: string | null; endDate: string | null; eventType: string; isInstantaneous: boolean }>;
   };
   coverage?: { startTime: string; endTime: string; expectedDays: number; observedDays: number; missingDays: string[] };
   unavailable?: Array<{ series: string; reason: "missing" | "non-finite"; period?: string }>;
@@ -37,18 +38,22 @@ export function radarPurposeEndpoint(now = new Date()): string {
     dateStart: window.startTime, dateEnd: window.endTime, aggInterval: "1d", normalization: "PERCENTAGE",
   });
 }
-export function parseRadar(group: string, body: unknown, now = new Date()): { rows: SeriesRow[]; metadata: RadarMetadata } {
+/**
+ * The window and normalization must verify or the snapshot is rejected, naming which check failed.
+ * Supplementary publisher fields that fail validation are omitted and returned in `dropped`.
+ */
+export function parseRadar(group: string, body: unknown, now = new Date()): { rows: SeriesRow[]; metadata: RadarMetadata; dropped: string[] } {
   if (!(RADAR_GROUPS as readonly string[]).includes(group)) throw new Error("Radar unknown group");
   const result = object(body) && object(body.result) ? body.result : null;
   const meta = result && object(result.meta) ? result.meta : null;
-  const metadata = meta ? publicRadarMetadata({
+  if (!object(body) || body.success !== true || !meta) throw new Error("Radar metadata rejected: envelope");
+  const { metadata, dropped } = readRadarMetadata({
     normalization: meta.normalization, units: meta.units, dateRange: meta.dateRange,
     lastUpdated: meta.lastUpdated, aggInterval: meta.aggInterval, confidenceInfo: meta.confidenceInfo,
     fetchedAt: now.toISOString(), version: 2,
-  }) : null;
-  if (!object(body) || body.success !== true || !metadata || metadata.dateRange.length !== 1) {
-    throw new Error("Radar response missing verified units/window metadata");
-  }
+  });
+  if (!metadata) throw new Error("Radar metadata rejected: window or normalization");
+  if (metadata.dateRange.length !== 1) throw new Error("Radar metadata rejected: multiple windows");
   const rows: SeriesRow[] = [];
   if (group === "operator" || group === "crawl-purpose") {
     const serie = object(result?.serie_0) ? result.serie_0 : null, timestamps = serie?.timestamps;
@@ -99,7 +104,7 @@ export function parseRadar(group: string, body: unknown, now = new Date()): { ro
       } else rows.push({ source: RADAR_SOURCE, series, period: metadata.dateRange[0].endTime.slice(0, 10), value: parsed });
     }
   }
-  return { rows, metadata };
+  return { rows, metadata, dropped };
 }
 /** Ratios may have no finite denominator. Preserve that state instead of making it zero. */
 export function radarSummaryValue(value: unknown, ratio: boolean): number | "missing" | "non-finite" {
@@ -139,6 +144,7 @@ export const radarJob: Job = async (ctx) => {
   let rows = 0, partial = false, unavailableSeries = 0;
   const unavailable: string[] = [];
   const attemptedToday: string[] = [];
+  const metadataDropped: string[] = [];
   for (const [group, endpoint] of endpoints) {
     if (timeLeft(ctx) < 5_000) { partial = true; break; }
     try {
@@ -176,9 +182,11 @@ export const radarJob: Job = async (ctx) => {
         rows += parsed.rows.length;
         unavailableSeries += parsed.metadata.unavailable?.length ?? 0;
         if (snapshotIncomplete(parsed.metadata)) { partial = true; unavailable.push(group); }
+        // The values and their window were stored; only the named supplementary fields were left out.
+        if (parsed.dropped.length) metadataDropped.push(group + ": " + [...new Set(parsed.dropped)].join(", "));
       }
       else partial = true;
     } catch (err) { failed.push(group + ": " + (err instanceof Error ? err.message : "fetch failed")); }
   }
-  return { stats: { rows, failed, unavailable, unavailableSeries, attemptedToday }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
+  return { stats: { rows, failed, unavailable, unavailableSeries, attemptedToday, metadataDropped }, partial, outcome: failed.length ? "failed" : partial ? "partial" : "success" };
 };

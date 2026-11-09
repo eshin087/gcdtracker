@@ -72,7 +72,7 @@ export default async function DataPage() {
               <td>
                 <code>GET /api/live</code>
               </td>
-              <td>external-source freshness, collector outcomes and last successful collection</td>
+              <td>external-source freshness, collector outcomes with a short reason, and last successful collection</td>
             </tr>
             <tr>
               <td>
@@ -104,10 +104,13 @@ export default async function DataPage() {
                 return (
                 <tr key={r.id}>
                   <td>
-                    <code>{r.source}</code>
+                    <code className="run-source">{r.source}</code>
                   </td>
                   <td>{fmtStamp(r.startedAt)}</td>
-                  <td>{health ? `${health.outcome}${health.schedule === "unscheduled" ? " · unscheduled" : health.stale ? " · stale" : ""}` : "running or interrupted"}</td>
+                  <td>
+                    {health ? `${health.outcome}${health.schedule === "unscheduled" ? " · unscheduled" : health.stale ? " · stale" : ""}` : "running or interrupted"}
+                    {health?.detail ? <div className="run-detail">{health.detail}</div> : null}
+                  </td>
                   <td>
                     {r.finishedAt ? fmtStamp(r.finishedAt) : "No completion recorded"}
                   </td>

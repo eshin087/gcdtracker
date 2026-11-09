@@ -6,7 +6,7 @@ import { GITHUB_AGENTS } from "@/lib/github/agents";
 import { findSignatures } from "@/lib/github/signatures";
 import { type Job, type JobContext, timeLeft } from "./common";
 import { readCollectorState, commitCollectorState } from "./state";
-import { canCall, gapMs, RateLimited, search, type SearchItem } from "./github";
+import { budgetedSearch, canCall, gapMs, noteRateLimit, RateLimited, type SearchItem } from "./github";
 
 /**
  * Watched-repository collector. For a seed list plus auto-discovered repositories
@@ -160,7 +160,7 @@ export const watchedJob: Job = async (ctx) => {
   const before = after.length < limit ? await ctx.db.select().from(watchedRepos).where(sql`${watchedRepos.repo} <= ${wheel.state.afterRepo}`).orderBy(asc(watchedRepos.repo)).limit(limit-after.length) : [];
   const repos = [...after,...before], now = new Date();
   for (const r of repos) {
-    if (!canCall(ctx)) { partial = true; break; }
+    if (!canCall(ctx)) { partial = true; stats.stopped = "deadline"; break; }
     let rateLimited = false;
     try {
       const since = r.lastPolledAt ? new Date(r.lastPolledAt.getTime() - 48 * 3_600_000) : new Date(now.getTime() - 30 * 86_400_000);
@@ -175,7 +175,7 @@ export const watchedJob: Job = async (ctx) => {
       while (checkpoint.state.windows.length && fetchedPages < 3 && canCall(ctx)) {
         const window = checkpoint.state.windows[0];
         // Old page-number checkpoints restart the entire window safely.
-        const body = await search(`repo:${r.repo} is:pr updated:${window.from}..${window.to}`, { sort: "updated", order: "desc", per_page: "100", page: "1" });
+        const body = await budgetedSearch(ctx, `repo:${r.repo} is:pr updated:${window.from}..${window.to}`, { sort: "updated", order: "desc", per_page: "100", page: "1" });
         stats.queries = Number(stats.queries) + 1; fetchedPages++;
         if (body.total_count! > 100) {
           const windows = [...splitWatchedWindow(window), ...checkpoint.state.windows.slice(1)];
@@ -196,12 +196,15 @@ export const watchedJob: Job = async (ctx) => {
       if (checkpoint.state.windows.length) partial = true;
     } catch (err) {
       if (err instanceof RateLimited) {
-        stats.rateLimitedUntil = new Date(err.resetAt).toISOString();
+        noteRateLimit(stats, err);
         partial = true; rateLimited = true;
       } else failed.push(r.repo + ": " + (err instanceof Error ? err.message : "fetch failed"));
     } finally {
-      const rotation = await readCollectorState(ctx.db, "watched:rotation", { afterRepo: "" });
-      await commitCollectorState(ctx.db, "watched:rotation", rotation, { afterRepo: r.repo });
+      // A refusal is not this repository's attempt: it keeps its turn for the next run.
+      if (!rateLimited) {
+        const rotation = await readCollectorState(ctx.db, "watched:rotation", { afterRepo: "" });
+        await commitCollectorState(ctx.db, "watched:rotation", rotation, { afterRepo: r.repo });
+      }
     }
     if (rateLimited) break;
   }

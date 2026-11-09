@@ -1,3 +1,5 @@
+import { runDetail } from "./run-detail";
+
 export type SourceOutcome = "success" | "partial" | "failed" | "disabled";
 export type SourceHealth = {
   source: string;
@@ -7,6 +9,8 @@ export type SourceHealth = {
   schedule: "daily" | "unscheduled";
   /** Zero means there is no scheduled freshness deadline. */
   expectedIntervalSeconds: number;
+  /** Why the latest run ended as it did, in fixed phrases; null when there is nothing to explain. */
+  detail: string | null;
 };
 
 // These payload receivers retain historical data but have no scheduled workers.
@@ -14,7 +18,7 @@ const UNSCHEDULED_SOURCES = new Set(["gharchive", "robots-census", "ai-robots-hi
 const DAILY_INTERVAL_SECONDS = 86_400;
 const MISSED_INTERVALS_BEFORE_STALE = 2;
 
-export function sourceHealth(run: { source: string; finishedAt: Date | string; ok: boolean; stats: Record<string, unknown> | null }, now = Date.now()): SourceHealth {
+export function sourceHealth(run: { source: string; finishedAt: Date | string; ok: boolean; stats: Record<string, unknown> | null; error?: string | null }, now = Date.now()): SourceHealth {
   const stats = run.stats ?? {};
   const raw = stats.outcome;
   const outcome: SourceOutcome = raw === "success" || raw === "partial" || raw === "failed" || raw === "disabled" ? raw :
@@ -30,6 +34,7 @@ export function sourceHealth(run: { source: string; finishedAt: Date | string; o
     expectedIntervalSeconds,
     stale: schedule === "daily" && outcome !== "disabled" &&
       now - Date.parse(lastRun) > expectedIntervalSeconds * MISSED_INTERVALS_BEFORE_STALE * 1000,
+    detail: runDetail({ stats, error: run.error }),
   };
 }
 

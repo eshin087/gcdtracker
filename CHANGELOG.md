@@ -1,13 +1,24 @@
 # Changelog
 
-## Unreleased - GitHub search census on the homepage
+## Unreleased - Collector budget, Radar metadata and run reasons
+
+- `/data` shows a short reason under each source's latest result, and `/api/live` adds the same text as `detail` (null when there is nothing to explain). The text is built from fixed phrases, HTTP status codes, UTC times and collector step or repository names; raw error messages are never published. Source names in that table no longer break mid-word on narrow screens.
+- Radar stores a snapshot when only a supplementary publisher field fails validation: an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block is left out and named in the run statistics. Normalization and the observation window are still required. In `/api/export/radar.json`, an annotation's `startDate` or `endDate` can now be null for open-ended or instantaneous events.
+- The GitHub census run counts the previous UTC day, then takes the sample-feed query, then repairs at most one earlier day from the previous week. It no longer fills 30-day reference gaps, so days before 26 October 2026 keep detector counts without reference counts and stay marked incomplete on the heatmap.
+- GitHub search requests follow GitHub's pause headers: `retry-after`, then the window reset when no requests remain, otherwise one minute. A job waits when its remaining time allows and otherwise stops without sending requests. The search timeout is 12 seconds.
+- Text-signature counts: the day that just became final is collected first, then older days missing a final count from the previous week, then provisional counts for the previous day, at most twelve queries a run. Final counts are not requested again. The run is partial only when the newly final day is incomplete.
+- The daily `all` route runs the GitHub jobs as census, text signatures, watched repositories. A watched repository keeps its turn in the rotation when GitHub refuses the request.
+- Bluesky: reaching the 256 KiB decoded-byte budget with usable posts completes the sample, as the frame and time bounds already did; it is no longer recorded as a failed scope and a partial run.
+- Agentwatch: a signing-registry scan that checked its bounded batch no longer makes the run partial while the multi-run pass is in progress. A deadline or a concurrent run still does.
+
+## 2026-10-26 - GitHub search census on the homepage
 
 - The homepage headline tiles now report a GitHub search census (version 1): the deduplicated union of 16 tracked agent detectors per completed UTC day and its share of all public PRs opened that day, with the comparable-day count shown. They no longer show the GH Archive figures frozen since 9 September 2026.
 - The daily heatmap has a source selector. GitHub search v1 is the default when it has comparable days; GH Archive remains available as labelled history to 9 September 2026. Each source keeps its own color scale and the two are never combined.
 - The GitHub collector stores seven reference counts per finalized day in `external_series` source `github-search`: all PRs opened, plus each tracked branch prefix's PRs by any tracked bot account in two disjoint query chunks. Partially collected days are completed first, then yesterday, then the remaining previous 30 days.
 - The `/github` "Search API by day" bot-account line no longer includes text-signature phrase matches.
 
-## Unreleased - Collector accuracy and outcome fixes
+## 2026-10-26 - Collector accuracy and outcome fixes
 
 - Wikimedia edit metrics are requested from the day after the last stored day and treat upstream HTTP 404 as publisher lag rather than failure; the Wikidata, Commons and tag-sweep steps no longer abort when the metrics dataset is not loaded yet.
 - Wikipedia tier-2 heuristic scanning is a time-spread sample of twelve one-page reads across the previous 24 hours with recorded coverage, replacing a drifting cursor that had fallen more than two weeks behind. The Wikipedia page states the sampling method.
@@ -18,7 +29,7 @@
 - The OpenStreetMap sample takes one page from each of eight equal creation-time slots across the 48-hour window instead of the newest 800 changesets, and a completed capped sample reports success. Maps and Forums pages explain the sampling.
 - The daily `all` route runs the feed walk and retention before the paced GitHub jobs and reserves time for jobs still queued.
 
-## Unreleased — AI reading and social publishing
+## 2026-10-26 — AI reading and social publishing
 
 - Added crawler-purpose share lines from a bounded 28-day Cloudflare Radar snapshot, preserving units, normalization, confidence metadata and missing-day gaps.
 - Added Bluesky and Mastodon publishing reports. Narrow English disclosure text signals and self-designated bot accounts are distinct; no model authorship or whole-platform prevalence is inferred.
@@ -29,7 +40,7 @@
 - Aligned health checks with daily collection and marked retired historical workers unscheduled. GitHub Actions remains disabled; no new dependency or scheduler was added.
 
 
-## Unreleased — Project handbook and skills
+## 2026-10-26 — Project handbook and skills
 
 - Added a maintained project status, accepted decision record, data/retention contracts, cost controls, roadmap and incident notes, with an index and agent startup guidance.
 - Added four project-local skills for catch-up, data-quality work, release QA and cost reviews. Provider-installed skills remain outside Git.

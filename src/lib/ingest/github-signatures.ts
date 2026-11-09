@@ -1,8 +1,8 @@
-import { sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { githubDaily } from "@/lib/db/schema";
-import { daysAgo } from "@/lib/format";
-import { type Job, timeLeft } from "./common";
-import { canCall, RateLimited, search } from "./github";
+import { dayRange, daysAgo } from "@/lib/format";
+import type { Job } from "./common";
+import { budgetedSearch, canCall, noteRateLimit, RateLimited } from "./github";
 
 /**
  * Text signatures across all of GitHub, counted per day with the search API.
@@ -18,32 +18,67 @@ export const SIGNATURE_QUERIES = [
   { key: "sig-aider", label: "PRs: aider commits", q: '"aider:" in:title is:pr' },
 ] as const;
 
+/** How far back a run looks for days a missed run left without a final count. */
+export const SIGNATURE_LOOKBACK_DAYS = 7;
+/** The newly final day, plus as many again for older gaps or the provisional previous day. */
+export const SIGNATURE_CALLS_PER_RUN = SIGNATURE_QUERIES.length * 2;
+
+export interface SignatureCall {
+  day: string;
+  signature: (typeof SIGNATURE_QUERIES)[number];
+  /** A day's count is final from the second day after it. */
+  final: boolean;
+  /** Only the newly final day decides the outcome; the rest is best effort. */
+  required: boolean;
+}
+
+/**
+ * Everything still wanted, in priority order: the day that just became final, older days a
+ * missed run left without a final count (newest first), then a provisional count for the
+ * previous day. A count already stored as final is never requested again.
+ */
+export function signatureWork(now: Date, final: ReadonlySet<string>): SignatureCall[] {
+  const missing = (day: string) => SIGNATURE_QUERIES.filter((signature) => !final.has(`${day}|${signature.key}`));
+  const newest = daysAgo(2, now);
+  const older = dayRange(daysAgo(SIGNATURE_LOOKBACK_DAYS, now), daysAgo(3, now)).reverse();
+  return [
+    ...missing(newest).map((signature) => ({ day: newest, signature, final: true, required: true })),
+    ...older.flatMap((day) => missing(day).map((signature) => ({ day, signature, final: true, required: false }))),
+    ...SIGNATURE_QUERIES.map((signature) => ({ day: daysAgo(1, now), signature, final: false, required: false })),
+  ];
+}
+
 export const githubSignaturesJob: Job = async (ctx) => {
   if (!process.env.GITHUB_TOKEN) return { outcome: "disabled", stats: { skipped: "GITHUB_TOKEN not set" } };
   const stats: Record<string, unknown> = { queries: 0 };
-  let partial = false;
-  const days = [daysAgo(1), daysAgo(2), daysAgo(3)];
+  const rows = await ctx.db
+    .select({ day: githubDaily.day, agent: githubDaily.agent, final: githubDaily.final })
+    .from(githubDaily)
+    .where(and(eq(githubDaily.tier, "text-signature"), gte(githubDaily.day, daysAgo(SIGNATURE_LOOKBACK_DAYS))));
+  const plan = signatureWork(new Date(), new Set(rows.filter((r) => r.final).map((r) => `${r.day}|${r.agent}`)));
+  const required = plan.filter((call) => call.required).length;
+  const olderWanted = plan.filter((call) => call.final && !call.required).length;
+  let requiredDone = 0, olderDone = 0, provisional = 0;
   try {
-    for (const day of days) {
-      for (const s of SIGNATURE_QUERIES) {
-        if (!canCall(ctx) || timeLeft(ctx) < 10_000) {
-          partial = true;
-          break;
-        }
-        const body = await search(`${s.q} created:${day}`);
-        stats.queries = (stats.queries as number) + 1;
-        await ctx.db
-          .insert(githubDaily)
-          .values({ day, agent: s.key, prs: body.total_count ?? 0, tier: "text-signature", final: day !== daysAgo(1), fetchedAt: new Date() })
-          .onConflictDoUpdate({ target: [githubDaily.day, githubDaily.agent], set: { prs: sql`excluded.prs`, final: sql`excluded.final`, fetchedAt: new Date() } });
-      }
-      if (partial) break;
+    for (const call of plan.slice(0, SIGNATURE_CALLS_PER_RUN)) {
+      if (!canCall(ctx)) { stats.stopped = "deadline"; break; }
+      const body = await budgetedSearch(ctx, `${call.signature.q} created:${call.day}`);
+      stats.queries = (stats.queries as number) + 1;
+      await ctx.db
+        .insert(githubDaily)
+        .values({ day: call.day, agent: call.signature.key, prs: body.total_count ?? 0, tier: "text-signature", final: call.final, fetchedAt: new Date() })
+        .onConflictDoUpdate({ target: [githubDaily.day, githubDaily.agent], set: { prs: sql`excluded.prs`, final: sql`excluded.final`, fetchedAt: new Date() } });
+      if (call.required) requiredDone++;
+      else if (call.final) olderDone++;
+      else provisional++;
     }
   } catch (err) {
-    if (err instanceof RateLimited) {
-      stats.rateLimitedUntil = new Date(err.resetAt).toISOString();
-      partial = true;
-    } else throw err;
+    if (!(err instanceof RateLimited)) throw err;
+    noteRateLimit(stats, err);
   }
+  stats.finals = `${requiredDone}/${required}`;
+  stats.provisional = `${provisional}/${SIGNATURE_QUERIES.length}`;
+  if (olderWanted > olderDone) stats.pendingFinals = olderWanted - olderDone;
+  const partial = requiredDone < required;
   return { stats, partial, outcome: partial ? "partial" : "success" };
 };

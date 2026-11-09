@@ -35,7 +35,11 @@ export function registryEntry(body: unknown, slug: string) {
   if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new Error("Invalid signature directory");
   return {token:url.host,url:url.href,operator:typeof bot.operator === "string" ? bot.operator : null};
 }
-/** Catalog discovery only; never evidence that this site verified a signed request. */
+/**
+ * Catalog discovery only; never evidence that this site verified a signed request.
+ * A full pass takes many runs at MAX_DETAILS entries each, so a run that checked its bounded
+ * batch has done its work; it is partial only when the deadline or a concurrent run cut it short.
+ */
 export async function collectSignatureRegistry(ctx: JobContext) {
   const token = process.env.CLOUDFLARE_API_TOKEN;
   if (!token) return {partial:false,stats:{registry:"disabled",registryReason:"CLOUDFLARE_API_TOKEN not configured"}};
@@ -51,7 +55,7 @@ export async function collectSignatureRegistry(ctx: JobContext) {
     if (result.status!==200) throw new Error("Radar bot API HTTP "+result.status);
     return result.body;
   };
-  let checked=0, listPages=0;
+  let checked=0, listPages=0, contended=false;
   while (timeLeft(ctx)>4_000 && checked<MAX_DETAILS && listPages<MAX_LIST_PAGES) {
     const state=snapshot.state;
     if (!state.pending.length) {
@@ -59,7 +63,7 @@ export async function collectSignatureRegistry(ctx: JobContext) {
       listPages++;
       const next:Scan={...state,offset:state.offset+page.listed,pending:page.slugs,exhausted:page.listed<PAGE_SIZE,skipped:(state.skipped ?? 0)+page.skipped};
       if (!page.listed || (!page.slugs.length && next.exhausted)) next.completedAt=new Date().toISOString();
-      if (!await commitCollectorState(ctx.db,REGISTRY_KEY,snapshot,next)) break;
+      if (!await commitCollectorState(ctx.db,REGISTRY_KEY,snapshot,next)) { contended=true; break; }
       snapshot={state:next,revision:snapshot.revision+1};
       if (next.completedAt) break;
       if (!next.pending.length) continue;
@@ -72,9 +76,12 @@ export async function collectSignatureRegistry(ctx: JobContext) {
       insert into agent_sightings(kind,token,operator,fn,url)
       select 'signature-registry',${entry.token},${entry.operator},'Published Web Bot Auth directory',${entry.url} where ${guard}
       on conflict(kind,token) do nothing`] : []);
-    if (!saved) break;
+    if (!saved) { contended=true; break; }
     snapshot={state:next,revision:snapshot.revision+1};checked++;
     if (next.completedAt) break;
   }
-  return {partial:!snapshot.state.completedAt,stats:{registry:"Radar bot API",registryChecked:snapshot.state.checked,signedAgents:snapshot.state.found,registrySkippedSlugs:snapshot.state.skipped ?? 0,registryCompletedAt:snapshot.state.completedAt ?? null}};
+  const complete=!!snapshot.state.completedAt;
+  const batchDone=checked>=MAX_DETAILS || listPages>=MAX_LIST_PAGES;
+  const registryScan=complete ? "complete" : contended ? "interrupted by a concurrent run" : batchDone ? "in progress" : "cut short by the deadline";
+  return {partial:!complete && !batchDone,stats:{registry:"Radar bot API",registryScan,registryChecked:snapshot.state.checked,signedAgents:snapshot.state.found,registrySkippedSlugs:snapshot.state.skipped ?? 0,registryCompletedAt:snapshot.state.completedAt ?? null}};
 }

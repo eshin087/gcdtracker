@@ -1,14 +1,16 @@
 # Open work and research roadmap
 
-Reviewed October 25, 2026. Priorities below are recommendations, not work already performed or authorization for external changes. Keep completed work in the changelog/PR rather than a growing checklist here.
+Reviewed November 9, 2026. Priorities below are recommendations, not work already performed or authorization for external changes. Keep completed work in the changelog/PR rather than a growing checklist here.
 
 ## R1: Align health with the daily schedule
 
-**Priority:** release verification. **Status:** daily cadence, unscheduled historical-source handling and per-step collector outcomes implemented on the three-source and flow branches; production still ran the 30-minute interval on October 25, so its health pill reported every source stale.
+**Priority:** release verification. **Status:** the daily grace window is deployed: on November 9 `/api/live` reported `schedule: daily` and no stale source. Health is still `degraded` every day, for the reasons in the [November 9 incident](incidents.md#collectors-starved-or-failing-after-the-october-26-release).
 
-[Health defaults](../src/lib/health.ts) expect routine runs every 86,400 seconds with a two-interval grace window, matching [scheduling](../vercel.json). Historical workers retain their last outcomes but are explicitly unscheduled and excluded from routine freshness. The collector fixes of October 25 make by-design caps, publisher lag and per-series publisher states recorded coverage instead of failed or partial runs.
+[Health defaults](../src/lib/health.ts) expect routine runs every 86,400 seconds with a two-interval grace window, matching [scheduling](../vercel.json). Historical workers retain their last outcomes but are explicitly unscheduled and excluded from routine freshness. A run is partial when a required observation is incomplete, not when a bound that defines a sample is reached. The branch `codex/collector-budget-and-radar` applies that to the Bluesky byte budget and the signing-registry scan and adds a public reason per source; it is not deployed.
 
-**Done when:** the daily grace window is deployed; historical/unscheduled sources are clearly represented; partial and failed outcomes remain visible; a newly generated public snapshot can be distinguished from cached data; after deployment `/data` shows `success` for sources whose upstreams responded. Verify schedule delivery and checkpoint movement before claiming new observations are arriving.
+Still open after that branch: Radar fails, Moltbook's daily count is a lower bound ([R8](#r8-moltbook-volume-exceeds-the-walk-cap)), and the GitHub jobs may be refused ([R7](#r7-give-the-github-jobs-enough-time)). The first request to `/api/live` after a quiet period returns the previous snapshot, whose `stale` flags were computed when it was generated; the pill does not compare `generatedAt` with the present.
+
+**Done when:** historical/unscheduled sources are clearly represented; partial and failed outcomes remain visible with their reason; an old cached snapshot cannot read as current; after deployment `/data` shows `success` for sources whose upstreams responded. Verify schedule delivery and checkpoint movement before claiming new observations are arriving.
 
 ## R2: Prune detail without losing historical summaries
 
@@ -28,17 +30,17 @@ Vercel Hobby and disabled GitHub Actions were checked on September 11; GitHub Ac
 
 ## R4: Replace the frozen homepage archive figures
 
-**Priority:** next product task. **Status:** merged October 26 via [PR #14](https://github.com/eshin087/gcdtracker/pull/14) as GitHub search census v1; verify the first comparable day on the production homepage after the next daily run. After deployment the tiles show no value until the first comparable days exist. Each day needs 16 detector and 7 reference queries; the previous 30 days backfill with the spare search budget of each daily run, which may take several weeks. Partially collected days are completed first so a short slice still converges.
+**Priority:** next product task. **Status:** released October 26 via [PR #14](https://github.com/eshin087/gcdtracker/pull/14) as GitHub search census v1. Verified on the production homepage on November 9: the tiles show a current figure and the heatmap has one comparable day per run from October 26.
 
-The three homepage headline tiles and the daily heatmap read GH Archive summaries. The archive worker was retired on September 9, 2026, so the tiles show no value with "0/7 comparable UTC days" and the 2026 heatmap row has 4 validated days out of 298. Decision [D2](decisions.md#d2-preserve-the-distinctive-homepage) keeps the heatmap; its data source is what stopped.
+Each day needs 16 detector and 7 reference queries. The planned backfill of the previous 30 days did not happen: a run had at most two spare queries, and they went to the oldest day in the window, which left the window the next day. On the branch `codex/collector-budget-and-radar` the daily run no longer fills 30-day gaps; it repairs at most one earlier day from the last week after its required work. Days before October 26 keep their detector counts without reference counts and stay marked incomplete. The 30-day window becomes fully comparable on its own around November 25. Filling earlier days would need search budget the daily invocation does not have; see [R7](#r7-give-the-github-jobs-enough-time).
 
-**Proposed direction:** feed the tiles and heatmap from the GitHub search daily series, which finalizes every UTC day, as a separately labelled version with its own denominator (a daily `is:pr created:<day>` total). Keep the GH Archive view as labelled history. Any replacement must keep missing, incomplete and zero distinct and must not splice the two detectors into one line.
+Decision [D2](decisions.md#d2-preserve-the-distinctive-homepage) keeps the heatmap. The GH Archive view remains as labelled history, and the two detectors are never spliced.
 
-**Done when:** the homepage shows a current, labelled agent-PR figure and heatmap; the archive history remains available and labelled; browser tests cover both; the Methods page explains the detector change.
+**Done when:** the public Methods page explains the search census and the detector change. Its GitHub section still describes only GH Archive; the explanation currently lives under the homepage heatmap.
 
 ## R5: Release the September work
 
-**Status:** released October 26, 2026 as `068098d` via [PR #12](https://github.com/eshin087/gcdtracker/pull/12), with migration 0002 applied first. Remaining: verify the first post-release collector run and close PRs #8 and #3; see [status](status.md).
+**Status:** released October 26, 2026 as `068098d` via [PR #12](https://github.com/eshin087/gcdtracker/pull/12), with migration 0002 applied first. PRs #8 and #3 are closed. The post-release runs were checked on November 9: Wikimedia, Wikipedia and OSM reach `success`; the remaining problems are in the [November 9 incident](incidents.md#collectors-starved-or-failing-after-the-october-26-release).
 
 ## R6: Trim and cache the heavy explorer pages
 
@@ -47,6 +49,39 @@ The three homepage headline tiles and the daily heatmap read GH Archive summarie
 `/github` returned 1.8 MB of HTML, of which 1.2 MB is the server-component payload for the census view, and the Forums, GitHub and Wikipedia optional catch-all routes render dynamically on every request (`private, no-store`), so each visit queries the database. Traffic is low, so cost impact is small today.
 
 **Done when:** the catch-all pages declare their known views for static generation with revalidation, the census payload is reduced to what the view renders, and page size and cache headers are re-measured on the production alias.
+
+## R7: Give the GitHub jobs enough time
+
+**Priority:** decide after the first deployed run of `codex/collector-budget-and-radar`. **Status:** open; needs an owner decision.
+
+Three collectors share one GitHub search allowance inside one 240-second invocation: the census (23 queries a day plus one sample-feed query), text signatures (up to 12) and watched repositories (up to 15 repositories). Of the thirteen runs from October 27 to November 8, the two jobs after the census collected nothing on twelve. The branch orders them by what a missed day costs, bounds each one, and waits for the pause GitHub asks for when the remaining time allows.
+
+What the branch cannot settle is which limit applies. If the refusal carries a window reset a few seconds away, waiting fits and all three complete. If it carries a `retry-after` of about a minute, the wait does not fit: going by the November 8 run times, the census needs roughly 50 seconds, the other two jobs roughly 60, and the other collectors roughly 95 of the 225 usable seconds. `/data` will show the basis after the first run.
+
+Options if the long pause applies, each a scheduling or runtime decision: raise `maxDuration` from 240 to 300 seconds after confirming the plan allows it; add a second daily invocation for signatures and watched repositories; or run the other collectors between the census and the two smaller jobs, which needs per-job time budgets because several collectors sit close to their current slice. A second invocation would also make history backfill for the census possible.
+
+**Done when:** text-signature finals arrive daily, the watched rotation advances daily, the sample feed fills `github_events`, and the choice is recorded in [decisions](decisions.md) and [cost controls](cost-controls.md).
+
+## R8: Moltbook volume exceeds the walk cap
+
+**Priority:** owner decision. **Status:** open.
+
+The daily walk reads at most 60 pages of 100 posts. From November 1 to 7 every day recorded between 5,726 and 6,150 posts and the walk stopped before reaching the previous run, so the series has flattened at the ceiling and each day is a lower bound. The Forums page and the homepage inspector say so, and the run stays `partial` because the daily count is incomplete. In the first three hours of November 8 the feed carried 1,082 posts, which suggests more than 8,000 a day.
+
+Raising the page cap costs one request per 100 posts and about 0.3 seconds each, taken from a run with little spare time ([R7](#r7-give-the-github-jobs-enough-time)). The alternative is to keep the cap and present the series as a capped sample.
+
+**Done when:** the cap is raised with its request and time cost recorded, or the lower-bound presentation is accepted and the outcome rule for a capped walk is written down.
+
+## R9: Presentation and interpretation fixes
+
+**Priority:** low. **Status:** observed on production November 9; not changed.
+
+- The homepage flow shows two rows labelled "Cursor": the branch-prefix detector and the app account lose their distinguishing suffix in [stats-sources.ts](../src/lib/stats-sources.ts).
+- Forums shows the current UTC day as 0 before the daily run, and days without a row as 0, which conflicts with [D3](decisions.md#d3-evidence-must-remain-interpretable).
+- Social publishing shows a daily zero: 0 disclosure matches in 2,913 sampled posts over 13 days. A pooled rate with its sample size would be more informative than a zero from about 150 posts.
+- New agents dates signing-registry entries by when the alphabetical scan reached them, so long-standing entries look new during a pass.
+- The homepage census chart overlaps its "2015" and "2016" axis labels, and the heatmap's month and weekday labels render much larger than surrounding text.
+- The GitHub page sums text-signature counts over 30 days although only one day was collected between October 27 and November 8; the number of days is shown only in a tooltip.
 
 ## Research features after reliability
 

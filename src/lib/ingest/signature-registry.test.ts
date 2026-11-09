@@ -27,9 +27,10 @@ describe("authenticated signature catalog",()=>{
   const slugs=Array.from({length:21},(_,i)=>"bot-"+i);
   const fetch=vi.fn(async(input:string)=>Response.json(input.includes("?")?{success:true,result:{bots:slugs.map(slug=>({slug}))}}:detail(input.split("/").at(-1)!,"https://"+input.split("/").at(-1)+".example/keys")));
   vi.stubGlobal("fetch",fetch);
-  expect((await collectSignatureRegistry(ctx())).partial).toBe(true);
+  // A run that checked its whole bounded batch did its work; the scan simply continues next run.
+  expect(await collectSignatureRegistry(ctx())).toMatchObject({partial:false,stats:{registryScan:"in progress",registryChecked:20,registryCompletedAt:null}});
   expect(state.pending).toEqual(["bot-20"]);expect(state.completedAt).toBeUndefined();
-  expect((await collectSignatureRegistry(ctx())).partial).toBe(false);
+  expect(await collectSignatureRegistry(ctx())).toMatchObject({partial:false,stats:{registryScan:"complete",registryChecked:21}});
   expect(fetch.mock.calls.filter(([url])=>url.includes("?")).length).toBe(1);
   expect(fetch.mock.calls).toHaveLength(22);expect(state.checked).toBe(21);
   expect((await collectSignatureRegistry(ctx())).partial).toBe(false);expect(fetch.mock.calls).toHaveLength(22);
@@ -45,7 +46,13 @@ describe("authenticated signature catalog",()=>{
   state={offset:1,pending:["example"],exhausted:true,checked:0,found:0};
   vi.mocked(commitCollectorState).mockResolvedValue(false);
   vi.stubGlobal("fetch",vi.fn().mockResolvedValue(Response.json(detail("example"))));
-  expect((await collectSignatureRegistry(ctx())).partial).toBe(true);expect(state.pending).toEqual(["example"]);
+  expect(await collectSignatureRegistry(ctx())).toMatchObject({partial:true,stats:{registryScan:"interrupted by a concurrent run"}});expect(state.pending).toEqual(["example"]);
+ });
+ it("is partial when the deadline, not the batch size, stops the scan",async()=>{
+  state={offset:1,pending:["example"],exhausted:true,checked:0,found:0};
+  const fetch=vi.fn();vi.stubGlobal("fetch",fetch);
+  expect(await collectSignatureRegistry({...ctx(),deadline:Date.now()+3_000})).toMatchObject({partial:true,stats:{registryScan:"cut short by the deadline"}});
+  expect(fetch).not.toHaveBeenCalled();expect(state.pending).toEqual(["example"]);
  });
  it("skips an unexpected catalog slug and still completes the scan",async()=>{
   const fetch=vi.fn(async(input:string)=>Response.json(input.includes("?")?{success:true,result:{bots:[{slug:"odd slug!"},{slug:"good-bot"}]}}:detail("good-bot","https://good-bot.example/keys")));

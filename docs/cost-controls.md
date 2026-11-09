@@ -53,3 +53,7 @@ The three-source addition uses the existing daily Vercel route, with no new sche
 Social storage grows by at most two aggregate rows per UTC date per methodology version (730 in a normal year), plus fixed-size per-platform checkpoints. It does not retain raw posts. This row bound is not a measured byte forecast: indexes, database history, other collectors, compute and public page delivery also consume allowances. Radar purpose adds at most one request/day and replaces its bounded 28-day group snapshot.
 
 A free upstream source does not make unlimited site traffic free. Existing account/plan unknowns remain; this code neither changes billing plans nor promises permanent zero charges.
+
+## Bounded GitHub search
+
+The three GitHub collectors use the existing daily invocation and one search allowance. Per run the census sends 23 count queries and one sample-feed query, plus at most 23 more when one earlier day from the previous week needs repair; text signatures send at most twelve; watched repositories poll at most 15 repositories with a token, up to three pages each. Requests are paced, a refusal is followed by at most one wait and one retry, and a pause that does not fit the job's remaining time ends the job without further requests. There is no 30-day or multi-year backfill. Changing `maxDuration` or adding a second invocation is a runtime decision tracked in [R7](roadmap.md#r7-give-the-github-jobs-enough-time), not something this code does.
