@@ -4,14 +4,14 @@ Verified November 9, 2026, 02:10 to 04:15 UTC, from the public site, its exports
 
 ## Current work
 
-Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It is open as [PR #15](https://github.com/eshin087/gcdtracker/pull/15), not merged and not deployed. It needs no migration and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
+Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It was merged into `main` as [PR #15](https://github.com/eshin087/gcdtracker/pull/15) on November 9 at 04:15 UTC (`93c7d68`). Whether production serves it was not checked. It needs no migration and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
 
 - Radar accepts a snapshot when only a supplementary publisher field (an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block) fails validation, and records what it left out.
 - `/data` and `/api/live` show a short reason for each source's latest run, built from fixed phrases only.
 - The GitHub census counts the previous day, then takes the sample feed, then repairs at most one earlier day from the last week. It no longer fills 30-day reference gaps. The three GitHub jobs honour GitHub's own pause headers and run census, signatures, watched.
 - Bluesky's byte budget and an in-progress signing-registry scan no longer mark a run partial.
 
-Branch `codex/display-fixes`, cut from the tip of that branch (`5adf80c`), holds the presentation fixes of [R9](roadmap.md#r9-presentation-and-interpretation-fixes). It is open as [PR #16](https://github.com/eshin087/gcdtracker/pull/16), not merged and not deployed. It depends on PR #15, whose commits appear in its diff until that merges, and needs no migration, scheduler, dependency or paid service.
+Branch `codex/display-fixes`, cut from the tip of that branch (`5adf80c`), holds the presentation fixes of [R9](roadmap.md#r9-presentation-and-interpretation-fixes). It is open as [PR #16](https://github.com/eshin087/gcdtracker/pull/16), not merged and not deployed. PR #15 is already in `main`, so its diff holds only these changes. It needs no migration, scheduler, dependency or paid service.
 
 - The homepage flow labels the Cursor branch-prefix detector "Cursor branches", so no two rows share a name.
 - Forums ends at the last UTC day a walk finished counting and leaves a gap, not a zero, for a day without a stored count.
