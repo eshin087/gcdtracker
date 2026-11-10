@@ -221,25 +221,45 @@ export async function getGithubEvents(limit = 50, agent?: string): Promise<Githu
 
 export interface ForumDay {
   day: string;
-  posts: number;
-  agents: number;
+  /** Null when no count is stored for the day; that is a gap, not a zero. */
+  posts: number | null;
+  agents: number | null;
   /** The daily feed walk ended before reaching the previous boundary, so this count is a lower bound. */
   capped: boolean;
 }
 
+/**
+ * The last UTC day a feed walk has finished counting. A walk counts back from its newest post,
+ * so the day it runs in holds only the hours before the run and is left out.
+ */
+export function forumLastFullDay(countedThrough: unknown, now: Date = new Date()): string {
+  const yesterday = daysAgo(1, now);
+  const ms = typeof countedThrough === "string" ? Date.parse(countedThrough) : NaN;
+  if (!Number.isFinite(ms)) return yesterday;
+  const before = daysAgo(1, new Date(ms));
+  return before < yesterday ? before : yesterday;
+}
+
+export function forumDays(since: string, end: string, rows: Array<{ day: string; posts: number; agents: number }>, capped: string[]): ForumDay[] {
+  const map = new Map(rows.map((r) => [r.day, r]));
+  const cappedDays = new Set(capped);
+  return dayRange(since, end).map((day) => {
+    const row = map.get(day);
+    return { day, posts: row ? n(row.posts) : null, agents: row ? n(row.agents) : null, capped: cappedDays.has(day) };
+  });
+}
+
 export async function getForumByDay(days = 60): Promise<ForumDay[]> {
-  const since = daysAgo(days - 1);
-  const { rows, capped } = await safe({ rows: [] as Array<{ day: string; posts: number; agents: number }>, capped: [] as string[] }, async (d) => {
+  const since = daysAgo(days);
+  const { rows, capped, countedThrough } = await safe({ rows: [] as Array<{ day: string; posts: number; agents: number }>, capped: [] as string[], countedThrough: null as unknown }, async (d) => {
     const [rows, [coverage]] = await Promise.all([
       d.select().from(forumDaily).where(gte(forumDaily.day, since)),
       d.select({ state: collectorState.state }).from(collectorState).where(eq(collectorState.key, "moltbook:coverage")),
     ]);
     const list = Array.isArray(coverage?.state.capped) ? (coverage.state.capped as unknown[]) : [];
-    return { rows, capped: list.filter((day): day is string => typeof day === "string") };
+    return { rows, capped: list.filter((day): day is string => typeof day === "string"), countedThrough: coverage?.state.countedThrough as unknown };
   });
-  const map = new Map(rows.map((r) => [r.day, r]));
-  const cappedDays = new Set(capped);
-  return dayRange(since, dayOf()).map((day) => ({ day, posts: n(map.get(day)?.posts), agents: n(map.get(day)?.agents), capped: cappedDays.has(day) }));
+  return forumDays(since, forumLastFullDay(countedThrough), rows, capped);
 }
 
 export type ForumPostRow = typeof forumPosts.$inferSelect;

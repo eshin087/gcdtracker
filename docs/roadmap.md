@@ -74,7 +74,7 @@ Raising the page cap costs one request per 100 posts and about 0.3 seconds each,
 
 ## R9: Presentation and interpretation fixes
 
-**Priority:** low. **Status:** observed on production November 9; not changed.
+**Priority:** low. **Status:** observed on production November 9; fixed on local branch `codex/display-fixes` the same day, uncommitted, not merged and not deployed. The pages that need stored data (Forums, the Social table, the GitHub signature table, New agents) were checked by unit tests and an offline build, not in a browser with data. The items below describe production until a deployment.
 
 - The homepage flow shows two rows labelled "Cursor": the branch-prefix detector and the app account lose their distinguishing suffix in [stats-sources.ts](../src/lib/stats-sources.ts).
 - Forums shows the current UTC day as 0 before the daily run, and days without a row as 0, which conflicts with [D3](decisions.md#d3-evidence-must-remain-interpretable).

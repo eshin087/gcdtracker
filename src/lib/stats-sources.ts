@@ -28,7 +28,7 @@ import { dayOf, dayRange, daysAgo } from "@/lib/format";
 import { cacheSummary } from "./query-cache";
 import { RADAR_GROUPS, type RadarMetadata } from "./ingest/radar";
 import { publicRadarMetadata } from "./public-radar";
-import { githubAgentLabel } from "@/lib/github/agents";
+import { flowAgentLabel, githubAgentLabel } from "@/lib/github/agents";
 
 const n = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 const iso = (d: Date | string | null | undefined): string | null => {
@@ -369,7 +369,7 @@ async function queryFlowData(days = 30): Promise<FlowData> {
       if (source.total <= 0) return;
       sources.push(source); links.push({ source: source.id, target, value: source.total });
     };
-    for (const row of gh.slice(0, 6)) add({ id: "gh:" + row.agent, label: githubAgentLabel(row.agent).replace(/ \(.*\)$/, ""),
+    for (const row of gh.slice(0, 6)) add({ id: "gh:" + row.agent, label: flowAgentLabel(row.agent, row.tier),
       total: n(row.value), feed: "github", unit: "PR matches", purpose: "Code contributions",
       evidence: row.tier === "bot-account" ? "Documented bot account" : "Branch-name heuristic",
       method: "GitHub Search matches; bot-account and branch-prefix queries may overlap. Counts are not unique contributions or proof of model authorship.",

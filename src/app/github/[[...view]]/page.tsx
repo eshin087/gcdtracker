@@ -172,9 +172,35 @@ async function ByAgent({ db }: { db: boolean }) {
       {signatures.length > 0 ? (
         <>
           <p className="label" style={{ margin: "28px 0 8px" }}>
-            Text signatures across all of GitHub · 30 days · self-identified rung, loose phrase matching
+            Text signatures across all of GitHub · days collected in the last 30 · self-identified rung, loose phrase matching
           </p>
-          <BarList rows={signatures.map((s) => ({ key: s.agent, label: s.agent.replace("sig-", ""), value: s.prs, title: `${s.days} days` }))} variant="neutral" />
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Signature</th>
+                  <th className="num">Days collected</th>
+                  <th className="num">Matches on those days</th>
+                  <th className="num">Per collected day</th>
+                  <th>Latest day</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signatures.map((s) => (
+                  <tr key={s.agent}>
+                    <td className="mono">{s.agent.replace("sig-", "")}</td>
+                    <td className="num">{fmtInt(s.days)} of 30</td>
+                    <td className="num">{fmtInt(s.prs)}</td>
+                    <td className="num">{s.days > 0 ? fmtInt(s.prs / s.days) : "–"}</td>
+                    <td className="dim">{s.lastDay ? fmtDay(s.lastDay) : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="dim sans" style={{ fontSize: 12.5, marginTop: 12 }}>
+            Totals cover only the days a count was collected, so a signature with few days is not a 30-day total. Compare signatures by the per-day figure. Days without a count are missing, not zero.
+          </p>
         </>
       ) : null}
     </>

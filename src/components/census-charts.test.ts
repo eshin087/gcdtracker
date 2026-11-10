@@ -14,6 +14,25 @@ describe("restored history charts", () => {
     expect(html).not.toContain("NaN");
     expect(html).not.toContain("<circle");
   });
+  it("drops the start-year label when it would collide with the first year tick", () => {
+    const render = (start: string) => renderToStaticMarkup(createElement(MultiLine,{title:"History",showPoints:false,series:[{key:"a",label:"Views",points:[
+      {x:start,y:4},{x:"2026-09-01",y:7},
+    ]}]}));
+    const late = render("2015-07-01");
+    expect(late).not.toContain('class="axis-start"');
+    expect(late).toContain(">2016<");
+    const january = render("2015-01-01");
+    expect(january).toMatch(/class="axis-start"[^>]*>2015</);
+  });
+  it("sizes heatmap labels to the width of the map", () => {
+    const year = Array.from({length:365},(_,i) => ({day:new Date(Date.UTC(2026,0,1)+i*86_400_000).toISOString().slice(0,10),value:0.5,title:"d"}));
+    const one = renderToStaticMarkup(createElement(CalendarHeatmap,{label:"Year",days:year}));
+    const size = Number(one.match(/font-size:([\d.]+)px/)?.[1]);
+    expect(size).toBeGreaterThanOrEqual(6);
+    expect(size).toBeLessThan(8);
+    expect(one).toContain(">Jan 2026<");
+    expect(one).toContain(">Dec<");
+  });
   it("distinguishes recorded zero, missing dates, and partial coverage", () => {
     const html = renderToStaticMarkup(createElement(CalendarHeatmap,{label:"Daily",days:[
       {day:"2026-09-01",value:0,title:"Recorded zero"},

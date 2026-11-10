@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Display and interpretation fixes
+
+- Homepage flow: the Cursor branch-prefix detector is labelled "Cursor branches", so it no longer shares the name "Cursor" with the app account.
+- Forums: the daily series ends at the last UTC day a walk has finished counting, and a day without a stored count is a gap in the charts and is listed under them, not drawn as zero. A stored zero stays zero.
+- Social publishing: a new table pools every stored sample per platform, giving matches, sampled posts, the rate, and how many of the recent dates have a sample. Missing dates are left out of the totals.
+- GitHub: text signatures are a table with the number of days collected in the last 30, the matches on those days, a per-collected-day figure and the latest day, replacing a 30-day sum whose day count was only in a tooltip.
+- New agents: the registry column is "Recorded here", with a note that the registry is scanned in batches in catalogue order and publishes no join date. The crawler-token note says which dates come from the list's history and which from this site's first sighting.
+- Charts: the multi-year line chart omits its start-year label when it would overlap the first year tick, and heatmap month and weekday labels scale with the map so they no longer render larger than the surrounding text.
+
 ## Unreleased - Collector budget, Radar metadata and run reasons
 
 - `/data` shows a short reason under each source's latest result, and `/api/live` adds the same text as `detail` (null when there is nothing to explain). The text is built from fixed phrases, HTTP status codes, UTC times and collector step or repository names; raw error messages are never published. Source names in that table no longer break mid-word on narrow screens.
