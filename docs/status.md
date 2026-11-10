@@ -11,7 +11,7 @@ Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, 
 - The GitHub census counts the previous day, then takes the sample feed, then repairs at most one earlier day from the last week. It no longer fills 30-day reference gaps. The three GitHub jobs honour GitHub's own pause headers and run census, signatures, watched.
 - Bluesky's byte budget and an in-progress signing-registry scan no longer mark a run partial.
 
-Branch `codex/display-fixes`, cut from the tip of that branch (`5adf80c`), holds the presentation fixes of [R9](roadmap.md#r9-presentation-and-interpretation-fixes). On November 9 it was local only: uncommitted, not pushed, no pull request, not merged and not deployed. It depends on PR #15 and needs no migration, scheduler, dependency or paid service.
+Branch `codex/display-fixes`, cut from the tip of that branch (`5adf80c`), holds the presentation fixes of [R9](roadmap.md#r9-presentation-and-interpretation-fixes). On November 9 it was committed locally only: not pushed, no pull request, not merged and not deployed. It depends on PR #15 and needs no migration, scheduler, dependency or paid service.
 
 - The homepage flow labels the Cursor branch-prefix detector "Cursor branches", so no two rows share a name.
 - Forums ends at the last UTC day a walk finished counting and leaves a gap, not a zero, for a day without a stored count.
