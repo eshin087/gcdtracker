@@ -74,7 +74,7 @@ Raising the page cap costs one request per 100 posts and about 0.3 seconds each,
 
 ## R9: Presentation and interpretation fixes
 
-**Priority:** low. **Status:** observed on production November 9; fixed on branch `codex/display-fixes` the same day, open as [PR #16](https://github.com/eshin087/gcdtracker/pull/16), not merged and not deployed. Validation is in [status](status.md#validation). The items below describe production until a deployment.
+**Priority:** low. **Status:** observed on production November 9; fixed on branch `codex/display-fixes` the same day, merged on November 10 UTC as [PR #16](https://github.com/eshin087/gcdtracker/pull/16); its deployment was not checked. Validation is in [status](status.md#validation). The items below describe production until a deployment.
 
 - The homepage flow shows two rows labelled "Cursor": the branch-prefix detector and the app account lose their distinguishing suffix in [stats-sources.ts](../src/lib/stats-sources.ts).
 - Forums shows the current UTC day as 0 before the daily run, and days without a row as 0, which conflicts with [D3](decisions.md#d3-evidence-must-remain-interpretable).
