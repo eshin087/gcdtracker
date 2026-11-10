@@ -6,7 +6,7 @@ Reviewed November 9, 2026. Priorities below are recommendations, not work alread
 
 **Priority:** release verification. **Status:** the daily grace window is deployed: on November 9 `/api/live` reported `schedule: daily` and no stale source. Health is still `degraded` every day, for the reasons in the [November 9 incident](incidents.md#collectors-starved-or-failing-after-the-october-26-release).
 
-[Health defaults](../src/lib/health.ts) expect routine runs every 86,400 seconds with a two-interval grace window, matching [scheduling](../vercel.json). Historical workers retain their last outcomes but are explicitly unscheduled and excluded from routine freshness. A run is partial when a required observation is incomplete, not when a bound that defines a sample is reached. The branch `codex/collector-budget-and-radar` applies that to the Bluesky byte budget and the signing-registry scan and adds a public reason per source; it is not deployed.
+[Health defaults](../src/lib/health.ts) expect routine runs every 86,400 seconds with a two-interval grace window, matching [scheduling](../vercel.json). Historical workers retain their last outcomes but are explicitly unscheduled and excluded from routine freshness. A run is partial when a required observation is incomplete, not when a bound that defines a sample is reached. The branch `codex/collector-budget-and-radar` applies that to the Bluesky byte budget and the signing-registry scan and adds a public reason per source; it merged on November 9 as PR #15, and its deployment was not checked.
 
 Still open after that branch: Radar fails, Moltbook's daily count is a lower bound ([R8](#r8-moltbook-volume-exceeds-the-walk-cap)), and the GitHub jobs may be refused ([R7](#r7-give-the-github-jobs-enough-time)). The first request to `/api/live` after a quiet period returns the previous snapshot, whose `stale` flags were computed when it was generated; the pill does not compare `generatedAt` with the present.
 
@@ -74,7 +74,7 @@ Raising the page cap costs one request per 100 posts and about 0.3 seconds each,
 
 ## R9: Presentation and interpretation fixes
 
-**Priority:** low. **Status:** observed on production November 9; not changed.
+**Priority:** low. **Status:** observed on production November 9; fixed on branch `codex/display-fixes` the same day, merged on November 10 UTC as [PR #16](https://github.com/eshin087/gcdtracker/pull/16); its deployment was not checked. Validation is in [status](status.md#validation). The items below describe production until a deployment.
 
 - The homepage flow shows two rows labelled "Cursor": the branch-prefix detector and the app account lose their distinguishing suffix in [stats-sources.ts](../src/lib/stats-sources.ts).
 - Forums shows the current UTC day as 0 before the daily run, and days without a row as 0, which conflicts with [D3](decisions.md#d3-evidence-must-remain-interpretable).

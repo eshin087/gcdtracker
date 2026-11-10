@@ -47,3 +47,12 @@ export function githubAgent(key: string): GithubAgent | undefined {
 export function githubAgentLabel(key: string): string {
   return BY_KEY.get(key)?.label ?? key;
 }
+
+/**
+ * Short label for the homepage flow. A branch-prefix detector and a bot account can share
+ * a product name, so the detector keeps a suffix that tells the two rows apart.
+ */
+export function flowAgentLabel(key: string, tier?: string): string {
+  const base = githubAgentLabel(key).replace(/ \(.*\)$/, "");
+  return (tier ?? BY_KEY.get(key)?.tier) === "branch-prefix" ? base + " branches" : base;
+}

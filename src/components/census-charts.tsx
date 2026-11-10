@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 
 /* ------------------------------------------------------------------ */
 /* MultiLine: several series on a true date axis with end labels       */
@@ -73,6 +73,11 @@ export function MultiLine({
   // Year rules along the x axis.
   const years: number[] = [];
   for (let y = Number(fmtYear(x0)) + 1; y <= Number(fmtYear(x1)); y++) years.push(Date.UTC(y, 0, 1));
+  // The start label sits at the left edge and year labels are centred on 1 January. When the
+  // data starts late in a year the two collide, so the start label gives way.
+  const startLabel = shortAxis ? new Date(x0).toISOString().slice(5, 10) : fmtYear(x0);
+  const firstYearX = years.length ? padL + ((years[0] - x0) / span) * plotW : Infinity;
+  const showStart = firstYearX - 13 >= padL + startLabel.length * 6.2 + 4;
 
   // End labels: sort by final y and push apart so none overlap.
   const ends = series
@@ -124,9 +129,9 @@ export function MultiLine({
           </g>
         );
       })}
-      <text x={padL} y={H - 8} textAnchor="start">
-        {shortAxis ? new Date(x0).toISOString().slice(5,10) : fmtYear(x0)}
-      </text>
+      {showStart ? <text className="axis-start" x={padL} y={H - 8} textAnchor="start">
+        {startLabel}
+      </text> : null}
       {shortAxis ? <text x={W-padR} y={H-8} textAnchor="end">{new Date(x1).toISOString().slice(5,10)}</text> : null}
       <line className="axis" x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} />
       {visibleAnnotations.map((a) => (
@@ -201,7 +206,14 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
   const cells: Array<{ x: number; y: number; d: HeatDay }> = [];
   const monthLabels: Array<{ x: number; text: string }> = [];
   let lastMonth = -1;
-  let lastLabelEnd = -Infinity; // ~5.6px per character at 10px
+  // The viewBox is scaled to the container, so a one-year map (about 450 units wide) would draw
+  // 10-unit text at roughly 17px. Size the labels to land near 11px at a 760px container.
+  // On narrow screens the map keeps its natural width and scrolls, so the stylesheet goes back
+  // to 10 units there; labels are therefore spaced for 10-unit text (about 5.6 units a character).
+  const fontSize = Math.round(Math.min(10, Math.max(4, (11 * W) / 760)) * 10) / 10;
+  const charW = 5.6;
+  const textStyle = { "--hm-fs": `${fontSize}px` } as CSSProperties;
+  let lastLabelEnd = -Infinity;
   for (let i = 0; i < totalDays; i++) {
     const date = new Date(start.getTime() + i * 86_400_000);
     const key = date.toISOString().slice(0, 10);
@@ -213,7 +225,7 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
       const text = date.getUTCMonth() === 0 || monthLabels.length === 0 ? `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}` : MONTHS[date.getUTCMonth()];
       if (x >= lastLabelEnd) {
         monthLabels.push({ x, text });
-        lastLabelEnd = x + text.length * 5.6 + 8;
+        lastLabelEnd = x + text.length * charW + 8;
       }
     }
     const d = byDay.get(key) ?? (date >= first ? {day:key,value:null,title:key+" · no observation"} : null);
@@ -229,12 +241,12 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
           </pattern>
         </defs>
         {monthLabels.map((m) => (
-          <text key={`${m.x}-${m.text}`} x={m.x} y={padT - 6} textAnchor="start">
+          <text key={`${m.x}-${m.text}`} x={m.x} y={padT - 6} textAnchor="start" style={textStyle}>
             {m.text}
           </text>
         ))}
         {["Mon", "Wed", "Fri", "Sun"].map((t, i) => (
-          <text key={t} x={padL - 6} y={padT + [0, 2, 4, 6][i] * step + cell - 2} textAnchor="end">
+          <text key={t} x={padL - 6} y={padT + [0, 2, 4, 6][i] * step + cell - 1} textAnchor="end" style={textStyle}>
             {t}
           </text>
         ))}

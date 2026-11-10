@@ -7,6 +7,8 @@ const API = "https://api.cloudflare.com/client/v4/radar/bots";
 export const REGISTRY_KEY = "agentwatch:signature-catalog";
 const PAGE_SIZE = 100;
 const MAX_DETAILS = 20;
+/** Entries checked per run; the New agents page states it. */
+export const SIGNATURE_SCAN_BATCH = MAX_DETAILS;
 const MAX_LIST_PAGES = 5;
 interface Scan extends Record<string, unknown> {
   offset: number; pending: string[]; exhausted: boolean; checked: number; found: number; skipped?: number; completedAt?: string;

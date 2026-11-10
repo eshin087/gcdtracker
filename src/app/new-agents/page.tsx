@@ -6,6 +6,7 @@ import { hasDatabase } from "@/lib/stats";
 import { getSeries, getSightings } from "@/lib/stats-sources";
 import { TimelineChart } from "@/components/charts";
 import { fmtMonth } from "@/lib/stats-census";
+import { SIGNATURE_SCAN_BATCH } from "@/lib/ingest/signature-registry";
 
 export const revalidate = 300;
 
@@ -26,7 +27,7 @@ export default async function NewAgentsPage() {
     <div className="shell explorer">
       <PageHeader
         title="New agents"
-        sub="Two public lists are diffed daily: the ai.robots.txt catalogue of AI crawler user agents, and the registry of agents that sign their requests with Web Bot Auth. Anything that appears for the first time is recorded here with the date we first saw it."
+        sub="Two public lists are diffed daily: the ai.robots.txt catalogue of AI crawler user agents, and the registry of agents that sign their requests with Web Bot Auth. Crawler tokens are dated from the list's own history where it was collected. Registry entries carry the date our scan recorded them, which is not the date they joined the registry."
       />
       <StatTiles
         tiles={[
@@ -66,13 +67,16 @@ export default async function NewAgentsPage() {
           <p className="page-sub" style={{ maxWidth: "72ch" }}>
             These registry entries advertise signing keys. Membership does not establish the identity of a visitor here. Signature-header presence is recorded without cryptographic verification.
           </p>
+          <p className="page-sub" style={{ maxWidth: "72ch" }}>
+            The registry is read about {SIGNATURE_SCAN_BATCH} entries per daily run, in catalogue order. &quot;Recorded here&quot; is the day the scan reached an entry, so an entry recorded recently may have been in the registry for a long time. The registry does not publish a join date.
+          </p>
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
                 <tr>
                   <th>Host</th>
                   <th>Key directory</th>
-                  <th>First seen here</th>
+                  <th>Recorded here</th>
                   <th></th>
                 </tr>
               </thead>
@@ -126,7 +130,7 @@ export default async function NewAgentsPage() {
             </table>
           </div>
           <p className="dim sans" style={{ fontSize: 12.5, marginTop: 12 }}>
-            The first run records the whole list at once; from then on only genuinely new entries appear with a fresh date.
+            Crawler token dates come from the ai.robots.txt git history where it was collected, so they show when maintainers listed a token, not when the crawler launched. A token listed after that history stopped updating carries the date this site first saw it.
           </p>
         </>
       )}

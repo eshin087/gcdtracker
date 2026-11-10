@@ -4,12 +4,21 @@ Verified November 9, 2026, 02:10 to 04:15 UTC, from the public site, its exports
 
 ## Current work
 
-Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It is open as [PR #15](https://github.com/eshin087/gcdtracker/pull/15), not merged and not deployed. It needs no migration and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
+Branch `codex/collector-budget-and-radar`, cut from `origin/main` at `864f4f0`, holds fixes for the collector problems found on November 9. It was merged into `main` as [PR #15](https://github.com/eshin087/gcdtracker/pull/15) on November 9 at 04:15 UTC (`93c7d68`). Whether production serves it was not checked. It needs no migration and adds no scheduler, dependency or paid service. See the [incident note](incidents.md#collectors-starved-or-failing-after-the-october-26-release) for the evidence and the [changelog](../CHANGELOG.md) for behaviour.
 
 - Radar accepts a snapshot when only a supplementary publisher field (an annotation, `lastUpdated`, `aggInterval`, a unit entry or the confidence block) fails validation, and records what it left out.
 - `/data` and `/api/live` show a short reason for each source's latest run, built from fixed phrases only.
 - The GitHub census counts the previous day, then takes the sample feed, then repairs at most one earlier day from the last week. It no longer fills 30-day reference gaps. The three GitHub jobs honour GitHub's own pause headers and run census, signatures, watched.
 - Bluesky's byte budget and an in-progress signing-registry scan no longer mark a run partial.
+
+Branch `codex/display-fixes`, cut from the tip of that branch (`5adf80c`), holds the presentation fixes of [R9](roadmap.md#r9-presentation-and-interpretation-fixes). It was merged into `main` as [PR #16](https://github.com/eshin087/gcdtracker/pull/16) on November 10 UTC. Whether production serves it was not checked. PR #15 is already in `main`, so its diff holds only these changes. It needs no migration, scheduler, dependency or paid service.
+
+- The homepage flow labels the Cursor branch-prefix detector "Cursor branches", so no two rows share a name.
+- Forums ends at the last UTC day a walk finished counting and leaves a gap, not a zero, for a day without a stored count.
+- Social publishing adds a table pooling all stored samples per platform, with the sampled-post total and the dates covered.
+- The GitHub text-signature list is a table showing how many of the last 30 days were collected beside each total.
+- New agents labels registry dates "Recorded here" and explains the batched catalogue-order scan.
+- The census chart drops its start-year label when it would touch the first year tick, and heatmap month and weekday labels are sized to the map so they render near the surrounding text.
 
 ## Verified state
 
@@ -33,11 +42,15 @@ On a fresh disposable PostgreSQL 16 container: `init` and `migration-check` pass
 
 The reason line on `/data` was then checked in a browser against synthetic failed and partial runs added to the QA database. It rendered at desktop and 375-pixel widths without horizontal overflow, `/api/live` carried the same text, and a run whose stored error contained a hostname showed only "error: network error". The check also found source names breaking mid-word at phone width, which the branch fixes.
 
+On `codex/display-fixes`: lint, TypeScript and all 383 unit tests in 40 files passed. On a fresh disposable PostgreSQL 16 container, `init` and `migration-check` passed, the integration suite passed all 44 tests in 7 files, and the seeded browser suite passed all 33 tests, first on the seeded build and again on the final build. The container was removed and the build output replaced with an offline build afterwards.
+
+The changed views were then seen in a browser at desktop and 375-pixel widths with the seed plus synthetic rows added to the QA database: two Cursor detectors, three text signatures collected on one or two days, and two removed forum days. The flow showed "Cursor" and "Cursor branches"; Forums named the two gap days; the Social and signature tables showed their totals and day counts and scrolled inside their own frame with no page overflow; New agents showed the renamed column. That check found heatmap labels at about 6 pixels on a phone, where the map keeps its natural width, so the stylesheet now uses the original 10-unit size below 700 pixels: labels measured about 10.6 pixels at 1024 and 10 at 375. The start-year collision case is covered by a unit test only, because the seed starts in January.
+
 Narrow layouts were not checked on production. No production write, migration, merge or deployment was performed, and no production database query was made.
 
 ## Next steps and limitations
 
 - After a deployment, read `/data` following the next daily run. The Radar line should name the group and either an HTTP status or the rejected check; the GitHub lines should say whether a pause came from `retry-after` or the window reset. Until then the Radar cause is inferred by elimination, not confirmed.
 - If GitHub's refusal is a minute-long `retry-after`, the three GitHub jobs cannot all finish inside one invocation; see [R7](roadmap.md#r7-give-the-github-jobs-enough-time).
-- Decide the Moltbook cap ([R8](roadmap.md#r8-moltbook-volume-exceeds-the-walk-cap)) and the presentation fixes ([R9](roadmap.md#r9-presentation-and-interpretation-fixes)).
+- Decide the Moltbook cap ([R8](roadmap.md#r8-moltbook-volume-exceeds-the-walk-cap)).
 - Radar purpose endpoint permissions, Neon plan verification, retention ([R2](roadmap.md#r2-prune-detail-without-losing-historical-summaries)) and the GitHub page payload ([R6](roadmap.md#r6-trim-and-cache-the-heavy-explorer-pages)) remain open.

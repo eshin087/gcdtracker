@@ -36,6 +36,30 @@ export interface SocialReportData {
   days: string[];
   samples: PublicSocialSample[];
 }
+export interface PooledDisclosure {
+  platform: PublicSocialSample["platform"];
+  /** UTC dates with a stored sample, not calendar days in the window. */
+  sampleDays: number;
+  sampledPosts: number;
+  aiDisclosurePosts: number;
+  firstDay: string;
+  lastDay: string;
+}
+/**
+ * Adds up every stored sample per platform so a rate is read against its whole sample size
+ * rather than one day's. Days without a sample are not counted as zeros.
+ */
+export function pooledDisclosure(samples: PublicSocialSample[]): PooledDisclosure[] {
+  const out = new Map<string, PooledDisclosure>();
+  for (const s of samples) {
+    const p = out.get(s.platform) ?? { platform: s.platform, sampleDays: 0, sampledPosts: 0, aiDisclosurePosts: 0, firstDay: s.day, lastDay: s.day };
+    p.sampleDays++; p.sampledPosts += s.sampledPosts; p.aiDisclosurePosts += s.aiDisclosurePosts;
+    if (s.day < p.firstDay) p.firstDay = s.day;
+    if (s.day > p.lastDay) p.lastDay = s.day;
+    out.set(s.platform, p);
+  }
+  return SOCIAL_PLATFORMS.flatMap(platform => out.get(platform) ?? []);
+}
 export function sampleDays(endDay: string, count = 28): string[] {
   const start = Date.parse(endDay + "T00:00:00Z");
   return Array.from({ length: Math.max(1, Math.min(90, count)) }, (_,i) => i).map((_,i,arr) =>

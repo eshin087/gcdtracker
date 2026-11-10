@@ -26,7 +26,7 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
 
   const db = hasDatabase();
   const [overview, byDay] = await Promise.all([getOverview(), getForumByDay(60)]);
-  const latest = [...byDay].reverse().find((d) => d.posts > 0);
+  const latest = [...byDay].reverse().find((d) => (d.posts ?? 0) > 0);
 
   const tiles = [
     { value: fmtInt(overview.forumPosts7d), label: "Moltbook posts, 7 days", sub: "platform-reported activity; authorship unverified" },
@@ -53,9 +53,13 @@ export default async function ForumsPage({ params }: { params: Promise<{ view?: 
 }
 
 function ByDay({ byDay, db }: { byDay: Awaited<ReturnType<typeof getForumByDay>>; db: boolean }) {
-  if (!byDay.some((d) => d.posts > 0)) return <Empty db={db}>The Moltbook feed walk runs once a day.</Empty>;
+  const counted = byDay.flatMap((d) => (d.posts === null ? [] : [{ ...d, posts: d.posts }]));
+  if (!counted.some((d) => d.posts > 0)) return <Empty db={db}>The Moltbook feed walk runs once a day.</Empty>;
   const days = byDay.map((d) => d.day);
-  const capped = byDay.filter((d) => d.capped && d.posts > 0);
+  const capped = counted.filter((d) => d.capped && d.posts > 0);
+  const through = byDay[byDay.length - 1].day;
+  const firstCounted = byDay.findIndex((d) => d.posts !== null);
+  const gaps = byDay.slice(firstCounted).filter((d) => d.posts === null);
   return (
     <>
       <p className="meta">
@@ -63,11 +67,15 @@ function ByDay({ byDay, db }: { byDay: Awaited<ReturnType<typeof getForumByDay>>
         Days where the walk stopped early are lower bounds{capped.length ? `: ${capped.map((d) => fmtDay(d.day)).join(", ")}` : ""}.
         Before this walk, each run kept only the newest 500 posts, so earlier days show that cap rather than platform volume.
       </p>
+      <p className="meta">
+        Shown through {fmtDay(through)} UTC, the last day a walk has finished counting. The day a walk runs in holds only the hours before the run, so it is left out until the next run.
+        {gaps.length ? ` ${gaps.length === 1 ? "One day has" : `${fmtInt(gaps.length)} days have`} no stored count (${gaps.slice(-6).map((d) => fmtDay(d.day)).join(", ")}${gaps.length > 6 ? ", and earlier" : ""}); the charts leave a gap there rather than a zero.` : ""}
+      </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24, margin: "0 0 28px" }}>
         <MiniChart days={days} values={byDay.map((d) => d.posts)} label="Posts per day" />
         <MiniChart days={days} values={byDay.map((d) => d.agents)} label="Distinct agents per day" />
       </div>
-      <BarList rows={[...byDay].reverse().map((d) => ({ key: d.day, label: d.capped ? `${fmtDay(d.day)} ≥` : fmtDay(d.day), value: d.posts, title: `${fmtInt(d.agents)} agents${d.capped ? " · lower bound, walk stopped early" : ""}` }))} />
+      <BarList rows={[...counted].reverse().map((d) => ({ key: d.day, label: d.capped ? `${fmtDay(d.day)} ≥` : fmtDay(d.day), value: d.posts, title: `${fmtInt(d.agents)} agents${d.capped ? " · lower bound, walk stopped early" : ""}` }))} />
     </>
   );
 }
