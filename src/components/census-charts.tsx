@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 
 /* ------------------------------------------------------------------ */
 /* MultiLine: several series on a true date axis with end labels       */
@@ -208,9 +208,11 @@ export function CalendarHeatmap({ days, label, selectedDay, onSelectDay, scaleMa
   let lastMonth = -1;
   // The viewBox is scaled to the container, so a one-year map (about 450 units wide) would draw
   // 10-unit text at roughly 17px. Size the labels to land near 11px at a 760px container.
+  // On narrow screens the map keeps its natural width and scrolls, so the stylesheet goes back
+  // to 10 units there; labels are therefore spaced for 10-unit text (about 5.6 units a character).
   const fontSize = Math.round(Math.min(10, Math.max(4, (11 * W) / 760)) * 10) / 10;
-  const charW = fontSize * 0.56;
-  const textStyle = { fontSize };
+  const charW = 5.6;
+  const textStyle = { "--hm-fs": `${fontSize}px` } as CSSProperties;
   let lastLabelEnd = -Infinity;
   for (let i = 0; i < totalDays; i++) {
     const date = new Date(start.getTime() + i * 86_400_000);

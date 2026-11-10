@@ -27,7 +27,7 @@ describe("restored history charts", () => {
   it("sizes heatmap labels to the width of the map", () => {
     const year = Array.from({length:365},(_,i) => ({day:new Date(Date.UTC(2026,0,1)+i*86_400_000).toISOString().slice(0,10),value:0.5,title:"d"}));
     const one = renderToStaticMarkup(createElement(CalendarHeatmap,{label:"Year",days:year}));
-    const size = Number(one.match(/font-size:([\d.]+)px/)?.[1]);
+    const size = Number(one.match(/--hm-fs:([\d.]+)px/)?.[1]);
     expect(size).toBeGreaterThanOrEqual(6);
     expect(size).toBeLessThan(8);
     expect(one).toContain(">Jan 2026<");

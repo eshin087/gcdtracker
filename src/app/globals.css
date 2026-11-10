@@ -289,7 +289,8 @@
 .multiline .end-label.control { fill: var(--muted); }
 .heatmap .cell { fill: var(--accent); }
 .heatmap .hatch { stroke: var(--bg); stroke-width: 1.4; }
-.heatmap text { font-size: 10px; }
+.heatmap text { font-size: var(--hm-fs, 10px); }
+@media (max-width: 700px) { .heatmap text { font-size: 10px; } }
 .chart .annot line { stroke: var(--rule-strong); }
 .chart .legend text { fill: var(--ink-2); }
 .spark { display: inline-block; vertical-align: middle; }

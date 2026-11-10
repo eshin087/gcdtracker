@@ -28,7 +28,7 @@ export default async function SocialPage() {
             <td>{PLATFORM_NAMES[p.platform]}</td>
             <td className="num">{fmtInt(p.aiDisclosurePosts)}</td>
             <td className="num">{fmtInt(p.sampledPosts)}</td>
-            <td className="num">{p.sampledPosts > 0 ? fmtPct(p.aiDisclosurePosts / p.sampledPosts) : "–"}</td>
+            <td className="num" style={{ whiteSpace: "nowrap" }}>{p.sampledPosts > 0 ? fmtPct(p.aiDisclosurePosts / p.sampledPosts) : "–"}</td>
             <td className="dim">{fmtInt(p.sampleDays)} of the last {fmtInt(data.days.length)} UTC dates · {fmtDay(p.firstDay)} – {fmtDay(p.lastDay)}</td>
           </tr>)}
         </tbody></table></div>
