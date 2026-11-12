@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import type { ReactNode } from "react";
 import { newsreader, inter, plexMono } from "./fonts";
 import "./globals.css";
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <TopBar />
         <main id="main-content">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
