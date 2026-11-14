@@ -55,7 +55,7 @@ Without a configured database, the site renders an explicit offline state.
 
 ## Licences
 
-Code: MIT. Project data exports: CC BY 4.0, subject to underlying source rights. Quoted sources retain their publishers' licences; Radar data has its own licence. Fonts: SIL OFL. Public third-party metadata links to its source; inclusion implies no endorsement or finding of misconduct.
+Code: all rights reserved, see [LICENSE](LICENSE). Project data exports: CC BY 4.0, subject to underlying source rights. Quoted sources retain their publishers' licences; Radar data has its own licence. Fonts: SIL OFL. Public third-party metadata links to its source; inclusion implies no endorsement or finding of misconduct.
 
 ## Security
 
